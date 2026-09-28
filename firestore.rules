@@ -1,0 +1,83 @@
+rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+
+    // Default-deny catch-all
+    match /{document=**} {
+      allow read, write: if false;
+    }
+
+    // Helper functions
+    function isSignedIn() {
+      return request.auth != null;
+    }
+
+    function isOwner(userId) {
+      return isSignedIn() && request.auth.uid == userId;
+    }
+
+    function isValidId(id) {
+      return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
+    }
+
+    // Admin helper for sachin.itig@gmail.com
+    function isAdmin() {
+      return isSignedIn() && (
+        (request.auth.token.email == 'sachin.itig@gmail.com' && request.auth.token.email_verified == true) ||
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+      );
+    }
+
+    // Connection test document
+    match /test/connection {
+      allow read: if true;
+    }
+
+    // Users Collection
+    match /users/{userId} {
+      allow get: if isOwner(userId) || isAdmin();
+      allow list: if isAdmin();
+      allow create: if (isOwner(userId) && request.resource.data.userId == userId) || isAdmin();
+      allow update: if (isOwner(userId) && request.resource.data.userId == userId) || isAdmin();
+      allow delete: if isOwner(userId) || isAdmin();
+    }
+
+    // Orders Collection (Razorpay payments)
+    match /orders/{orderId} {
+      allow get: if (isSignedIn() && resource.data.userId == request.auth.uid) || isAdmin();
+      allow list: if (isSignedIn() && resource.data.userId == request.auth.uid) || isAdmin();
+      allow create: if (isSignedIn() && request.resource.data.userId == request.auth.uid && isValidId(orderId)) || isAdmin();
+      allow update, delete: if isAdmin();
+    }
+
+    // Settings Collection (Gateway credentials & configuration)
+    match /settings/{settingId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Coupons Collection (Promo codes & discounts)
+    match /coupons/{couponId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Notifications Collection (Broadcast push announcements)
+    match /notifications/{notificationId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Custom Resources Collection (Uploaded study materials)
+    match /custom_resources/{resourceId} {
+      allow read: if true;
+      allow write: if isAdmin();
+    }
+
+    // Analytics Collection (Traffic metrics, post views, download tallies)
+    match /analytics/{metricId} {
+      allow read: if true;
+      allow write: if true;
+    }
+  }
+}

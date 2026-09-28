@@ -1,0 +1,25 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 100 100" width="100" height="100">
+  <defs>
+    <linearGradient id="mathGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#004ac6" />
+      <stop offset="100%" stop-color="#002113" />
+    </linearGradient>
+    <linearGradient id="goldGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#6ffbbe" />
+      <stop offset="100%" stop-color="#00e676" />
+    </linearGradient>
+  </defs>
+  <!-- Background Rounded Shield -->
+  <rect x="5" y="5" width="90" height="90" rx="24" fill="url(#mathGrad)" />
+  <rect x="5" y="5" width="90" height="90" rx="24" fill="none" stroke="#6ffbbe" stroke-width="2.5" stroke-opacity="0.4" />
+  
+  <!-- Math Sigma / Function Symbol -->
+  <path d="M 32 30 L 68 30 L 50 50 L 68 70 L 32 70" fill="none" stroke="#ffffff" stroke-width="7" stroke-linecap="round" stroke-linejoin="round" />
+  
+  <!-- Stylized Accent Dot / Compass Node -->
+  <circle cx="68" cy="30" r="5" fill="url(#goldGrad)" />
+  <circle cx="68" cy="70" r="5" fill="url(#goldGrad)" />
+  
+  <!-- Mini Infinity / Sparkle in Top Right -->
+  <path d="M 75 18 Q 78 14 81 18 Q 84 22 81 26 Q 78 22 75 18 Z" fill="#6ffbbe" opacity="0.9" />
+</svg>

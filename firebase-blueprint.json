@@ -1,0 +1,147 @@
+{
+  "entities": {
+    "userProfile": {
+      "title": "UserProfile",
+      "description": "User profile with grade level, bookmarks, and subscription state",
+      "type": "object",
+      "properties": {
+        "userId": { "type": "string" },
+        "email": { "type": "string" },
+        "displayName": { "type": "string" },
+        "photoURL": { "type": "string" },
+        "grade": { "type": "string" },
+        "mobileNumber": { "type": "string" },
+        "countryCode": { "type": "string" },
+        "phoneNumber": { "type": "string" },
+        "whatsappAlerts": { "type": "boolean" },
+        "mobileRegisteredAt": { "type": "string" },
+        "hasJoinedSocial": { "type": "boolean" },
+        "isPro": { "type": "boolean" },
+        "proPlan": { "type": "string" },
+        "bookmarks": { "type": "array" },
+        "createdAt": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["userId", "email"]
+    },
+    "order": {
+      "title": "Order",
+      "description": "Razorpay payment orders for Pro subscriptions",
+      "type": "object",
+      "properties": {
+        "orderId": { "type": "string" },
+        "userId": { "type": "string" },
+        "plan": { "type": "string" },
+        "amount": { "type": "number" },
+        "currency": { "type": "string" },
+        "paymentId": { "type": "string" },
+        "status": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["orderId", "userId", "amount", "status"]
+    },
+    "gatewaySettings": {
+      "title": "GatewaySettings",
+      "description": "Payment gateway configuration and merchant credentials",
+      "type": "object",
+      "properties": {
+        "keyId": { "type": "string" },
+        "keySecret": { "type": "string" },
+        "mode": { "type": "string" },
+        "merchantName": { "type": "string" },
+        "upiId": { "type": "string" },
+        "currency": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      }
+    },
+    "brandingSettings": {
+      "title": "BrandingSettings",
+      "description": "Custom logo, app icon, favicon and site branding assets",
+      "type": "object",
+      "properties": {
+        "logoUrl": { "type": "string" },
+        "iconUrl": { "type": "string" },
+        "faviconUrl": { "type": "string" },
+        "siteTitle": { "type": "string" },
+        "tagline": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      }
+    },
+    "coupon": {
+      "title": "Coupon",
+      "description": "Discount vouchers and promotional codes for Pro pass purchases",
+      "type": "object",
+      "properties": {
+        "code": { "type": "string" },
+        "discountType": { "type": "string" },
+        "discountValue": { "type": "number" },
+        "maxUses": { "type": "number" },
+        "usedCount": { "type": "number" },
+        "expiresAt": { "type": "string" },
+        "isActive": { "type": "boolean" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["code", "discountType", "discountValue", "isActive"]
+    },
+    "notification": {
+      "title": "Notification",
+      "description": "Broadcast announcements and push alerts sent to students",
+      "type": "object",
+      "properties": {
+        "title": { "type": "string" },
+        "message": { "type": "string" },
+        "targetAudience": { "type": "string" },
+        "actionUrl": { "type": "string" },
+        "createdAt": { "type": "string" },
+        "createdBy": { "type": "string" }
+      },
+      "required": ["title", "message", "createdAt"]
+    },
+    "customResource": {
+      "title": "CustomResource",
+      "description": "Newly uploaded curriculum study material, NCERT solutions or videos",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "title": { "type": "string" },
+        "grade": { "type": "string" },
+        "topic": { "type": "string" },
+        "format": { "type": "string" },
+        "tier": { "type": "string" },
+        "downloadUrl": { "type": "string" },
+        "youtubeId": { "type": "string" },
+        "description": { "type": "string" },
+        "views": { "type": "number" },
+        "downloads": { "type": "number" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "title", "grade", "topic", "tier"]
+    }
+  },
+  "firestore": {
+    "/users/{userId}": {
+      "schema": "userProfile",
+      "description": "User account document containing profile and settings"
+    },
+    "/orders/{orderId}": {
+      "schema": "order",
+      "description": "Payment records generated via Razorpay checkout"
+    },
+    "/settings/{settingId}": {
+      "schema": "gatewaySettings",
+      "description": "Platform settings including gateway credentials, branding assets, and SEO"
+    },
+    "/coupons/{couponId}": {
+      "schema": "coupon",
+      "description": "Discount voucher codes configured by administrator"
+    },
+    "/notifications/{notificationId}": {
+      "schema": "notification",
+      "description": "Broadcast announcements sent to enrolled students"
+    },
+    "/custom_resources/{resourceId}": {
+      "schema": "customResource",
+      "description": "Uploaded notes, sheets, and lecture resources"
+    }
+  }
+}

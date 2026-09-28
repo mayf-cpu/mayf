@@ -1,0 +1,127 @@
+@import "tailwindcss";
+
+@layer base {
+  *, *::before, *::after {
+    box-sizing: border-box;
+  }
+
+  html, body {
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    max-width: 100%;
+    overflow-x: hidden;
+    font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+  }
+  
+  body {
+    overscroll-behavior-y: none;
+    background-color: #f9f9ff;
+    color: #111c2d;
+    min-width: 320px;
+  }
+
+  #root {
+    width: 100%;
+    max-width: 100%;
+    overflow-x: hidden;
+    min-height: 100vh;
+  }
+}
+
+/* Material Symbols Outlined settings */
+.material-symbols-outlined {
+  font-family: 'Material Symbols Outlined';
+  font-weight: normal;
+  font-style: normal;
+  font-size: 24px;
+  line-height: 1;
+  letter-spacing: normal;
+  text-transform: none;
+  display: inline-block;
+  white-space: nowrap;
+  word-wrap: normal;
+  direction: ltr;
+  font-feature-settings: 'liga';
+  -webkit-font-smoothing: antialiased;
+}
+
+/* Custom 3D tactile button push style */
+.tactile-btn-primary {
+  box-shadow: 0 4px 0 #1e40af;
+  transition: transform 0.1s ease, box-shadow 0.1s ease;
+}
+.tactile-btn-primary:active {
+  transform: translateY(3px);
+  box-shadow: 0 1px 0 #1e40af;
+}
+
+.tactile-btn-secondary {
+  box-shadow: 0 4px 0 #b45309;
+  transition: transform 0.1s ease, box-shadow 0.1s ease;
+}
+.tactile-btn-secondary:active {
+  transform: translateY(3px);
+  box-shadow: 0 1px 0 #b45309;
+}
+
+/* Clean hide scrollbars */
+.no-scrollbar::-webkit-scrollbar {
+  display: none;
+}
+.no-scrollbar {
+  -ms-overflow-style: none;
+  scrollbar-width: none;
+}
+
+/* Theme variables and dark mode styles */
+:root {
+  --color-primary: #004ac6;
+  --color-accent: #006242;
+  --color-secondary: #434655;
+}
+
+html.dark-theme body {
+  background-color: #0b1120 !important;
+  color: #f8fafc !important;
+}
+
+html.dark-theme .bg-white {
+  background-color: #1e293b !important;
+  color: #f8fafc !important;
+  border-color: #334155 !important;
+}
+
+html.dark-theme .bg-\[\#f9f9ff\],
+html.dark-theme .bg-\[\#f0f3ff\],
+html.dark-theme .bg-slate-50 {
+  background-color: #0f172a !important;
+}
+
+html.dark-theme .text-\[\#111c2d\],
+html.dark-theme .text-slate-900 {
+  color: #f8fafc !important;
+}
+
+html.dark-theme .text-\[\#434655\],
+html.dark-theme .text-slate-600 {
+  color: #94a3b8 !important;
+}
+
+html.dark-theme .border-gray-100,
+html.dark-theme .border-slate-100,
+html.dark-theme .border-blue-100 {
+  border-color: #334155 !important;
+}
+
+/* Typography scale */
+html.scale-compact {
+  font-size: 14px;
+}
+html.scale-normal {
+  font-size: 16px;
+}
+html.scale-large {
+  font-size: 18px;
+}
+

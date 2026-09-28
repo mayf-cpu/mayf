@@ -1,0 +1,29 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 320 80" width="320" height="80">
+  <defs>
+    <linearGradient id="logoGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#004ac6" />
+      <stop offset="100%" stop-color="#0d1b2a" />
+    </linearGradient>
+    <linearGradient id="accentGrad" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#6ffbbe" />
+      <stop offset="100%" stop-color="#00c853" />
+    </linearGradient>
+  </defs>
+  
+  <!-- Icon Emblem -->
+  <g transform="translate(10, 10)">
+    <rect width="60" height="60" rx="16" fill="url(#logoGrad)" />
+    <rect width="60" height="60" rx="16" fill="none" stroke="#6ffbbe" stroke-width="2" stroke-opacity="0.3" />
+    <path d="M 21 20 L 45 20 L 33 33 L 45 46 L 21 46" fill="none" stroke="#ffffff" stroke-width="4.5" stroke-linecap="round" stroke-linejoin="round" />
+    <circle cx="45" cy="20" r="3.5" fill="url(#accentGrad)" />
+    <circle cx="45" cy="46" r="3.5" fill="url(#accentGrad)" />
+  </g>
+  
+  <!-- Typography -->
+  <text x="82" y="38" font-family="'Plus Jakarta Sans', system-ui, -apple-system, sans-serif" font-size="21" font-weight="800" fill="#004ac6" letter-spacing="-0.5">
+    Maths at Your Fingertips
+  </text>
+  <text x="83" y="56" font-family="'Plus Jakarta Sans', system-ui, -apple-system, sans-serif" font-size="11" font-weight="700" fill="#434655" letter-spacing="1.2">
+    CLASS 5 – 10 LEARNING HUB
+  </text>
+</svg>

@@ -1,0 +1,6 @@
+{
+  "name": "Maths at Your Fingertips",
+  "description": "Demystifying school mathematics for Class 5 to Class 10 with handcrafted notes, 2-minute formula sheets, NCERT walkthroughs, and animated video lessons.",
+  "requestFramePermissions": [],
+  "majorCapabilities": ["MAJOR_CAPABILITY_SERVER_SIDE_GEMINI_API"]
+}
