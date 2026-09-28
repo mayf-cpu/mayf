@@ -6,6 +6,14 @@ import { SocialConfig, getSocialConfig } from '../services/social';
 import { ThemeConfig } from '../services/theme';
 import { syncAndLoadNotifications, getLocalNotifications } from '../services/notifications';
 import { getUserCurrency, setUserCurrency, SUPPORTED_CURRENCIES } from '../services/currency';
+import {
+  YouTubeIcon,
+  WhatsAppIcon,
+  TelegramIcon,
+  InstagramIcon,
+  FacebookIcon,
+  ChromeIcon,
+} from './SocialIcons';
 
 interface HeaderProps {
   onOpenDownloads: () => void;
@@ -15,6 +23,7 @@ interface HeaderProps {
   onOpenFormulaDeck: () => void;
   onOpenProPass: () => void;
   activeClass: string;
+  onSelectClass?: (grade: string) => void;
   onSelectNav: (nav: string) => void;
   activeNav: string;
   currentUser: User | null;
@@ -25,6 +34,8 @@ interface HeaderProps {
   onOpenAdminPanel: () => void;
   onOpenDashboard?: () => void;
   onOpenMobileRegister?: () => void;
+  onOpenAiTeacher?: () => void;
+  onShareWebsite?: () => void;
   branding?: BrandingConfig;
   socialConfig?: SocialConfig;
   themeConfig?: ThemeConfig;
@@ -38,6 +49,7 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenFormulaDeck,
   onOpenProPass,
   activeClass,
+  onSelectClass,
   onSelectNav,
   activeNav,
   currentUser,
@@ -48,13 +60,15 @@ export const Header: React.FC<HeaderProps> = ({
   onOpenAdminPanel,
   onOpenDashboard,
   onOpenMobileRegister,
+  onOpenAiTeacher,
+  onShareWebsite,
   branding,
   socialConfig = getSocialConfig(),
   themeConfig,
 }) => {
   const [showNotifications, setShowNotifications] = useState(false);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
-  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
+  const [sidebarOpen, setSidebarOpen] = useState(false);
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
   const [notificationsList, setNotificationsList] = useState<NotificationRecord[]>(getLocalNotifications);
   const [hasUnread, setHasUnread] = useState(true);
@@ -102,17 +116,29 @@ export const Header: React.FC<HeaderProps> = ({
     };
   }, []);
 
+  // Prevent background scroll when sidebar is open
+  useEffect(() => {
+    if (sidebarOpen) {
+      document.body.style.overflow = 'hidden';
+    } else {
+      document.body.style.overflow = '';
+    }
+    return () => {
+      document.body.style.overflow = '';
+    };
+  }, [sidebarOpen]);
+
   const isPro = userProfile?.isPro || false;
   const isAdmin = isUserAdmin(currentUser);
-  const displayName = currentUser?.displayName || userProfile?.displayName || 'Arjun S.';
+  const displayName = currentUser?.displayName || userProfile?.displayName || 'Student';
   const userPhoto =
     currentUser?.photoURL ||
     userProfile?.photoURL ||
     'https://lh3.googleusercontent.com/aida/AEtjO1UhpsrCRgiMrqTFlxfxPmNEa9Mtse1EmIX9zICS42Uh1JtnrsM60AU9GVMNCbNnlbrAIotsPgTX3W9nKh4uAiXM0PgHoimvPKQaBLpbqHIp4_1uZu4yWVHLf54escoJl1BeIFQQMxvnUd3rHWguFEMELvfGhz6uqHQlt_qbW8WfXMr9-xLECGS6hIfPWzseTtdN2clzE2Wti1lCQf-pZHLuvXNZBRKctOh3IRBzw9Reiie7HJ1jVKCPzQ';
 
-  const handleMobileNavClick = (nav: string) => {
+  const handleNavClick = (nav: string) => {
     onSelectNav(nav);
-    setMobileMenuOpen(false);
+    setSidebarOpen(false);
     if (nav === 'formula-deck') {
       onOpenFormulaDeck();
     } else if (nav === 'paid-masterclasses') {
@@ -126,647 +152,813 @@ export const Header: React.FC<HeaderProps> = ({
     }
   };
 
+  const handleClassSelect = (grade: string) => {
+    if (onSelectClass) {
+      onSelectClass(grade);
+    }
+    setSidebarOpen(false);
+  };
+
   return (
-    <header className="fixed top-0 left-0 right-0 z-50 w-full max-w-full bg-[#ffffff]/95 backdrop-blur-xl shadow-[0_1px_8px_rgba(0,0,0,0.04)]">
-      {/* Top Banner Announcement */}
-      {branding?.showAnnouncement !== false && (
-        <div
-          className="text-[#eeefff] px-3 py-1.5 w-full overflow-hidden text-center transition-colors"
-          style={{ backgroundColor: themeConfig?.primaryColor || '#2563eb' }}
-        >
-          <div className="max-w-7xl mx-auto w-full flex items-center justify-center gap-1.5 sm:gap-2 text-xs sm:text-[13px] font-semibold">
-            <span className="material-symbols-outlined text-[16px] sm:text-[18px] shrink-0">celebration</span>
-            <span className="truncate">
-              {branding?.announcementText || '🎉 Term 2 Formula Sheets & Chapter Cheat-Sheets are LIVE!'}
-            </span>
-            <button
-              onClick={() => handleMobileNavClick('free-downloads')}
-              className="underline hover:text-white shrink-0 ml-1 cursor-pointer font-bold"
-            >
-              {branding?.announcementLinkText || 'Get PDFs →'}
-            </button>
-          </div>
-        </div>
-      )}
-
-      {/* Main Navbar */}
-      <div className="h-16 sm:h-20 max-w-7xl mx-auto px-2.5 sm:px-6 lg:px-8 flex items-center justify-between gap-1.5 sm:gap-4 w-full">
-        {/* Brand Logo & Name */}
-        <div className="flex items-center gap-2 sm:gap-6 min-w-0 flex-1 sm:flex-initial">
-          <button
-            onClick={() => {
-              onSelectNav('explore-notes');
-              window.scrollTo({ top: 0, behavior: 'smooth' });
-            }}
-            className="flex items-center gap-1.5 sm:gap-3 text-left cursor-pointer group min-w-0 max-w-full"
+    <>
+      <header className="fixed top-0 left-0 right-0 z-50 w-full max-w-full bg-[#ffffff]/95 backdrop-blur-xl shadow-[0_1px_8px_rgba(0,0,0,0.04)] border-b border-gray-100">
+        {/* Top Announcement Banner (Optional) */}
+        {branding?.showAnnouncement !== false && (
+          <div
+            className="text-[#eeefff] px-3 py-1.5 w-full overflow-hidden text-center transition-colors text-xs font-semibold"
+            style={{ backgroundColor: themeConfig?.primaryColor || '#2563eb' }}
           >
-            <img
-              alt={branding?.siteTitle || "Brand logo"}
-              className="h-6 sm:h-8 w-auto object-contain transition-transform group-hover:scale-105 shrink-0"
-              src={branding?.logoUrl || "https://lh3.googleusercontent.com/aida/AEtjO1UjgWp59CcYsKXuqwB2FYHcehNEDlMGhbND9VEHl154aFff2EPvt39mUwZ6qXVc-edHZxj5IPmP7JbzGPqzLaCgdQX4S4GUMQBtC4KxFgHHUCu_55VykewYAvz0ReMRXT-l8SNrEHvxLcCxtTX0zVGZ6bSEQvSxd3WcuoKgXa3gTPPWl-czWwPLaYldf3jK6W4CDevlmvi08ew8Ag-k6FiBm7lx3ROJP5G9hsY15VySSpP-r5sf3fqLFLs"}
-            />
-            <div className="flex flex-col min-w-0">
-              <span
-                className="text-sm sm:text-lg lg:text-[20px] font-bold leading-tight tracking-tight truncate max-w-[150px] sm:max-w-none transition-colors"
-                style={{ color: themeConfig?.primaryColor || '#004ac6' }}
-              >
-                {branding?.siteTitle || "Maths at Your Fingertips"}
+            <div className="max-w-7xl mx-auto w-full flex items-center justify-center gap-1.5 sm:gap-2">
+              <span className="material-symbols-outlined text-[16px] shrink-0">celebration</span>
+              <span className="truncate">
+                {branding?.announcementText || '🎉 Term 2 Formula Sheets & Chapter Cheat-Sheets are LIVE!'}
               </span>
-              <span className="hidden sm:block text-[10px] sm:text-[11px] font-bold text-[#434655] uppercase tracking-wider truncate">
-                {branding?.tagline || "Class 5 – 10 Learning Hub"}
-              </span>
-            </div>
-          </button>
-        </div>
-
-        {/* Global Search Bar (Large screens) */}
-        <div className="hidden xl:flex flex-1 max-w-md items-center relative mx-2">
-          <div className="w-full flex items-center bg-[#f0f3ff] rounded-xl px-3 py-1.5 shadow-[0_1px_4px_rgba(0,0,0,0.03)] focus-within:ring-2 focus-within:ring-blue-500 transition-all">
-            <span className="material-symbols-outlined text-[#737686] mr-2 text-[20px]">search</span>
-            <input
-              className="w-full bg-transparent border-0 outline-none text-[14px] text-[#111c2d] placeholder:text-[#737686]"
-              placeholder="Search formula sheets, notes, NCERT..."
-              type="text"
-              value={searchQuery}
-              onChange={(e) => onSearchChange(e.target.value)}
-            />
-            {searchQuery && (
               <button
-                onClick={() => onSearchChange('')}
-                className="text-gray-400 hover:text-gray-600 mr-1 p-0.5 cursor-pointer"
-                title="Clear search"
+                onClick={() => handleNavClick('free-downloads')}
+                className="underline hover:text-white shrink-0 ml-1 cursor-pointer font-bold"
               >
-                <span className="material-symbols-outlined text-[16px]">close</span>
+                {branding?.announcementLinkText || 'Get PDFs →'}
               </button>
-            )}
-            <div className="flex items-center gap-1 shrink-0">
-              <span className="bg-[#d8e3fb] text-[#434655] text-[11px] font-bold px-2 py-0.5 rounded-lg">
-                {activeClass}
-              </span>
-              <kbd className="bg-[#d8e3fb] text-[#737686] text-[11px] font-bold px-1.5 py-0.5 rounded">
-                /
-              </kbd>
             </div>
           </div>
-        </div>
+        )}
 
-        {/* Main Navigation Links (Desktop) */}
-        <nav className="hidden lg:flex items-center gap-1 shrink-0">
-          <button
-            onClick={() => handleMobileNavClick('explore-notes')}
-            style={activeNav === 'explore-notes' && themeConfig?.primaryColor ? { backgroundColor: themeConfig.primaryColor } : {}}
-            className={`text-[13px] font-semibold px-3 py-2 rounded-xl transition-colors cursor-pointer ${
-              activeNav === 'explore-notes'
-                ? 'bg-[#2563eb] text-white shadow-sm'
-                : 'text-[#434655] hover:text-[#111c2d] hover:bg-[#e7eeff]'
-            }`}
-          >
-            Explore Notes
-          </button>
-          <button
-            onClick={() => handleMobileNavClick('video-lessons')}
-            style={activeNav === 'video-lessons' && themeConfig?.primaryColor ? { backgroundColor: themeConfig.primaryColor } : {}}
-            className={`text-[13px] font-semibold px-3 py-2 rounded-xl transition-colors cursor-pointer ${
-              activeNav === 'video-lessons'
-                ? 'bg-[#2563eb] text-white shadow-sm'
-                : 'text-[#434655] hover:text-[#111c2d] hover:bg-[#e7eeff]'
-            }`}
-          >
-            Video Lessons
-          </button>
-          <button
-            onClick={() => handleMobileNavClick('formula-deck')}
-            style={activeNav === 'formula-deck' && themeConfig?.primaryColor ? { backgroundColor: themeConfig.primaryColor } : {}}
-            className={`text-[13px] font-semibold px-3 py-2 rounded-xl transition-colors cursor-pointer ${
-              activeNav === 'formula-deck'
-                ? 'bg-[#2563eb] text-white shadow-sm'
-                : 'text-[#434655] hover:text-[#111c2d] hover:bg-[#e7eeff]'
-            }`}
-          >
-            Formula Deck
-          </button>
-          <button
-            onClick={() => handleMobileNavClick('paid-masterclasses')}
-            className={`text-[13px] font-semibold px-3 py-2 rounded-xl transition-colors cursor-pointer ${
-              activeNav === 'paid-masterclasses'
-                ? 'bg-[#2563eb] text-white shadow-sm'
-                : 'text-[#434655] hover:text-[#111c2d] hover:bg-[#e7eeff]'
-            }`}
-          >
-            Masterclasses
-          </button>
-        </nav>
-
-        {/* Right Action Icons & Profile */}
-        <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
-          {/* Mobile search toggle */}
-          <button
-            onClick={() => setMobileSearchOpen(!mobileSearchOpen)}
-            className="xl:hidden p-1.5 sm:p-2 text-[#434655] hover:bg-[#e7eeff] rounded-xl cursor-pointer transition-colors"
-            title="Search"
-            type="button"
-          >
-            <span className="material-symbols-outlined text-[20px] sm:text-[22px]">search</span>
-          </button>
-
-          {/* Social Links (Desktop) */}
-          <div className="hidden md:flex items-center gap-1 text-[#434655]">
-            <a
-              className="p-1.5 rounded-lg hover:bg-[#e7eeff] text-[#434655] hover:text-[#111c2d] transition-colors"
-              href={socialConfig.platforms.youtube.url || "https://youtube.com"}
-              target="_blank"
-              rel="noopener noreferrer"
-              title="YouTube Video Channel"
-            >
-              <span className="material-symbols-outlined text-[19px]">smart_display</span>
-            </a>
-            <a
-              className="p-1.5 rounded-lg hover:bg-[#e7eeff] text-[#434655] hover:text-[#111c2d] transition-colors"
-              href={socialConfig.platforms.whatsapp.groupUrl || socialConfig.platforms.whatsapp.url || "https://whatsapp.com"}
-              target="_blank"
-              rel="noopener noreferrer"
-              title="Discussion Group"
-            >
-              <span className="material-symbols-outlined text-[19px]">groups</span>
-            </a>
-            <a
-              className="p-1.5 rounded-lg hover:bg-[#e7eeff] text-[#434655] hover:text-[#111c2d] transition-colors"
-              href={socialConfig.platforms.telegram.groupUrl || socialConfig.platforms.telegram.url || "https://t.me"}
-              target="_blank"
-              rel="noopener noreferrer"
-              title="Study Notifications Telegram"
-            >
-              <span className="material-symbols-outlined text-[19px]">send</span>
-            </a>
-          </div>
-
-          {/* Downloads Action Button */}
-          <button
-            onClick={onOpenDownloads}
-            className="hidden sm:inline-flex items-center gap-1.5 bg-[#6ffbbe] text-[#002113] text-xs sm:text-[13px] font-semibold px-2.5 sm:px-3 py-1.5 rounded-xl hover:bg-[#4edea3] transition-colors shadow-sm cursor-pointer shrink-0"
-          >
-            <span className="material-symbols-outlined text-[16px] sm:text-[18px]">download</span>
-            <span className="hidden md:inline">Downloads</span>
-            {downloadsCount > 0 && (
-              <span className="bg-[#006242] text-white text-[10px] font-bold px-1.5 py-0.2 rounded-full">
-                {downloadsCount}
-              </span>
-            )}
-          </button>
-
-          {/* Official Currency Indicator (single currency display) */}
-          <div className="hidden lg:flex items-center gap-1 bg-[#f0f3ff] px-2 py-1 rounded-xl border border-blue-100 text-xs">
-            <span className="material-symbols-outlined text-[#004ac6] text-[15px]">payments</span>
-            <select
-              value={userCurrencyState.code}
-              onChange={(e) => {
-                setUserCurrency(e.target.value);
-                setUserCurrencyState(SUPPORTED_CURRENCIES[e.target.value]);
-              }}
-              className="bg-transparent border-none outline-none font-bold text-xs text-[#004ac6] cursor-pointer"
-              title="Official Currency for your Region"
-            >
-              {Object.values(SUPPORTED_CURRENCIES).map((c) => (
-                <option key={c.code} value={c.code}>
-                  {c.code} ({c.symbol.trim()})
-                </option>
-              ))}
-            </select>
-          </div>
-
-          {/* User Dashboard Quick Button (when logged in) */}
-          {currentUser && onOpenDashboard && (
+        {/* Main Navbar:
+            - Desktop: Logo, Search Bar, Social Media Icons, Notification Symbol, AI Teacher Button, Login/Logged-in Button, Hamburger Menu Icon ONLY.
+            - Mobile: Logo, Search Icon, Notification Icon, Hamburger Menu Icon ONLY.
+        */}
+        <div className="h-16 sm:h-20 max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 flex items-center justify-between gap-2 sm:gap-4 w-full">
+          {/* 1. BRAND LOGO */}
+          <div className="flex items-center min-w-0 shrink-0">
             <button
-              onClick={onOpenDashboard}
-              className="hidden md:inline-flex items-center gap-1.5 text-xs font-bold px-2.5 py-1.5 rounded-xl cursor-pointer transition-colors shrink-0 shadow-xs border bg-[#e7eeff] hover:bg-[#dee8ff] text-[#004ac6] border-blue-200"
-              title="Open Student Dashboard"
-            >
-              <span className="material-symbols-outlined text-[16px]">account_circle</span>
-              <span>Dashboard</span>
-            </button>
-          )}
-
-          {/* Quick Admin Console Button (ONLY visible for verified admin, completely hidden for normal users) */}
-          {isAdmin && (
-            <button
-              onClick={onOpenAdminPanel}
-              className="hidden sm:inline-flex items-center gap-1.5 text-xs font-bold px-2.5 py-1.5 rounded-xl cursor-pointer transition-colors shrink-0 shadow-xs border bg-slate-900 text-amber-300 border-amber-500/50 hover:bg-slate-800"
-              title="Admin Control Center (Admin Only)"
-            >
-              <span className="material-symbols-outlined text-[16px] text-amber-400">admin_panel_settings</span>
-              <span>Control Panel</span>
-              <span className="w-1.5 h-1.5 rounded-full bg-emerald-400"></span>
-            </button>
-          )}
-
-          {/* Notification Bell */}
-          <div className="relative">
-            <button
-              aria-label="Notifications"
               onClick={() => {
-                setShowNotifications(!showNotifications);
-                setHasUnread(false);
+                onSelectNav('explore-notes');
+                window.scrollTo({ top: 0, behavior: 'smooth' });
               }}
-              className="p-1.5 sm:p-2 text-[#434655] hover:bg-[#e7eeff] rounded-xl relative cursor-pointer transition-colors"
+              className="flex items-center gap-2 sm:gap-3 text-left cursor-pointer group min-w-0"
+              title="Return to Home"
+            >
+              <img
+                alt={branding?.siteTitle || 'Brand logo'}
+                className="h-7 sm:h-8 w-auto object-contain transition-transform group-hover:scale-105 shrink-0"
+                src={
+                  branding?.logoUrl ||
+                  'https://lh3.googleusercontent.com/aida/AEtjO1UjgWp59CcYsKXuqwB2FYHcehNEDlMGhbND9VEHl154aFff2EPvt39mUwZ6qXVc-edHZxj5IPmP7JbzGPqzLaCgdQX4S4GUMQBtC4KxFgHHUCu_55VykewYAvz0ReMRXT-l8SNrEHvxLcCxtTX0zVGZ6bSEQvSxd3WcuoKgXa3gTPPWl-czWwPLaYldf3jK6W4CDevlmvi08ew8Ag-k6FiBm7lx3ROJP5G9hsY15VySSpP-r5sf3fqLFLs'
+                }
+              />
+              <div className="flex flex-col min-w-0">
+                <span
+                  className="text-sm sm:text-base lg:text-[19px] font-extrabold leading-tight tracking-tight truncate max-w-[150px] sm:max-w-[210px] md:max-w-none transition-colors"
+                  style={{ color: themeConfig?.primaryColor || '#004ac6' }}
+                >
+                  {branding?.siteTitle || 'Maths at Your Fingertips'}
+                </span>
+                <span className="hidden sm:block text-[10px] font-bold text-[#434655] uppercase tracking-wider truncate">
+                  {branding?.tagline || 'Class 5 – 10 Learning Hub'}
+                </span>
+              </div>
+            </button>
+          </div>
+
+          {/* 2. SEARCH BAR (Desktop & Tablet) */}
+          <div className="hidden md:flex flex-1 max-w-sm lg:max-w-md items-center relative mx-2">
+            <div className="w-full flex items-center bg-[#f0f3ff] rounded-xl px-3 py-1.5 shadow-[0_1px_4px_rgba(0,0,0,0.03)] focus-within:ring-2 focus-within:ring-blue-500 transition-all border border-blue-50">
+              <span className="material-symbols-outlined text-[#737686] mr-2 text-[20px]">search</span>
+              <input
+                className="w-full bg-transparent border-0 outline-none text-[13px] text-[#111c2d] placeholder:text-[#737686]"
+                placeholder="Search formula sheets, notes, NCERT..."
+                type="text"
+                value={searchQuery}
+                onChange={(e) => onSearchChange(e.target.value)}
+              />
+              {searchQuery && (
+                <button
+                  onClick={() => onSearchChange('')}
+                  className="text-gray-400 hover:text-gray-600 mr-1 p-0.5 cursor-pointer"
+                  title="Clear search"
+                >
+                  <span className="material-symbols-outlined text-[16px]">close</span>
+                </button>
+              )}
+              <div className="flex items-center gap-1 shrink-0">
+                <span className="bg-[#d8e3fb] text-[#434655] text-[10px] font-bold px-2 py-0.5 rounded-lg">
+                  {activeClass}
+                </span>
+              </div>
+            </div>
+          </div>
+
+          {/* RIGHT ACTION ICONS & BUTTONS */}
+          <div className="flex items-center gap-1.5 sm:gap-2.5 shrink-0">
+            {/* MOBILE ONLY: Search Toggle Icon Button */}
+            <button
+              onClick={() => setMobileSearchOpen(!mobileSearchOpen)}
+              className="md:hidden p-1.5 text-[#434655] hover:bg-[#e7eeff] rounded-xl cursor-pointer transition-colors"
+              title="Search notes and formulas"
               type="button"
             >
-              <span className="material-symbols-outlined text-[20px] sm:text-[22px]">notifications</span>
-              {hasUnread && notificationsList.length > 0 && (
-                <span className="absolute top-1 right-1 w-2.5 h-2.5 rounded-full bg-[#fea619] border-2 border-white"></span>
-              )}
+              <span className="material-symbols-outlined text-[22px]">search</span>
             </button>
 
-            {/* Notification Dropdown */}
-            {showNotifications && (
-              <div className="absolute right-0 mt-2 w-[calc(100vw-24px)] max-w-xs sm:max-w-sm bg-white rounded-2xl shadow-xl border border-gray-100 p-4 z-50 animate-fadeIn max-h-[80vh] overflow-y-auto">
-                <div className="flex items-center justify-between pb-2 border-b border-gray-100">
-                  <div className="flex items-center gap-1.5">
-                    <span className="font-bold text-sm text-gray-900">Study Notifications</span>
-                    <span className="bg-blue-100 text-blue-800 text-[10px] font-bold px-1.5 py-0.2 rounded-full">
-                      {notificationsList.length}
-                    </span>
-                  </div>
-                  <span className="text-[11px] font-bold text-blue-600 bg-blue-50 px-2 py-0.5 rounded-full">Live Feed</span>
-                </div>
-                <div className="space-y-2.5 mt-3">
-                  {notificationsList.length === 0 ? (
-                    <div className="p-4 text-center text-xs text-gray-400">
-                      No announcements right now. Check back soon!
-                    </div>
-                  ) : (
-                    notificationsList.map((notif) => (
-                      <div
-                        key={notif.id}
-                        className={`text-left text-xs p-2.5 rounded-xl border transition-all ${
-                          notif.priority === 'urgent' || notif.priority === 'high'
-                            ? 'bg-amber-50/80 border-amber-200'
-                            : 'bg-blue-50/70 border-blue-200'
-                        }`}
-                      >
-                        <div className="flex items-center justify-between gap-1 mb-1">
-                          <span
-                            className={`font-bold truncate ${
-                              notif.priority === 'urgent' || notif.priority === 'high'
-                                ? 'text-amber-900'
-                                : 'text-blue-900'
-                            }`}
-                          >
-                            {notif.title}
-                          </span>
-                          {notif.tag && (
-                            <span className="text-[9px] font-bold uppercase tracking-wider bg-white/80 px-1.5 py-0.5 rounded text-gray-600 shrink-0">
-                              {notif.tag}
-                            </span>
-                          )}
-                        </div>
-                        <p className="text-gray-700 leading-relaxed text-[11px]">{notif.message}</p>
-                        {notif.createdAt && (
-                          <div className="mt-1 text-[9px] text-gray-400 font-medium">
-                            {new Date(notif.createdAt).toLocaleDateString()}
-                          </div>
-                        )}
-                      </div>
-                    ))
-                  )}
-                </div>
-              </div>
-            )}
-          </div>
+            {/* DESKTOP ONLY: Official Social Media Icons & Share */}
+            <div className="hidden md:flex items-center gap-1.5 text-[#434655]">
+              <a
+                className="p-1.5 rounded-lg hover:bg-red-50 text-red-600 transition-colors flex items-center justify-center"
+                href={socialConfig.platforms.youtube.url || 'https://youtube.com'}
+                target="_blank"
+                rel="noopener noreferrer"
+                title="Official YouTube Video Channel"
+              >
+                <YouTubeIcon size={19} />
+              </a>
+              <a
+                className="p-1.5 rounded-lg hover:bg-emerald-50 text-emerald-600 transition-colors flex items-center justify-center"
+                href={socialConfig.platforms.whatsapp.groupUrl || socialConfig.platforms.whatsapp.url || 'https://whatsapp.com'}
+                target="_blank"
+                rel="noopener noreferrer"
+                title="Official WhatsApp Discussion Group"
+              >
+                <WhatsAppIcon size={19} />
+              </a>
+              <a
+                className="p-1.5 rounded-lg hover:bg-sky-50 text-sky-500 transition-colors flex items-center justify-center"
+                href={socialConfig.platforms.telegram.groupUrl || socialConfig.platforms.telegram.url || 'https://t.me'}
+                target="_blank"
+                rel="noopener noreferrer"
+                title="Official Study Telegram Channel"
+              >
+                <TelegramIcon size={19} />
+              </a>
+              {onShareWebsite && (
+                <button
+                  type="button"
+                  onClick={onShareWebsite}
+                  className="p-1.5 rounded-lg hover:bg-blue-50 text-blue-600 transition-colors flex items-center justify-center cursor-pointer"
+                  title="Share Website Externally (Chrome Direct)"
+                >
+                  <span className="material-symbols-outlined text-[19px]">share</span>
+                </button>
+              )}
+            </div>
 
-          {/* User Profile or Google Sign In */}
-          {currentUser ? (
+            {/* NOTIFICATION SYMBOL (Shown on both Desktop & Mobile) */}
             <div className="relative">
               <button
-                onClick={() => setShowProfileMenu(!showProfileMenu)}
-                className="flex items-center gap-1.5 sm:gap-2 p-1 sm:pl-2 bg-[#f0f3ff] hover:bg-[#e7eeff] transition-colors rounded-full sm:pr-2.5 py-1 shadow-sm cursor-pointer border border-blue-100 shrink-0"
+                aria-label="Notifications"
+                onClick={() => {
+                  setShowNotifications(!showNotifications);
+                  setHasUnread(false);
+                }}
+                className="p-1.5 sm:p-2 text-[#434655] hover:bg-[#e7eeff] rounded-xl relative cursor-pointer transition-colors"
+                type="button"
               >
-                <img
-                  alt={displayName}
-                  className="w-7 h-7 sm:w-8 sm:h-8 rounded-full object-cover border border-white shrink-0"
-                  src={userPhoto}
-                />
-                <div className="hidden md:flex flex-col text-left">
-                  <span className="text-xs font-bold text-[#111c2d] leading-none truncate max-w-[90px]">
-                    {displayName}
-                  </span>
-                  <span
-                    className={`text-[10px] font-bold leading-tight ${
-                      isPro ? 'text-[#006242]' : 'text-blue-600'
-                    }`}
-                  >
-                    {isPro ? `${activeClass} • Pro` : `${activeClass} • Free`}
-                  </span>
-                </div>
-                <span className="material-symbols-outlined text-[16px] text-gray-500 hidden sm:inline-block">
-                  {showProfileMenu ? 'arrow_drop_up' : 'arrow_drop_down'}
-                </span>
+                <span className="material-symbols-outlined text-[21px] sm:text-[22px]">notifications</span>
+                {hasUnread && notificationsList.length > 0 && (
+                  <span className="absolute top-1 right-1 w-2.5 h-2.5 rounded-full bg-[#fea619] border-2 border-white"></span>
+                )}
               </button>
 
-              {/* Profile Dropdown Menu */}
-              {showProfileMenu && (
-                <div className="absolute right-0 mt-2 w-[calc(100vw-24px)] max-w-xs bg-white rounded-2xl shadow-xl border border-gray-100 p-4 z-50 animate-fadeIn">
-                  <div className="flex items-center gap-3 pb-3 border-b border-gray-100">
-                    <img
-                      src={userPhoto}
-                      alt={displayName}
-                      className="w-10 h-10 rounded-full object-cover border border-blue-100"
-                    />
-                    <div className="overflow-hidden">
-                      <div className="font-bold text-sm text-gray-900 truncate">{displayName}</div>
-                      <div className="text-[11px] text-gray-500 truncate">{currentUser.email}</div>
-                    </div>
-                  </div>
-
-                  <div className="py-2.5 space-y-1.5 text-xs">
-                    <div className="flex items-center justify-between text-gray-600">
-                      <span>Status:</span>
-                      <span
-                        className={`font-bold px-2 py-0.5 rounded-full ${
-                          isPro
-                            ? 'bg-emerald-100 text-emerald-800'
-                            : 'bg-blue-100 text-blue-800'
-                        }`}
-                      >
-                        {isPro ? 'Pro Active ⭐' : 'Free Learner'}
+              {/* Notification Dropdown */}
+              {showNotifications && (
+                <div className="absolute right-0 mt-2 w-[calc(100vw-24px)] max-w-xs sm:max-w-sm bg-white rounded-2xl shadow-2xl border border-gray-100 p-4 z-50 animate-fadeIn max-h-[80vh] overflow-y-auto">
+                  <div className="flex items-center justify-between pb-2 border-b border-gray-100">
+                    <div className="flex items-center gap-1.5">
+                      <span className="font-bold text-sm text-gray-900">Study Notifications</span>
+                      <span className="bg-blue-100 text-blue-800 text-[10px] font-bold px-1.5 py-0.2 rounded-full">
+                        {notificationsList.length}
                       </span>
                     </div>
-
-                    {!isPro && (
-                      <button
-                        onClick={() => {
-                          setShowProfileMenu(false);
-                          onOpenProPass();
-                        }}
-                        className="w-full mt-2 py-2 px-3 bg-[#fea619] hover:bg-amber-400 text-[#2a1700] rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer shadow-xs tactile-btn-secondary"
-                      >
-                        <span className="material-symbols-outlined text-[16px]">workspace_premium</span>
-                        <span>Upgrade with Razorpay</span>
-                      </button>
-                    )}
+                    <button
+                      onClick={() => setShowNotifications(false)}
+                      className="text-gray-400 hover:text-gray-600 text-xs cursor-pointer"
+                    >
+                      <span className="material-symbols-outlined text-[16px]">close</span>
+                    </button>
                   </div>
 
-                  <div className="pt-2 border-t border-gray-100 mt-1 space-y-1">
-                    {onOpenMobileRegister && (
-                      <button
-                        onClick={() => {
-                          setShowProfileMenu(false);
-                          onOpenMobileRegister();
-                        }}
-                        className="w-full text-left py-1.5 px-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 rounded-lg flex items-center justify-between cursor-pointer transition-colors"
-                      >
-                        <div className="flex items-center gap-2">
-                          <span className="material-symbols-outlined text-[16px] text-emerald-600">phone_iphone</span>
-                          <span>{userProfile?.mobileNumber ? 'Mobile Number' : 'Register Mobile (+91)'}</span>
+                  <div className="divide-y divide-gray-50 mt-2">
+                    {notificationsList.length === 0 ? (
+                      <div className="py-6 text-center text-xs text-gray-400">No new announcements</div>
+                    ) : (
+                      notificationsList.map((notif) => (
+                        <div key={notif.id} className="py-2.5 hover:bg-slate-50 px-2 rounded-xl transition-colors">
+                          <div className="text-xs font-bold text-gray-900">{notif.title}</div>
+                          <div className="text-[11px] text-gray-600 mt-0.5 leading-relaxed">{notif.message}</div>
+                          {notif.createdAt && (
+                            <div className="text-[10px] text-gray-400 mt-1">
+                              {new Date(notif.createdAt).toLocaleDateString()}
+                            </div>
+                          )}
                         </div>
-                        {userProfile?.mobileNumber ? (
-                          <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-1.5 py-0.2 rounded">
-                            {userProfile.countryCode || '+91'} {userProfile.mobileNumber.slice(-4)}
-                          </span>
-                        ) : (
-                          <span className="text-[10px] bg-amber-100 text-amber-800 font-bold px-1.5 py-0.2 rounded">
-                            Add
-                          </span>
-                        )}
-                      </button>
+                      ))
                     )}
-
-                    {onOpenDashboard && (
-                      <button
-                        onClick={() => {
-                          setShowProfileMenu(false);
-                          onOpenDashboard();
-                        }}
-                        className="w-full text-left py-2 px-2 text-xs font-bold text-blue-700 bg-blue-50/70 hover:bg-blue-100/70 rounded-xl flex items-center justify-between cursor-pointer transition-colors"
-                      >
-                        <div className="flex items-center gap-2">
-                          <span className="material-symbols-outlined text-[18px] text-blue-700">account_circle</span>
-                          <span>My Student Dashboard</span>
-                        </div>
-                        <span className="material-symbols-outlined text-[14px]">chevron_right</span>
-                      </button>
-                    )}
-
-                    {isAdmin && (
-                      <button
-                        onClick={() => {
-                          setShowProfileMenu(false);
-                          onOpenAdminPanel();
-                        }}
-                        className="w-full text-left py-1.5 px-2 text-xs font-bold text-slate-800 hover:bg-slate-100 rounded-lg flex items-center justify-between cursor-pointer transition-colors"
-                      >
-                        <div className="flex items-center gap-2">
-                          <span className="material-symbols-outlined text-[16px] text-amber-500">admin_panel_settings</span>
-                          <span>Admin &amp; Gateway</span>
-                        </div>
-                        <span className="text-[10px] bg-amber-100 text-amber-800 font-bold px-1.5 py-0.2 rounded">
-                          Admin Only
-                        </span>
-                      </button>
-                    )}
-
-                    <button
-                      onClick={() => {
-                        setShowProfileMenu(false);
-                        onSignOut();
-                      }}
-                      className="w-full text-left py-1.5 px-2 text-xs font-semibold text-red-600 hover:bg-red-50 rounded-lg flex items-center gap-2 cursor-pointer transition-colors"
-                    >
-                      <span className="material-symbols-outlined text-[16px]">logout</span>
-                      <span>Sign Out</span>
-                    </button>
                   </div>
                 </div>
               )}
             </div>
-          ) : (
-            <button
-              onClick={onGoogleSignIn}
-              disabled={authLoading}
-              className="flex items-center gap-1.5 bg-white hover:bg-gray-50 text-[#111c2d] border border-gray-200 px-2.5 sm:px-3 py-1.5 rounded-full text-xs font-bold shadow-xs transition-all cursor-pointer disabled:opacity-60 shrink-0"
-            >
-              <svg className="w-3.5 h-3.5 sm:w-4 sm:h-4 shrink-0" viewBox="0 0 24 24">
-                <path
-                  fill="#4285F4"
-                  d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
-                />
-                <path
-                  fill="#34A853"
-                  d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
-                />
-                <path
-                  fill="#FBBC05"
-                  d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
-                />
-                <path
-                  fill="#EA4335"
-                  d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
-                />
-              </svg>
-              <span className="hidden sm:inline">{authLoading ? 'Signing in...' : 'Sign In'}</span>
-            </button>
-          )}
 
-          {/* Mobile Hamburger Button */}
-          <button
-            onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
-            className="lg:hidden p-1.5 sm:p-2 text-[#434655] hover:bg-[#e7eeff] rounded-xl cursor-pointer transition-colors"
-            title="Open Menu"
-            type="button"
-          >
-            <span className="material-symbols-outlined text-[22px]">
-              {mobileMenuOpen ? 'close' : 'menu'}
-            </span>
-          </button>
-        </div>
-      </div>
-
-      {/* Mobile Search Bar Expansion */}
-      {mobileSearchOpen && (
-        <div className="xl:hidden px-4 py-2.5 bg-[#f0f3ff] border-t border-blue-50 animate-fadeIn">
-          <div className="w-full flex items-center bg-white rounded-xl px-3 py-1.5 shadow-2xs border border-blue-100">
-            <span className="material-symbols-outlined text-[#737686] mr-2 text-[18px]">search</span>
-            <input
-              className="w-full bg-transparent border-0 outline-none text-xs text-[#111c2d] placeholder:text-[#737686]"
-              placeholder="Search formula sheets, notes..."
-              type="text"
-              value={searchQuery}
-              onChange={(e) => onSearchChange(e.target.value)}
-              autoFocus
-            />
-            {searchQuery && (
+            {/* DESKTOP ONLY: AI Teacher Button */}
+            {onOpenAiTeacher && (
               <button
-                onClick={() => onSearchChange('')}
-                className="text-gray-400 hover:text-gray-600 p-0.5"
+                onClick={onOpenAiTeacher}
+                className="hidden md:inline-flex items-center gap-1.5 text-xs font-extrabold px-3 py-1.5 rounded-xl cursor-pointer transition-all shrink-0 shadow-xs border bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-500 hover:to-amber-600 text-slate-950 border-amber-300"
+                title="Ask Math Teacher AI (Step-by-Step Solver)"
               >
-                <span className="material-symbols-outlined text-[16px]">close</span>
+                <span className="material-symbols-outlined text-[17px]">psychology</span>
+                <span>AI Teacher</span>
+                <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-pulse"></span>
               </button>
             )}
+
+            {/* DESKTOP ONLY: Login / Logged In Bar Button */}
+            <div className="hidden md:block">
+              {currentUser ? (
+                <div className="relative">
+                  <button
+                    onClick={() => setShowProfileMenu(!showProfileMenu)}
+                    className="flex items-center gap-1.5 sm:gap-2 p-1 sm:pl-2 bg-[#f0f3ff] hover:bg-[#e7eeff] transition-colors rounded-full sm:pr-2.5 py-1 shadow-xs cursor-pointer border border-blue-100 shrink-0"
+                  >
+                    <img
+                      alt={displayName}
+                      className="w-7 h-7 sm:w-8 sm:h-8 rounded-full object-cover border border-white shrink-0"
+                      src={userPhoto}
+                    />
+                    <div className="flex flex-col text-left">
+                      <span className="text-xs font-bold text-[#111c2d] leading-none truncate max-w-[90px]">
+                        {displayName}
+                      </span>
+                      <span
+                        className={`text-[10px] font-bold leading-tight ${
+                          isPro ? 'text-[#006242]' : 'text-blue-600'
+                        }`}
+                      >
+                        {isPro ? `${activeClass} • Pro` : `${activeClass} • Free`}
+                      </span>
+                    </div>
+                    <span className="material-symbols-outlined text-[16px] text-gray-500">
+                      {showProfileMenu ? 'arrow_drop_up' : 'arrow_drop_down'}
+                    </span>
+                  </button>
+
+                  {/* Profile Dropdown Menu */}
+                  {showProfileMenu && (
+                    <div className="absolute right-0 mt-2 w-72 bg-white rounded-2xl shadow-xl border border-gray-100 p-4 z-50 animate-fadeIn">
+                      <div className="flex items-center gap-3 pb-3 border-b border-gray-100">
+                        <img
+                          src={userPhoto}
+                          alt={displayName}
+                          className="w-10 h-10 rounded-full object-cover border border-blue-100"
+                        />
+                        <div className="overflow-hidden">
+                          <div className="font-bold text-sm text-gray-900 truncate">{displayName}</div>
+                          <div className="text-[11px] text-gray-500 truncate">{currentUser.email}</div>
+                        </div>
+                      </div>
+
+                      <div className="py-2.5 space-y-1.5 text-xs">
+                        <div className="flex items-center justify-between text-gray-600">
+                          <span>Status:</span>
+                          <span
+                            className={`font-bold px-2 py-0.5 rounded-full ${
+                              isPro ? 'bg-emerald-100 text-emerald-800' : 'bg-blue-100 text-blue-800'
+                            }`}
+                          >
+                            {isPro ? 'Pro Active ⭐' : 'Free Learner'}
+                          </span>
+                        </div>
+
+                        {!isPro && (
+                          <button
+                            onClick={() => {
+                              setShowProfileMenu(false);
+                              onOpenProPass();
+                            }}
+                            className="w-full mt-2 py-2 px-3 bg-[#fea619] hover:bg-amber-400 text-[#2a1700] rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 cursor-pointer shadow-xs tactile-btn-secondary"
+                          >
+                            <span className="material-symbols-outlined text-[16px]">workspace_premium</span>
+                            <span>Upgrade with Razorpay</span>
+                          </button>
+                        )}
+                      </div>
+
+                      <div className="pt-2 border-t border-gray-100 mt-1 space-y-1">
+                        {onOpenDashboard && (
+                          <button
+                            onClick={() => {
+                              setShowProfileMenu(false);
+                              onOpenDashboard();
+                            }}
+                            className="w-full text-left py-2 px-2 text-xs font-bold text-blue-700 bg-blue-50/70 hover:bg-blue-100/70 rounded-xl flex items-center justify-between cursor-pointer transition-colors"
+                          >
+                            <div className="flex items-center gap-2">
+                              <span className="material-symbols-outlined text-[18px] text-blue-700">account_circle</span>
+                              <span>My Student Dashboard</span>
+                            </div>
+                            <span className="material-symbols-outlined text-[14px]">chevron_right</span>
+                          </button>
+                        )}
+
+                        {onOpenMobileRegister && (
+                          <button
+                            onClick={() => {
+                              setShowProfileMenu(false);
+                              onOpenMobileRegister();
+                            }}
+                            className="w-full text-left py-1.5 px-2 text-xs font-semibold text-slate-700 hover:bg-slate-100 rounded-lg flex items-center justify-between cursor-pointer transition-colors"
+                          >
+                            <div className="flex items-center gap-2">
+                              <span className="material-symbols-outlined text-[16px] text-emerald-600">phone_iphone</span>
+                              <span>{userProfile?.mobileNumber ? 'Mobile Number' : 'Register Mobile (+91)'}</span>
+                            </div>
+                            {userProfile?.mobileNumber ? (
+                              <span className="text-[10px] bg-emerald-100 text-emerald-800 font-bold px-1.5 py-0.2 rounded">
+                                {userProfile.countryCode || '+91'} {userProfile.mobileNumber.slice(-4)}
+                              </span>
+                            ) : (
+                              <span className="text-[10px] bg-amber-100 text-amber-800 font-bold px-1.5 py-0.2 rounded">
+                                Add
+                              </span>
+                            )}
+                          </button>
+                        )}
+
+                        {isAdmin && (
+                          <button
+                            onClick={() => {
+                              setShowProfileMenu(false);
+                              onOpenAdminPanel();
+                            }}
+                            className="w-full text-left py-1.5 px-2 text-xs font-bold text-slate-800 hover:bg-slate-100 rounded-lg flex items-center justify-between cursor-pointer transition-colors"
+                          >
+                            <div className="flex items-center gap-2">
+                              <span className="material-symbols-outlined text-[16px] text-amber-500">admin_panel_settings</span>
+                              <span>Admin &amp; Gateway</span>
+                            </div>
+                            <span className="text-[10px] bg-amber-100 text-amber-800 font-bold px-1.5 py-0.2 rounded">
+                              Admin Only
+                            </span>
+                          </button>
+                        )}
+
+                        <button
+                          onClick={() => {
+                            setShowProfileMenu(false);
+                            onSignOut();
+                          }}
+                          className="w-full text-left py-1.5 px-2 text-xs font-semibold text-red-600 hover:bg-red-50 rounded-lg flex items-center gap-2 cursor-pointer transition-colors"
+                        >
+                          <span className="material-symbols-outlined text-[16px]">logout</span>
+                          <span>Sign Out</span>
+                        </button>
+                      </div>
+                    </div>
+                  )}
+                </div>
+              ) : (
+                <button
+                  onClick={onGoogleSignIn}
+                  disabled={authLoading}
+                  className="flex items-center gap-1.5 bg-white hover:bg-gray-50 text-[#111c2d] border border-gray-200 px-3 py-1.5 rounded-full text-xs font-bold shadow-xs transition-all cursor-pointer disabled:opacity-60 shrink-0"
+                >
+                  <svg className="w-3.5 h-3.5 shrink-0" viewBox="0 0 24 24">
+                    <path
+                      fill="#4285F4"
+                      d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"
+                    />
+                    <path
+                      fill="#34A853"
+                      d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"
+                    />
+                    <path
+                      fill="#FBBC05"
+                      d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z"
+                    />
+                    <path
+                      fill="#EA4335"
+                      d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z"
+                    />
+                  </svg>
+                  <span>{authLoading ? 'Signing in...' : 'Sign In'}</span>
+                </button>
+              )}
+            </div>
+
+            {/* HAMBURGER MENU ICON (Shown on both Desktop & Mobile to toggle the sidebar drawer) */}
+            <button
+              onClick={() => setSidebarOpen(!sidebarOpen)}
+              className="p-1.5 sm:p-2 text-[#111c2d] hover:bg-[#e7eeff] rounded-xl cursor-pointer transition-colors flex items-center justify-center shrink-0 border border-transparent hover:border-blue-100"
+              title="Open Navigation Menu"
+              type="button"
+              aria-label="Toggle Navigation Sidebar"
+            >
+              <span className="material-symbols-outlined text-[24px] sm:text-[26px]">menu</span>
+            </button>
           </div>
         </div>
-      )}
 
-      {/* Mobile Navigation Drawer Dropdown */}
-      {mobileMenuOpen && (
-        <div className="lg:hidden bg-white border-t border-gray-100 shadow-xl p-4 space-y-2 animate-fadeIn max-h-[80vh] overflow-y-auto">
-          <div className="grid grid-cols-2 gap-2 pb-2 border-b border-gray-100">
-            <button
-              onClick={() => handleMobileNavClick('explore-notes')}
-              className={`p-2.5 rounded-xl text-left text-xs font-bold flex items-center gap-2 cursor-pointer ${
-                activeNav === 'explore-notes'
-                  ? 'bg-[#2563eb] text-white'
-                  : 'bg-[#f0f3ff] text-[#111c2d]'
-              }`}
-            >
-              <span className="material-symbols-outlined text-[18px]">auto_awesome</span>
-              <span>Explore Notes</span>
-            </button>
-            <button
-              onClick={() => handleMobileNavClick('video-lessons')}
-              className={`p-2.5 rounded-xl text-left text-xs font-bold flex items-center gap-2 cursor-pointer ${
-                activeNav === 'video-lessons'
-                  ? 'bg-[#2563eb] text-white'
-                  : 'bg-[#f0f3ff] text-[#111c2d]'
-              }`}
-            >
-              <span className="material-symbols-outlined text-[18px]">smart_display</span>
-              <span>Video Lessons</span>
-            </button>
-            <button
-              onClick={() => handleMobileNavClick('formula-deck')}
-              className={`p-2.5 rounded-xl text-left text-xs font-bold flex items-center gap-2 cursor-pointer ${
-                activeNav === 'formula-deck'
-                  ? 'bg-[#2563eb] text-white'
-                  : 'bg-[#f0f3ff] text-[#111c2d]'
-              }`}
-            >
-              <span className="material-symbols-outlined text-[18px]">square_foot</span>
-              <span>Formula Deck</span>
-            </button>
-            <button
-              onClick={() => handleMobileNavClick('paid-masterclasses')}
-              className={`p-2.5 rounded-xl text-left text-xs font-bold flex items-center gap-2 cursor-pointer ${
-                activeNav === 'paid-masterclasses'
-                  ? 'bg-[#2563eb] text-white'
-                  : 'bg-[#f0f3ff] text-[#111c2d]'
-              }`}
-            >
-              <span className="material-symbols-outlined text-[18px]">workspace_premium</span>
-              <span>Masterclasses</span>
-            </button>
-            {currentUser && onOpenDashboard && (
-              <button
-                onClick={() => {
-                  setMobileMenuOpen(false);
-                  onOpenDashboard();
-                }}
-                className="p-2.5 rounded-xl text-left text-xs font-bold flex items-center gap-2 cursor-pointer bg-blue-50 text-[#004ac6] col-span-2 border border-blue-100"
-              >
-                <span className="material-symbols-outlined text-[18px]">account_circle</span>
-                <span>My Student Dashboard</span>
-              </button>
-            )}
+        {/* MOBILE ONLY: Search Bar Input Expansion (Toggled via search icon) */}
+        {mobileSearchOpen && (
+          <div className="md:hidden px-3 py-2 bg-[#f0f3ff] border-t border-blue-50 animate-fadeIn">
+            <div className="w-full flex items-center bg-white rounded-xl px-3 py-1.5 shadow-2xs border border-blue-100">
+              <span className="material-symbols-outlined text-[#737686] mr-2 text-[18px]">search</span>
+              <input
+                className="w-full bg-transparent border-0 outline-none text-xs text-[#111c2d] placeholder:text-[#737686]"
+                placeholder="Search notes, formula sheets, NCERT..."
+                type="text"
+                value={searchQuery}
+                onChange={(e) => onSearchChange(e.target.value)}
+                autoFocus
+              />
+              {searchQuery && (
+                <button
+                  onClick={() => onSearchChange('')}
+                  className="text-gray-400 hover:text-gray-600 p-0.5"
+                >
+                  <span className="material-symbols-outlined text-[16px]">close</span>
+                </button>
+              )}
+            </div>
+          </div>
+        )}
+      </header>
 
-            {isAdmin && (
-              <button
-                onClick={() => {
-                  setMobileMenuOpen(false);
-                  onOpenAdminPanel();
-                }}
-                className="p-2.5 rounded-xl text-left text-xs font-bold flex items-center gap-2 cursor-pointer bg-slate-900 text-amber-300 col-span-2"
-              >
-                <span className="material-symbols-outlined text-[18px]">admin_panel_settings</span>
-                <span>Admin Console &amp; Gateway</span>
-                <span className="ml-auto text-[10px] bg-emerald-500/20 text-emerald-300 px-2 py-0.5 rounded font-mono">
-                  Admin
+      {/* ==============================================================
+          SIDEBAR DRAWER (Opened via Hamburger Menu Icon)
+          Contains:
+          - User Login/Profile state (especially crucial for mobile)
+          - AI Teacher Assistant card (especially crucial for mobile)
+          - All Main Navigation Links (Notes, Videos, Formula Deck, Masterclasses, Downloads, Olympiad)
+          - Class Selector
+          - Regional Currency Selector
+          - Admin Control Panel Link
+          - Social Media Communities
+          ============================================================== */}
+      {sidebarOpen && (
+        <div className="fixed inset-0 z-50 flex justify-end animate-fadeIn">
+          {/* Backdrop Overlay */}
+          <div
+            onClick={() => setSidebarOpen(false)}
+            className="fixed inset-0 bg-slate-950/60 backdrop-blur-xs transition-opacity cursor-pointer"
+          />
+
+          {/* Drawer Container */}
+          <div className="relative w-full max-w-sm sm:max-w-md bg-white h-full shadow-2xl z-10 flex flex-col overflow-y-auto font-['Plus_Jakarta_Sans',sans-serif]">
+            {/* Drawer Header */}
+            <div className="p-4 sm:p-5 border-b border-gray-100 flex items-center justify-between gap-3 bg-gradient-to-r from-blue-50/60 to-indigo-50/60 shrink-0">
+              <div className="flex items-center gap-2.5 min-w-0">
+                <img
+                  alt={branding?.siteTitle || 'Logo'}
+                  className="h-6 w-auto object-contain"
+                  src={
+                    branding?.logoUrl ||
+                    'https://lh3.googleusercontent.com/aida/AEtjO1UjgWp59CcYsKXuqwB2FYHcehNEDlMGhbND9VEHl154aFff2EPvt39mUwZ6qXVc-edHZxj5IPmP7JbzGPqzLaCgdQX4S4GUMQBtC4KxFgHHUCu_55VykewYAvz0ReMRXT-l8SNrEHvxLcCxtTX0zVGZ6bSEQvSxd3WcuoKgXa3gTPPWl-czWwPLaYldf3jK6W4CDevlmvi08ew8Ag-k6FiBm7lx3ROJP5G9hsY15VySSpP-r5sf3fqLFLs'
+                  }
+                />
+                <span className="font-extrabold text-sm text-[#004ac6] truncate">
+                  {branding?.siteTitle || 'Maths at Your Fingertips'}
                 </span>
+              </div>
+
+              <button
+                onClick={() => setSidebarOpen(false)}
+                className="w-8 h-8 rounded-full bg-white hover:bg-gray-100 text-gray-500 hover:text-gray-800 flex items-center justify-center transition-colors cursor-pointer border border-gray-200 shadow-2xs"
+                title="Close Sidebar"
+              >
+                <span className="material-symbols-outlined text-[18px]">close</span>
               </button>
-            )}
-          </div>
+            </div>
 
-          <div className="pt-2 flex items-center justify-between">
-            <button
-              onClick={() => {
-                setMobileMenuOpen(false);
-                onOpenDownloads();
-              }}
-              className="flex items-center gap-2 bg-[#6ffbbe] text-[#002113] text-xs font-bold py-2 px-3 rounded-xl cursor-pointer"
-            >
-              <span className="material-symbols-outlined text-[18px]">download</span>
-              <span>Offline Vault ({downloadsCount})</span>
-            </button>
+            {/* Drawer Body */}
+            <div className="p-4 sm:p-5 space-y-5 flex-1">
+              {/* 1. USER ACCOUNT CARD (Prominent for Mobile & Desktop) */}
+              <div className="bg-[#f0f4ff] rounded-2xl p-3.5 border border-blue-100">
+                {currentUser ? (
+                  <div className="space-y-3">
+                    <div className="flex items-center gap-3">
+                      <img
+                        src={userPhoto}
+                        alt={displayName}
+                        className="w-11 h-11 rounded-full object-cover border-2 border-white shadow-xs shrink-0"
+                      />
+                      <div className="min-w-0 flex-1">
+                        <div className="font-bold text-sm text-gray-900 truncate">{displayName}</div>
+                        <div className="text-[11px] text-gray-500 truncate">{currentUser.email}</div>
+                        <span
+                          className={`inline-block mt-0.5 text-[10px] font-bold px-2 py-0.2 rounded-full ${
+                            isPro ? 'bg-emerald-100 text-emerald-800' : 'bg-blue-100 text-blue-800'
+                          }`}
+                        >
+                          {isPro ? 'Pro Pass Active ⭐' : 'Free Learner'}
+                        </span>
+                      </div>
+                    </div>
 
-            <div className="flex items-center gap-2 text-[#434655]">
-              <a
-                href={socialConfig.platforms.youtube.url || "https://youtube.com"}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="p-2 hover:bg-gray-100 rounded-lg text-red-600"
-                title="YouTube Channel"
-              >
-                <span className="material-symbols-outlined text-[20px]">smart_display</span>
-              </a>
-              <a
-                href={socialConfig.platforms.whatsapp.groupUrl || socialConfig.platforms.whatsapp.url || "https://whatsapp.com"}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="p-2 hover:bg-gray-100 rounded-lg text-emerald-600"
-                title="WhatsApp Community"
-              >
-                <span className="material-symbols-outlined text-[20px]">groups</span>
-              </a>
-              <a
-                href={socialConfig.platforms.telegram.groupUrl || socialConfig.platforms.telegram.url || "https://t.me"}
-                target="_blank"
-                rel="noopener noreferrer"
-                className="p-2 hover:bg-gray-100 rounded-lg text-blue-600"
-                title="Telegram Group"
-              >
-                <span className="material-symbols-outlined text-[20px]">send</span>
-              </a>
+                    <div className="grid grid-cols-2 gap-2 pt-2 border-t border-blue-200/60">
+                      {onOpenDashboard && (
+                        <button
+                          onClick={() => {
+                            setSidebarOpen(false);
+                            onOpenDashboard();
+                          }}
+                          className="flex items-center justify-center gap-1.5 py-1.5 px-2 bg-white hover:bg-blue-50 text-blue-700 rounded-xl text-xs font-bold border border-blue-100 transition-colors cursor-pointer"
+                        >
+                          <span className="material-symbols-outlined text-[15px]">account_circle</span>
+                          <span>Dashboard</span>
+                        </button>
+                      )}
+
+                      <button
+                        onClick={() => {
+                          setSidebarOpen(false);
+                          onSignOut();
+                        }}
+                        className="flex items-center justify-center gap-1.5 py-1.5 px-2 bg-white hover:bg-red-50 text-red-600 rounded-xl text-xs font-semibold border border-red-100 transition-colors cursor-pointer"
+                      >
+                        <span className="material-symbols-outlined text-[15px]">logout</span>
+                        <span>Sign Out</span>
+                      </button>
+                    </div>
+                  </div>
+                ) : (
+                  <div className="text-center py-2 space-y-2.5">
+                    <div className="w-10 h-10 rounded-full bg-blue-100 text-blue-700 flex items-center justify-center mx-auto">
+                      <span className="material-symbols-outlined text-[22px]">account_circle</span>
+                    </div>
+                    <div>
+                      <div className="text-xs font-bold text-gray-900">Student Account</div>
+                      <div className="text-[11px] text-gray-500">Sign in to sync your notes, tests, and AI history</div>
+                    </div>
+                    <button
+                      onClick={() => {
+                        setSidebarOpen(false);
+                        onGoogleSignIn();
+                      }}
+                      disabled={authLoading}
+                      className="w-full flex items-center justify-center gap-2 bg-[#004ac6] hover:bg-blue-700 text-white font-bold text-xs py-2.5 px-3 rounded-xl shadow-xs transition-colors cursor-pointer"
+                    >
+                      <svg className="w-3.5 h-3.5 fill-current" viewBox="0 0 24 24">
+                        <path d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z" />
+                        <path d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z" />
+                        <path d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.06H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.94l2.85-2.22.81-.63z" />
+                        <path d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.06l3.66 2.84c.87-2.6 3.3-4.52 6.16-4.52z" />
+                      </svg>
+                      <span>{authLoading ? 'Signing in...' : 'Sign in with Google'}</span>
+                    </button>
+                  </div>
+                )}
+              </div>
+
+              {/* 2. AI TEACHER ASSISTANT CARD */}
+              {onOpenAiTeacher && (
+                <div
+                  onClick={() => {
+                    setSidebarOpen(false);
+                    onOpenAiTeacher();
+                  }}
+                  className="bg-gradient-to-r from-amber-400 via-amber-500 to-amber-600 rounded-2xl p-3.5 text-slate-950 shadow-md cursor-pointer hover:shadow-lg transition-transform active:scale-98 flex items-center justify-between gap-3 border border-amber-300"
+                >
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-xl bg-slate-950 text-amber-400 flex items-center justify-center font-bold shrink-0">
+                      <span className="material-symbols-outlined text-[22px]">psychology</span>
+                    </div>
+                    <div>
+                      <div className="text-xs font-black uppercase tracking-tight flex items-center gap-1.5">
+                        <span>Prof. Raman • AI Teacher</span>
+                        <span className="w-2 h-2 rounded-full bg-emerald-600 animate-pulse"></span>
+                      </div>
+                      <div className="text-[11px] text-slate-900 font-semibold opacity-90">
+                        Ask any math question via text or photo
+                      </div>
+                    </div>
+                  </div>
+                  <span className="material-symbols-outlined text-[18px]">chevron_right</span>
+                </div>
+              )}
+
+              {/* 3. PRIMARY NAVIGATION LINKS */}
+              <div className="space-y-1">
+                <div className="text-[11px] font-bold text-gray-400 uppercase tracking-wider px-2 mb-1">
+                  Main Navigation
+                </div>
+
+                <button
+                  onClick={() => handleNavClick('explore-notes')}
+                  className={`w-full flex items-center justify-between p-2.5 rounded-xl text-xs font-bold transition-colors cursor-pointer ${
+                    activeNav === 'explore-notes'
+                      ? 'bg-blue-600 text-white shadow-xs'
+                      : 'text-slate-700 hover:bg-slate-100'
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5">
+                    <span className="material-symbols-outlined text-[18px]">auto_awesome</span>
+                    <span>Explore Notes</span>
+                  </div>
+                  <span className="text-[10px] opacity-75">Classes 5-10</span>
+                </button>
+
+                <button
+                  onClick={() => handleNavClick('video-lessons')}
+                  className={`w-full flex items-center justify-between p-2.5 rounded-xl text-xs font-bold transition-colors cursor-pointer ${
+                    activeNav === 'video-lessons'
+                      ? 'bg-blue-600 text-white shadow-xs'
+                      : 'text-slate-700 hover:bg-slate-100'
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5">
+                    <span className="material-symbols-outlined text-[18px]">smart_display</span>
+                    <span>Video Lessons</span>
+                  </div>
+                  <span className="text-[10px] opacity-75">Animated</span>
+                </button>
+
+                <button
+                  onClick={() => handleNavClick('formula-deck')}
+                  className={`w-full flex items-center justify-between p-2.5 rounded-xl text-xs font-bold transition-colors cursor-pointer ${
+                    activeNav === 'formula-deck'
+                      ? 'bg-blue-600 text-white shadow-xs'
+                      : 'text-slate-700 hover:bg-slate-100'
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5">
+                    <span className="material-symbols-outlined text-[18px]">functions</span>
+                    <span>Formula Deck &amp; Sandbox</span>
+                  </div>
+                  <span className="bg-amber-100 text-amber-800 text-[10px] font-bold px-1.5 py-0.2 rounded">
+                    Interactive
+                  </span>
+                </button>
+
+                <button
+                  onClick={() => handleNavClick('paid-masterclasses')}
+                  className={`w-full flex items-center justify-between p-2.5 rounded-xl text-xs font-bold transition-colors cursor-pointer ${
+                    activeNav === 'paid-masterclasses'
+                      ? 'bg-blue-600 text-white shadow-xs'
+                      : 'text-slate-700 hover:bg-slate-100'
+                  }`}
+                >
+                  <div className="flex items-center gap-2.5">
+                    <span className="material-symbols-outlined text-[18px]">workspace_premium</span>
+                    <span>Pro Masterclasses</span>
+                  </div>
+                  <span className="text-[10px] text-amber-600 font-bold">100/100 Prep</span>
+                </button>
+
+                {/* Downloads Drawer Link */}
+                <button
+                  onClick={() => {
+                    setSidebarOpen(false);
+                    onOpenDownloads();
+                  }}
+                  className="w-full flex items-center justify-between p-2.5 rounded-xl text-xs font-bold text-slate-700 hover:bg-slate-100 transition-colors cursor-pointer"
+                >
+                  <div className="flex items-center gap-2.5">
+                    <span className="material-symbols-outlined text-[18px] text-emerald-600">download</span>
+                    <span>Downloads &amp; Offline Vault</span>
+                  </div>
+                  {downloadsCount > 0 && (
+                    <span className="bg-emerald-600 text-white text-[10px] font-bold px-2 py-0.2 rounded-full">
+                      {downloadsCount} items
+                    </span>
+                  )}
+                </button>
+              </div>
+
+              {/* 4. CLASS GRADE SELECTOR */}
+              <div className="pt-2 border-t border-gray-100">
+                <div className="text-[11px] font-bold text-gray-400 uppercase tracking-wider px-2 mb-2">
+                  Select Class Syllabus
+                </div>
+                <div className="grid grid-cols-3 gap-1.5">
+                  {['Class 10', 'Class 9', 'Class 8', 'Class 7', 'Class 6', 'Class 5'].map((grade) => (
+                    <button
+                      key={grade}
+                      onClick={() => handleClassSelect(grade)}
+                      className={`py-1.5 px-2 rounded-xl text-xs font-bold text-center transition-colors cursor-pointer ${
+                        activeClass === grade
+                          ? 'bg-blue-600 text-white'
+                          : 'bg-slate-100 text-slate-700 hover:bg-slate-200'
+                      }`}
+                    >
+                      {grade}
+                    </button>
+                  ))}
+                </div>
+              </div>
+
+              {/* 5. REGIONAL CURRENCY & PREFERENCES */}
+              <div className="pt-2 border-t border-gray-100">
+                <div className="text-[11px] font-bold text-gray-400 uppercase tracking-wider px-2 mb-2">
+                  Currency Setting
+                </div>
+                <div className="flex items-center justify-between p-2.5 bg-slate-50 rounded-xl border border-slate-200 text-xs">
+                  <div className="flex items-center gap-2 text-slate-700 font-bold">
+                    <span className="material-symbols-outlined text-[18px] text-blue-600">payments</span>
+                    <span>Display Currency</span>
+                  </div>
+                  <select
+                    value={userCurrencyState.code}
+                    onChange={(e) => {
+                      setUserCurrency(e.target.value);
+                      setUserCurrencyState(SUPPORTED_CURRENCIES[e.target.value]);
+                    }}
+                    className="bg-white border border-slate-200 rounded-lg px-2 py-1 font-bold text-xs text-blue-700 outline-none cursor-pointer"
+                  >
+                    {Object.values(SUPPORTED_CURRENCIES).map((c) => (
+                      <option key={c.code} value={c.code}>
+                        {c.code} ({c.symbol.trim()})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* 6. ADMIN CONTROL CENTER (If Admin) */}
+              {isAdmin && (
+                <div className="pt-2 border-t border-gray-100">
+                  <button
+                    onClick={() => {
+                      setSidebarOpen(false);
+                      onOpenAdminPanel();
+                    }}
+                    className="w-full flex items-center justify-between p-3 rounded-xl bg-slate-900 text-amber-300 text-xs font-bold shadow-xs hover:bg-slate-800 transition-colors cursor-pointer border border-amber-500/40"
+                  >
+                    <div className="flex items-center gap-2">
+                      <span className="material-symbols-outlined text-[18px] text-amber-400">admin_panel_settings</span>
+                      <span>Admin Control Center</span>
+                    </div>
+                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
+                  </button>
+                </div>
+              )}
+
+              {/* 7. SOCIAL MEDIA COMMUNITIES & SHARE (Especially Crucial for Mobile) */}
+              <div className="pt-2 border-t border-gray-100">
+                <div className="text-[11px] font-bold text-gray-400 uppercase tracking-wider px-2 mb-2 flex items-center justify-between">
+                  <span>Study Communities</span>
+                  <span className="text-[10px] text-blue-600 font-extrabold uppercase">Official</span>
+                </div>
+                <div className="grid grid-cols-2 gap-2">
+                  <a
+                    href={socialConfig.platforms.youtube.url || 'https://youtube.com'}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-2 p-2.5 bg-slate-50 hover:bg-red-50 text-slate-700 hover:text-red-700 rounded-xl text-xs font-semibold border border-slate-100 transition-colors"
+                  >
+                    <YouTubeIcon size={18} />
+                    <span>YouTube</span>
+                  </a>
+                  <a
+                    href={socialConfig.platforms.whatsapp.groupUrl || socialConfig.platforms.whatsapp.url || 'https://whatsapp.com'}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-2 p-2.5 bg-slate-50 hover:bg-emerald-50 text-slate-700 hover:text-emerald-700 rounded-xl text-xs font-semibold border border-slate-100 transition-colors"
+                  >
+                    <WhatsAppIcon size={18} />
+                    <span>WhatsApp</span>
+                  </a>
+                  <a
+                    href={socialConfig.platforms.telegram.groupUrl || socialConfig.platforms.telegram.url || 'https://t.me'}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-2 p-2.5 bg-slate-50 hover:bg-sky-50 text-slate-700 hover:text-sky-700 rounded-xl text-xs font-semibold border border-slate-100 transition-colors"
+                  >
+                    <TelegramIcon size={18} />
+                    <span>Telegram</span>
+                  </a>
+                  <a
+                    href={socialConfig.platforms.instagram.url || 'https://instagram.com'}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="flex items-center gap-2 p-2.5 bg-slate-50 hover:bg-pink-50 text-slate-700 hover:text-pink-700 rounded-xl text-xs font-semibold border border-slate-100 transition-colors"
+                  >
+                    <InstagramIcon size={18} />
+                    <span>Instagram</span>
+                  </a>
+                </div>
+
+                {onShareWebsite && (
+                  <button
+                    type="button"
+                    onClick={() => {
+                      setSidebarOpen(false);
+                      onShareWebsite();
+                    }}
+                    className="mt-2.5 w-full flex items-center justify-center gap-2 p-2.5 rounded-xl bg-blue-50 hover:bg-blue-100 text-blue-700 border border-blue-200 text-xs font-bold transition-colors cursor-pointer"
+                  >
+                    <span className="material-symbols-outlined text-[18px]">share</span>
+                    <span>Share Website (Direct Chrome Link)</span>
+                  </button>
+                )}
+              </div>
+            </div>
+
+            {/* Drawer Footer */}
+            <div className="p-4 border-t border-gray-100 bg-gray-50 text-center text-[11px] text-gray-500 shrink-0">
+              Maths at Your Fingertips • Classes 5 to 10
             </div>
           </div>
         </div>
       )}
-    </header>
+    </>
   );
 };

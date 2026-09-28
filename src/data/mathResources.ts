@@ -20,6 +20,10 @@ export interface MathResource {
   videoDuration?: string;
   thumbnailUrl?: string;
   youtubeId?: string;
+  facebookVideoUrl?: string;
+  videoUrl?: string;
+  videoPlatform?: 'youtube' | 'facebook' | 'direct';
+  embedHtml?: string;
   downloadUrl?: string;
   flashcardCount?: number;
   keyFormulas?: string[];
@@ -129,6 +133,8 @@ export const MATH_RESOURCES: MathResource[] = [
     originalPrice: 899,
     hasVideo: true,
     videoDuration: '3.5 Hrs Video',
+    videoPlatform: 'youtube',
+    youtubeId: 'kJQP7kiw5Fk',
     thumbnailUrl: 'https://lh3.googleusercontent.com/aida-public/AB6AXuDZtxWXovBQ43fDotyNVe9ZDaWWCvGpkkQl4Tn5qW2jNzVl0l1EMnJQM8Ss6FACQs9Mi0l_L4hHH49EcHsH3upcN3IDVJRicOwlyxL40z4PbSkkvqhgrzlIV7s9M8yOTvL4XA7gXS45fQG9KnWtNh-JW8qsZbokBuGh9ClIT0_93EBQLjO07aVAMAb2QDlRFJe0RHqRC6Z5fpGHdVIq7IqHsjf8UbTS5ak0KLJ6jye5D0gp7wZxp7Ru',
     badgeLabel: 'VIDEO MASTERCLASS',
     tags: ['Class 9 Geometry', 'Triangles', 'Circles', 'Theorems & Proofs'],
@@ -137,6 +143,56 @@ export const MATH_RESOURCES: MathResource[] = [
       'Exterior Angle Theorem: Exterior angle = Sum of two interior opposite angles',
       'SAS, ASA, AAS, SSS, RHS Congruence criteria conditions',
       'Circles: Angle subtended at centre is twice angle at circumference'
+    ]
+  },
+  {
+    id: 'res-fb-video-trig-class10',
+    title: 'Class 10 Trigonometry 1-Shot Visual Masterclass (Facebook Live)',
+    grade: 'Class 10',
+    topic: 'Trigonometry',
+    categoryTitle: 'Trigonometry • Facebook Embedded Lesson',
+    tier: 'free',
+    format: 'Video Lessons',
+    description: 'Complete high-yield walkthrough of sin², cos², tan ratios, standard angle tricks (0° to 90° table memorization), and board exam proofs.',
+    rating: 5.0,
+    downloadsCount: '19.4k',
+    sizeOrDuration: '45 mins • Facebook Embedded Player',
+    hasVideo: true,
+    videoDuration: '45 mins',
+    videoPlatform: 'facebook',
+    facebookVideoUrl: 'https://www.facebook.com/facebook/videos/10153231379946729/',
+    badgeLabel: 'FACEBOOK VIDEO EMBED',
+    tags: ['Class 10', 'Trigonometry', 'Facebook Video', 'NCERT Solutions', 'Board Exam 2026'],
+    keyFormulas: [
+      'sin²θ + cos²θ = 1',
+      '1 + tan²θ = sec²θ',
+      '1 + cot²θ = cosec²θ',
+      'tanθ = sinθ / cosθ'
+    ]
+  },
+  {
+    id: 'res-yt-video-poly-class10',
+    title: 'Quadratic Equations & Roots Decomposition in 15 Minutes',
+    grade: 'Class 10',
+    topic: 'Polynomials',
+    categoryTitle: 'Algebra • YouTube Embedded Lesson',
+    tier: 'free',
+    format: 'Video Lessons',
+    description: 'Visual geometric breakdown of completing the square and the Shreedharacharya quadratic discriminant D = b² - 4ac method.',
+    rating: 4.9,
+    downloadsCount: '14.2k',
+    sizeOrDuration: '18 mins • YouTube HD',
+    hasVideo: true,
+    videoDuration: '18 mins',
+    videoPlatform: 'youtube',
+    youtubeId: 'kJQP7kiw5Fk',
+    badgeLabel: 'YOUTUBE HD EMBED',
+    tags: ['Class 10', 'Quadratic Equations', 'YouTube Video', 'Board Exam 2026'],
+    keyFormulas: [
+      'Standard Form: ax² + bx + c = 0',
+      'Discriminant: D = b² - 4ac',
+      'Quadratic Formula: x = (-b ± √D) / (2a)',
+      'Nature of Roots: D > 0 distinct real, D = 0 equal real, D < 0 no real roots'
     ]
   },
   {

@@ -86,6 +86,7 @@ import { AdminSeoTab } from './admin/AdminSeoTab';
 import { AdminCategoriesTab } from './admin/AdminCategoriesTab';
 import { AdminThemeTab } from './admin/AdminThemeTab';
 import { AdminSocialTab } from './admin/AdminSocialTab';
+import { AdminAiTeacherTab } from './admin/AdminAiTeacherTab';
 import { resetAllAdminFeaturesToDefaults } from '../services/adminReset';
 
 interface AdminControlPanelPageProps {
@@ -108,6 +109,7 @@ export const AdminControlPanelPage: React.FC<AdminControlPanelPageProps> = ({
   const [activeTab, setActiveTab] = useState<
     | 'analytics'
     | 'students'
+    | 'ai-teacher'
     | 'content'
     | 'categories'
     | 'theme'
@@ -589,6 +591,7 @@ export const AdminControlPanelPage: React.FC<AdminControlPanelPageProps> = ({
           {[
             { id: 'analytics', label: 'Overview', icon: 'monitoring' },
             { id: 'students', label: `Students (${users.length})`, icon: 'group' },
+            { id: 'ai-teacher', label: 'AI Teacher Activity', icon: 'psychology' },
             { id: 'content', label: `Upload Material (${customResources.length})`, icon: 'upload_file' },
             { id: 'categories', label: `Categories (${categories.length})`, icon: 'category' },
             { id: 'theme', label: 'Theme & Layout', icon: 'palette' },
@@ -630,6 +633,13 @@ export const AdminControlPanelPage: React.FC<AdminControlPanelPageProps> = ({
           <AdminStudentsTab
             users={users}
             onRefresh={loadData}
+            onToast={onToast}
+          />
+        )}
+
+        {/* TAB: AI TEACHER ACTIVITY */}
+        {activeTab === 'ai-teacher' && (
+          <AdminAiTeacherTab
             onToast={onToast}
           />
         )}

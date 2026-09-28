@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { MathResource } from '../data/mathResources';
 import { formatPrice } from '../services/currency';
+import { downloadResourceToSystem } from '../services/fileDownloader';
 
 interface ResourceModalProps {
   resource: MathResource | null;
@@ -8,6 +9,7 @@ interface ResourceModalProps {
   onClose: () => void;
   onDownload: (title: string, size: string) => void;
   onOpenProPass: () => void;
+  onShare?: (title: string, resource: MathResource) => void;
 }
 
 export const ResourceModal: React.FC<ResourceModalProps> = ({
@@ -16,6 +18,7 @@ export const ResourceModal: React.FC<ResourceModalProps> = ({
   onClose,
   onDownload,
   onOpenProPass,
+  onShare,
 }) => {
   const [downloading, setDownloading] = useState(false);
   const [activeTab, setActiveTab] = useState<'sheet' | 'traps' | 'solutions'>('sheet');
@@ -30,24 +33,25 @@ export const ResourceModal: React.FC<ResourceModalProps> = ({
     }
 
     setDownloading(true);
-    if (resource.downloadUrl && (resource.downloadUrl.startsWith('http') || resource.downloadUrl.startsWith('blob:') || resource.downloadUrl.startsWith('data:'))) {
-      try {
-        const a = document.createElement('a');
-        a.href = resource.downloadUrl;
-        a.target = '_blank';
-        a.rel = 'noopener noreferrer';
-        a.download = `${resource.title.replace(/[^a-zA-Z0-9_-]/g, '_')}.pdf`;
-        document.body.appendChild(a);
-        a.click();
-        document.body.removeChild(a);
-      } catch (e) {
-        console.warn('Direct file download fallback:', e);
-      }
+    try {
+      downloadResourceToSystem({
+        title: resource.title,
+        grade: resource.grade,
+        topic: resource.topic,
+        format: resource.format,
+        downloadUrl: resource.downloadUrl,
+        description: resource.description,
+        keyFormulas: resource.keyFormulas,
+        examTraps: resource.examTraps,
+      });
+    } catch (e) {
+      console.warn('System download failed:', e);
     }
+
     setTimeout(() => {
       setDownloading(false);
       onDownload(resource.title, resource.sizeOrDuration);
-    }, 800);
+    }, 400);
   };
 
   const handlePrint = () => {
@@ -79,6 +83,17 @@ export const ResourceModal: React.FC<ResourceModalProps> = ({
           </div>
 
           <div className="flex items-center gap-1.5 sm:gap-2 shrink-0">
+            {onShare && (
+              <button
+                type="button"
+                onClick={() => onShare(resource.title, resource)}
+                className="inline-flex items-center gap-1 text-xs text-blue-700 hover:text-blue-900 bg-blue-50 hover:bg-blue-100 px-2.5 py-1.5 rounded-lg font-bold border border-blue-200 transition-colors cursor-pointer"
+                title="Share externally via Chrome direct link"
+              >
+                <span className="material-symbols-outlined text-[16px]">share</span>
+                <span className="hidden sm:inline">Share</span>
+              </button>
+            )}
             <button
               onClick={handlePrint}
               className="hidden sm:inline-flex items-center gap-1 text-xs text-gray-600 hover:text-gray-900 bg-gray-100 hover:bg-gray-200 px-2.5 py-1.5 rounded-lg transition-colors cursor-pointer"

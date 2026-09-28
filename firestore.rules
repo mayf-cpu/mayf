@@ -79,5 +79,13 @@ service cloud.firestore {
       allow read: if true;
       allow write: if true;
     }
+
+    // AI Queries Collection (Student math queries & teacher assistant solutions)
+    match /ai_queries/{queryId} {
+      allow get: if (isSignedIn() && resource.data.userId == request.auth.uid) || isAdmin();
+      allow list: if (isSignedIn() && resource.data.userId == request.auth.uid) || isAdmin();
+      allow create: if isSignedIn() && request.resource.data.userId == request.auth.uid;
+      allow update, delete: if isAdmin();
+    }
   }
 }

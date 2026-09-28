@@ -1,11 +1,15 @@
 import React, { useState, useEffect } from 'react';
 import { MathResource } from '../data/mathResources';
+import { YouTubeIcon, FacebookIcon } from './SocialIcons';
+import { downloadResourceToSystem } from '../services/fileDownloader';
 
 interface VideoPlayerModalProps {
   resource: MathResource | null;
   isOpen: boolean;
   onClose: () => void;
   onOpenProPass: () => void;
+  onShare?: (title: string, resource: MathResource) => void;
+  onDownloadNotes?: (title: string, size: string) => void;
 }
 
 export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
@@ -13,6 +17,8 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
   isOpen,
   onClose,
   onOpenProPass,
+  onShare,
+  onDownloadNotes,
 }) => {
   const [isPlaying, setIsPlaying] = useState(true);
   const [playbackSpeed, setPlaybackSpeed] = useState<'1x' | '1.25x' | '1.5x'>('1x');
@@ -39,18 +45,71 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
 
   if (!isOpen || !resource) return null;
 
-  const getEmbedUrl = (raw?: string) => {
-    if (!raw) return null;
-    let videoId = raw.trim();
-    if (videoId.includes('v=')) {
-      videoId = videoId.split('v=')[1]?.split('&')[0] || videoId;
-    } else if (videoId.includes('youtu.be/')) {
-      videoId = videoId.split('youtu.be/')[1]?.split('?')[0] || videoId;
+  // Determine Video Provider & Embed URL
+  const getVideoEmbedInfo = () => {
+    // 1. Raw iframe embedHtml
+    if (resource.embedHtml) {
+      const srcMatch = resource.embedHtml.match(/src=["']([^"']+)["']/i);
+      if (srcMatch && srcMatch[1]) {
+        return {
+          type: 'iframe',
+          url: srcMatch[1],
+          platform: 'custom',
+        };
+      }
     }
-    return `https://www.youtube.com/embed/${videoId}?autoplay=1`;
+
+    // 2. Facebook Video Embed
+    const fbCandidate = resource.facebookVideoUrl || (resource.videoUrl?.includes('facebook.com') || resource.videoUrl?.includes('fb.watch') ? resource.videoUrl : null);
+    if (fbCandidate) {
+      const cleanFbUrl = fbCandidate.trim();
+      return {
+        type: 'facebook',
+        url: `https://www.facebook.com/plugins/video.php?href=${encodeURIComponent(cleanFbUrl)}&show_text=false&autoplay=true`,
+        platform: 'facebook',
+      };
+    }
+
+    // 3. YouTube Video Embed
+    const ytCandidate = resource.youtubeId || (resource.videoUrl?.includes('youtu') ? resource.videoUrl : null);
+    if (ytCandidate) {
+      let videoId = ytCandidate.trim();
+      if (videoId.includes('v=')) {
+        videoId = videoId.split('v=')[1]?.split('&')[0] || videoId;
+      } else if (videoId.includes('youtu.be/')) {
+        videoId = videoId.split('youtu.be/')[1]?.split('?')[0] || videoId;
+      } else if (videoId.includes('/shorts/')) {
+        videoId = videoId.split('/shorts/')[1]?.split('?')[0] || videoId;
+      } else if (videoId.includes('/embed/')) {
+        videoId = videoId.split('/embed/')[1]?.split('?')[0] || videoId;
+      }
+      return {
+        type: 'youtube',
+        url: `https://www.youtube.com/embed/${videoId}?autoplay=1&rel=0`,
+        platform: 'youtube',
+      };
+    }
+
+    return null;
   };
 
-  const embedUrl = getEmbedUrl(resource.youtubeId);
+  const embedInfo = getVideoEmbedInfo();
+
+  const handleDownloadWorksheet = () => {
+    downloadResourceToSystem({
+      title: `${resource.title} - Video Lecture Worksheet`,
+      grade: resource.grade,
+      topic: resource.topic,
+      format: 'Formula Sheets (1-Pager)',
+      downloadUrl: resource.downloadUrl,
+      description: resource.description,
+      keyFormulas: resource.keyFormulas,
+      examTraps: resource.examTraps,
+    });
+    if (onDownloadNotes) {
+      onDownloadNotes(resource.title, resource.sizeOrDuration);
+    }
+  };
 
   const formatTime = (secs: number) => {
     const mins = Math.floor(secs / 60);
@@ -59,66 +118,98 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
   };
 
   return (
-    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-5 bg-slate-900/70 backdrop-blur-md animate-fadeIn">
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-2 sm:p-5 bg-slate-900/80 backdrop-blur-md animate-fadeIn font-['Plus_Jakarta_Sans',sans-serif]">
       <div className="bg-[#111c2d] text-white w-full max-w-5xl max-h-[94vh] rounded-2xl sm:rounded-3xl shadow-2xl border border-slate-700 flex flex-col overflow-hidden">
         {/* Top bar */}
         <div className="px-3.5 sm:px-6 py-2.5 sm:py-3.5 border-b border-slate-800 flex items-center justify-between bg-slate-900 gap-2">
           <div className="flex items-center gap-2 sm:gap-3 min-w-0">
-            <span className="text-[10px] sm:text-[11px] font-bold bg-[#fea619] text-[#2a1700] px-2 sm:px-2.5 py-0.5 rounded-full shrink-0">
-              4K VIDEO
-            </span>
+            {embedInfo?.platform === 'facebook' ? (
+              <span className="text-[10px] sm:text-[11px] font-bold bg-[#1877f2] text-white px-2 sm:px-2.5 py-0.5 rounded-full shrink-0 flex items-center gap-1">
+                <FacebookIcon size={13} />
+                <span>FACEBOOK EMBED</span>
+              </span>
+            ) : embedInfo?.platform === 'youtube' ? (
+              <span className="text-[10px] sm:text-[11px] font-bold bg-[#dc2626] text-white px-2 sm:px-2.5 py-0.5 rounded-full shrink-0 flex items-center gap-1">
+                <YouTubeIcon size={13} />
+                <span>YOUTUBE HD</span>
+              </span>
+            ) : (
+              <span className="text-[10px] sm:text-[11px] font-bold bg-[#fea619] text-[#2a1700] px-2 sm:px-2.5 py-0.5 rounded-full shrink-0">
+                EMBEDDED VIDEO
+              </span>
+            )}
             <span className="text-xs sm:text-sm font-bold text-slate-200 truncate">
               {resource.title}
             </span>
           </div>
 
-          <button
-            onClick={onClose}
-            className="w-8 h-8 rounded-full bg-slate-800 hover:bg-slate-700 flex items-center justify-center text-slate-300 cursor-pointer transition-colors shrink-0"
-          >
-            <span className="material-symbols-outlined text-[18px]">close</span>
-          </button>
+          <div className="flex items-center gap-2 shrink-0">
+            {onShare && (
+              <button
+                type="button"
+                onClick={() => onShare(resource.title, resource)}
+                className="py-1 px-2.5 rounded-lg bg-blue-600/30 hover:bg-blue-600/50 text-blue-300 text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer"
+                title="Share video with Chrome direct link"
+              >
+                <span className="material-symbols-outlined text-[16px]">share</span>
+                <span className="hidden sm:inline">Share</span>
+              </button>
+            )}
+
+            <button
+              type="button"
+              onClick={handleDownloadWorksheet}
+              className="py-1 px-2.5 rounded-lg bg-emerald-600/30 hover:bg-emerald-600/50 text-emerald-300 text-xs font-bold flex items-center gap-1 transition-colors cursor-pointer"
+              title="Download accompanying revision sheet to system"
+            >
+              <span className="material-symbols-outlined text-[16px]">file_download</span>
+              <span className="hidden sm:inline">Download Notes</span>
+            </button>
+
+            <button
+              onClick={onClose}
+              className="w-8 h-8 rounded-full bg-slate-800 hover:bg-slate-700 flex items-center justify-center text-slate-300 cursor-pointer transition-colors"
+            >
+              <span className="material-symbols-outlined text-[18px]">close</span>
+            </button>
+          </div>
         </div>
 
         <div className="flex flex-col lg:flex-row flex-1 overflow-hidden">
           {/* Main Video Screen Area */}
           <div className="flex-1 flex flex-col bg-black justify-between relative overflow-hidden">
-            {embedUrl ? (
-              <div className="flex-1 w-full h-full min-h-[320px] sm:min-h-[460px] bg-black flex items-center justify-center">
+            {embedInfo ? (
+              <div className="flex-1 w-full h-full min-h-[340px] sm:min-h-[480px] bg-black flex items-center justify-center">
                 <iframe
-                  src={embedUrl}
+                  src={embedInfo.url}
                   title={resource.title}
                   className="w-full h-full aspect-video border-0"
-                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture"
+                  allow="accelerometer; autoplay; clipboard-write; encrypted-media; gyroscope; picture-in-picture; web-share"
                   allowFullScreen
                 />
               </div>
             ) : (
               /* Visual Canvas Representation of Math Animation */
               <div className="flex-1 relative flex items-center justify-center p-6 bg-gradient-to-b from-slate-950 via-slate-900 to-slate-950">
-                {/* Dynamic Interactive Geometric Animation Preview */}
                 <div className="relative w-full max-w-lg aspect-video bg-slate-900/90 rounded-2xl border border-blue-500/30 p-4 flex flex-col items-center justify-center shadow-2xl">
                   <div className="absolute top-3 left-4 flex items-center gap-2">
                     <span className="w-2.5 h-2.5 rounded-full bg-red-500 animate-pulse"></span>
                     <span className="text-[11px] font-mono font-bold text-blue-400">
-                      THEOREM 7.2 PROOF CANVAS
+                      LIVE MATHEMATICAL THEOREM PROOF
                     </span>
                   </div>
 
-                  {/* Animated Geometric Diagram */}
                   <svg
                     className="w-56 h-36 text-blue-400 fill-none stroke-current"
                     strokeWidth="2.5"
                     viewBox="0 0 200 130"
                   >
-                    {/* Isosceles triangle */}
                     <polygon
                       fill="#3b82f6"
                       fillOpacity="0.1"
                       points="100,20 30,110 170,110"
                       stroke="#60a5fa"
                     />
-                    {/* Median / Angle bisector */}
                     <line
                       stroke="#f59e0b"
                       strokeDasharray="4 2"
@@ -128,13 +219,10 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
                       y1="20"
                       y2="110"
                     />
-                    {/* Vertices text */}
                     <text className="fill-white text-[11px] font-bold" stroke="none" x="95" y="14">A</text>
                     <text className="fill-white text-[11px] font-bold" stroke="none" x="16" y="118">B</text>
                     <text className="fill-white text-[11px] font-bold" stroke="none" x="175" y="118">C</text>
                     <text className="fill-amber-400 text-[11px] font-bold" stroke="none" x="97" y="125">D</text>
-
-                    {/* Equal sides tick marks */}
                     <line stroke="#ec4899" strokeWidth="2.5" x1="58" x2="68" y1="62" y2="67" />
                     <line stroke="#ec4899" strokeWidth="2.5" x1="132" x2="142" y1="67" y2="62" />
                   </svg>
@@ -145,7 +233,6 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
                     </span>
                   </div>
 
-                  {/* Watermark in video */}
                   <div className="absolute bottom-3 right-4 text-[10px] text-slate-500 font-mono">
                     MathsAtYourFingertips • 1080p 60fps
                   </div>
@@ -155,7 +242,6 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
 
             {/* Video Controls Bar */}
             <div className="bg-slate-900/95 px-3 sm:px-5 py-2.5 sm:py-3 border-t border-slate-800 space-y-2">
-              {/* Progress bar */}
               <div className="w-full bg-slate-800 h-1.5 rounded-full overflow-hidden cursor-pointer group">
                 <div
                   className="bg-blue-500 h-full rounded-full transition-all group-hover:bg-blue-400"
@@ -252,16 +338,27 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
               ))}
             </div>
 
-            {/* Quick Proof Checklist */}
-            <div className="p-4 bg-slate-950 border-t border-slate-800">
-              <span className="text-[11px] font-bold text-amber-400 block mb-1">
-                ⚡ Included in this Course:
-              </span>
-              <ul className="text-[11px] text-slate-300 space-y-1">
-                <li>✓ 50 Solved Theorems with step-by-step proofs</li>
-                <li>✓ Downloadable 1-page summary PDF</li>
-                <li>✓ Certificate of geometry mastery upon completion</li>
-              </ul>
+            {/* Accompanying Sheet Download Block */}
+            <div className="p-4 bg-slate-950 border-t border-slate-800 space-y-2">
+              <div className="flex items-center justify-between">
+                <span className="text-[11px] font-bold text-amber-400 block">
+                  ⚡ Printable Lecture Sheet:
+                </span>
+                <span className="text-[10px] bg-emerald-500/20 text-emerald-300 font-bold px-1.5 py-0.5 rounded">
+                  Free PDF
+                </span>
+              </div>
+              <p className="text-[11px] text-slate-400 leading-tight">
+                Includes all 50 solved theorems, standard formulas, and board trap warnings.
+              </p>
+              <button
+                type="button"
+                onClick={handleDownloadWorksheet}
+                className="w-full py-2 px-3 rounded-xl bg-emerald-600 hover:bg-emerald-500 text-white font-bold text-xs flex items-center justify-center gap-1.5 shadow-sm transition-transform active:scale-95 cursor-pointer"
+              >
+                <span className="material-symbols-outlined text-[16px]">file_download</span>
+                <span>Download Study Sheet to Device</span>
+              </button>
             </div>
           </div>
         </div>
@@ -269,3 +366,4 @@ export const VideoPlayerModal: React.FC<VideoPlayerModalProps> = ({
     </div>
   );
 };
+

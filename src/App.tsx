@@ -12,7 +12,10 @@ import {
   subscribeToUserProfile,
   UserProfile,
   isUserAdmin,
+  createDemoStudentSession,
+  getLocalDemoSession,
 } from './firebase';
+import { UnauthorizedDomainModal } from './components/UnauthorizedDomainModal';
 import { MATH_RESOURCES, MathResource } from './data/mathResources';
 import { Header } from './components/Header';
 import { InteractiveFormulaDeckModal } from './components/InteractiveFormulaDeckModal';
@@ -23,9 +26,16 @@ import { ProCheckoutModal } from './components/ProCheckoutModal';
 import { DownloadsDrawer, DownloadedItem } from './components/DownloadsDrawer';
 import { ShareModal } from './components/ShareModal';
 import { OlympiadEnrollModal } from './components/OlympiadEnrollModal';
+import { InAppBrowserBanner } from './components/InAppBrowserBanner';
+import { YouTubeIcon, FacebookIcon, WhatsAppIcon, TelegramIcon } from './components/SocialIcons';
+import { downloadResourceToSystem } from './services/fileDownloader';
+import { attemptAutoLaunchExternalBrowser } from './services/externalBrowser';
 import { AdminControlPanelPage } from './components/AdminControlPanelPage';
 import { StudentMobileRegisterModal } from './components/StudentMobileRegisterModal';
 import { SocialMediaJoinBlock } from './components/SocialMediaJoinBlock';
+import { FormulaDeckPage } from './components/FormulaDeckPage';
+import { FormulaDeckSandbox } from './components/FormulaDeckSandbox';
+import { AiTeacherModal } from './components/AiTeacherModal';
 import {
   BrandingConfig,
   getBrandingConfig,
@@ -76,8 +86,8 @@ import {
 } from './services/currency';
 
 export default function App() {
-  // Page view routing: 'store' for student portal, 'admin' for dedicated Control Panel, 'dashboard' for User Dashboard
-  const [currentView, setCurrentView] = useState<'store' | 'admin' | 'dashboard'>(() => {
+  // Page view routing: 'store' for student portal, 'admin' for dedicated Control Panel, 'dashboard' for User Dashboard, 'formula-deck' for dedicated interactive sandbox
+  const [currentView, setCurrentView] = useState<'store' | 'admin' | 'dashboard' | 'formula-deck'>(() => {
     if (typeof window !== 'undefined') {
       const h = window.location.hash.toLowerCase();
       if (h.includes('portal-vault') || h.includes('staff-access') || h.includes('faculty-desk') || h.includes('admin')) {
@@ -85,6 +95,9 @@ export default function App() {
       }
       if (h.includes('dashboard')) {
         return 'dashboard';
+      }
+      if (h.includes('formula')) {
+        return 'formula-deck';
       }
     }
     return 'store';
@@ -139,7 +152,33 @@ export default function App() {
   const [isDownloadsOpen, setIsDownloadsOpen] = useState(false);
   const [isAdminPanelOpen, setIsAdminPanelOpen] = useState(false);
   const [showMobileRegisterModal, setShowMobileRegisterModal] = useState(false);
-  const [shareResourceTitle, setShareResourceTitle] = useState<string | null>(null);
+  const [showDomainModal, setShowDomainModal] = useState(false);
+  const [shareModalData, setShareModalData] = useState<{
+    isOpen: boolean;
+    title: string;
+    url?: string;
+  }>({
+    isOpen: false,
+    title: '',
+    url: '',
+  });
+
+  const openShare = (title: string, customUrl?: string) => {
+    setShareModalData({
+      isOpen: true,
+      title,
+      url: customUrl || (typeof window !== 'undefined' ? window.location.href : ''),
+    });
+  };
+
+  const setShareResourceTitle = (title: string | null) => {
+    if (title) {
+      openShare(title);
+    } else {
+      setShareModalData((prev) => ({ ...prev, isOpen: false }));
+    }
+  };
+  const shareResourceTitle = shareModalData.isOpen ? shareModalData.title : null;
   const [enrollModalData, setEnrollModalData] = useState<{
     isOpen: boolean;
     title: string;
@@ -168,8 +207,8 @@ export default function App() {
   // Auth state listener
   useEffect(() => {
     const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
-      setCurrentUser(user);
       if (user) {
+        setCurrentUser(user);
         const unsubscribeProfile = subscribeToUserProfile(user.uid, (profile) => {
           if (profile) {
             setUserProfile(profile);
@@ -183,7 +222,31 @@ export default function App() {
         });
         return () => unsubscribeProfile();
       } else {
-        setUserProfile(null);
+        // If Firebase Auth is null, check if a local demo student session exists
+        const localSession = getLocalDemoSession();
+        if (localSession) {
+          setCurrentUser(localSession);
+          const unsubscribeProfile = subscribeToUserProfile(localSession.uid, (profile) => {
+            if (profile) {
+              setUserProfile(profile);
+            } else {
+              setUserProfile({
+                userId: localSession.uid,
+                email: localSession.email,
+                displayName: localSession.displayName,
+                photoURL: localSession.photoURL,
+                grade: selectedClass,
+                isPro: true,
+                bookmarks: ['res-quad-class10'],
+                createdAt: new Date().toISOString(),
+              });
+            }
+          });
+          return () => unsubscribeProfile();
+        } else {
+          setCurrentUser(null);
+          setUserProfile(null);
+        }
       }
     });
 
@@ -337,6 +400,34 @@ export default function App() {
     };
     window.addEventListener('currency-changed', handleCurrencyChange);
 
+    // Auto-launch external browser if coming from an external share link or in-app browser
+    attemptAutoLaunchExternalBrowser();
+
+    // Check URL query parameters for direct resource linking (?resource=... or ?format=...)
+    try {
+      const urlParams = new URLSearchParams(window.location.search);
+      const targetResId = urlParams.get('resource');
+      if (targetResId) {
+        setTimeout(() => {
+          const found = allCatalogResources.find((r) => r.id === targetResId);
+          if (found) {
+            if (found.hasVideo) {
+              setSelectedResource(found);
+              setIsVideoModalOpen(true);
+            } else {
+              setSelectedResource(found);
+            }
+          }
+        }, 150);
+      }
+      const targetFormat = urlParams.get('format');
+      if (targetFormat && targetFormat.toLowerCase().includes('video')) {
+        setSelectedFormat('Video Lessons (YouTube & Facebook)');
+      }
+    } catch (e) {
+      console.warn('URL param parse notice:', e);
+    }
+
     // Hash-based page view routing
     const handleHashChange = () => {
       const h = window.location.hash.toLowerCase();
@@ -344,6 +435,8 @@ export default function App() {
         setCurrentView('admin');
       } else if (h.includes('dashboard')) {
         setCurrentView('dashboard');
+      } else if (h.includes('formula')) {
+        setCurrentView('formula-deck');
       } else {
         setCurrentView('store');
       }
@@ -364,6 +457,17 @@ export default function App() {
     };
   }, []);
 
+  // AI Teacher Assistant State
+  const [isAiTeacherOpen, setIsAiTeacherOpen] = useState(false);
+  const [aiTeacherPresetQuery, setAiTeacherPresetQuery] = useState('');
+
+  const handleOpenAiTeacher = (query?: string) => {
+    if (query) {
+      setAiTeacherPresetQuery(query);
+    }
+    setIsAiTeacherOpen(true);
+  };
+
   const handleOpenAdminPanel = () => {
     setCurrentView('admin');
     window.location.hash = '#portal-vault-8842';
@@ -373,6 +477,12 @@ export default function App() {
   const handleOpenDashboard = () => {
     setCurrentView('dashboard');
     window.location.hash = '#dashboard';
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
+  const handleNavigateToFormulaDeck = () => {
+    setCurrentView('formula-deck');
+    window.location.hash = '#formula-deck';
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -390,12 +500,31 @@ export default function App() {
       // Open mobile number registration block with Indian country code (+91) default
       setShowMobileRegisterModal(true);
     } catch (err: any) {
-      if (err.code !== 'auth/popup-closed-by-user') {
+      if (err?.code === 'auth/unauthorized-domain') {
+        setShowDomainModal(true);
+      } else if (err?.code !== 'auth/popup-closed-by-user' && err?.code !== 'auth/cancelled-popup-request') {
         showToast('Google Sign-In cancelled');
       }
     } finally {
       setAuthLoading(false);
     }
+  };
+
+  const handleQuickDemoSignIn = (email: string, name: string) => {
+    const mockUser = createDemoStudentSession(email, name, selectedClass);
+    setCurrentUser(mockUser);
+    setUserProfile({
+      userId: mockUser.uid,
+      email: mockUser.email,
+      displayName: mockUser.displayName,
+      photoURL: mockUser.photoURL,
+      grade: selectedClass,
+      isPro: true,
+      bookmarks: ['res-quad-class10'],
+      createdAt: new Date().toISOString(),
+    });
+    setShowDomainModal(false);
+    showToast(`Signed in as ${mockUser.displayName}! All features active.`);
   };
 
   const handleSignOut = async () => {
@@ -513,11 +642,13 @@ export default function App() {
       if (priceTier === 'free' && res.tier !== 'free') return false;
       if (priceTier === 'pro' && res.tier !== 'pro') return false;
 
-      // Format filter (flexible match to support custom format naming)
+      // Format filter (flexible match to support custom format naming & video category)
       if (selectedFormat && selectedFormat !== 'All Formats') {
         const normFmt = selectedFormat.toLowerCase().trim();
         const resFmt = (res.format || '').toLowerCase().trim();
-        if (
+        if (normFmt.includes('video')) {
+          if (!res.hasVideo && !resFmt.includes('video')) return false;
+        } else if (
           resFmt !== normFmt &&
           !resFmt.includes(normFmt) &&
           !normFmt.includes(resFmt)
@@ -561,16 +692,33 @@ export default function App() {
     });
   }, [allCatalogResources, searchQuery, selectedClass, priceTier, selectedFormat, selectedTopic, selectedStream]);
 
-  const handleDownload = (title: string, size: string) => {
+  const handleDownload = (title: string, size?: string, resource?: MathResource) => {
+    const targetResource = resource || allCatalogResources.find((r) => r.title === title || r.id === title);
+
+    try {
+      downloadResourceToSystem({
+        title: targetResource?.title || title,
+        grade: targetResource?.grade || 'Class 10',
+        topic: targetResource?.topic || 'Mathematics',
+        format: targetResource?.format || 'Formula Sheets (1-Pager)',
+        downloadUrl: targetResource?.downloadUrl,
+        description: targetResource?.description,
+        keyFormulas: targetResource?.keyFormulas,
+        examTraps: targetResource?.examTraps,
+      });
+    } catch (e) {
+      console.warn('System file download error:', e);
+    }
+
     const newItem: DownloadedItem = {
       id: `dl-${Date.now()}`,
       title,
-      size,
+      size: size || targetResource?.sizeOrDuration || '2.1 MB',
       downloadedAt: 'Just now',
     };
     recordResourceDownloadEvent(title, false);
     setDownloads((prev) => [newItem, ...prev.filter((p) => p.title !== title)]);
-    showToast(`✓ Downloaded "${title}" to your Offline Vault!`);
+    showToast(`✓ Downloading "${title}" to your system!`);
   };
 
   const toggleBookmark = (id: string, e: React.MouseEvent) => {
@@ -608,6 +756,15 @@ export default function App() {
           onToast={showToast}
           onNavigateHome={handleNavigateHome}
         />
+        <UnauthorizedDomainModal
+          isOpen={showDomainModal}
+          onClose={() => setShowDomainModal(false)}
+          onQuickSignIn={handleQuickDemoSignIn}
+          onRetryGoogleSignIn={() => {
+            setShowDomainModal(false);
+            handleGoogleSignIn();
+          }}
+        />
         {toastMessage && (
           <div className="fixed bottom-6 right-6 z-50 bg-[#111c2d] text-white px-5 py-3 rounded-2xl shadow-2xl flex items-center gap-2.5 text-xs font-bold animate-fadeIn border border-slate-700 max-w-[90vw]">
             <span className="material-symbols-outlined text-[18px] text-emerald-400 shrink-0">check_circle</span>
@@ -632,10 +789,67 @@ export default function App() {
           onDownload={handleDownload}
           onNavigateHome={handleNavigateHome}
           onOpenProPass={() => setIsProPassModalOpen(true)}
-          onOpenFormulaDeck={() => setIsFormulaDeckOpen(true)}
+          onOpenFormulaDeck={handleNavigateToFormulaDeck}
           onGoogleSignIn={handleGoogleSignIn}
           onSignOut={handleSignOut}
           onToast={showToast}
+        />
+        <AiTeacherModal
+          isOpen={isAiTeacherOpen}
+          onClose={() => setIsAiTeacherOpen(false)}
+          currentUser={currentUser}
+          userProfile={userProfile}
+          onGoogleSignIn={handleGoogleSignIn}
+          onToast={showToast}
+          initialQuery={aiTeacherPresetQuery}
+        />
+        <UnauthorizedDomainModal
+          isOpen={showDomainModal}
+          onClose={() => setShowDomainModal(false)}
+          onQuickSignIn={handleQuickDemoSignIn}
+          onRetryGoogleSignIn={() => {
+            setShowDomainModal(false);
+            handleGoogleSignIn();
+          }}
+        />
+        {toastMessage && (
+          <div className="fixed bottom-6 right-6 z-50 bg-[#111c2d] text-white px-5 py-3 rounded-2xl shadow-2xl flex items-center gap-2.5 text-xs font-bold animate-fadeIn border border-slate-700 max-w-[90vw]">
+            <span className="material-symbols-outlined text-[18px] text-emerald-400 shrink-0">check_circle</span>
+            <span className="truncate">{toastMessage}</span>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // Render Formula Deck as a separate dedicated page view with unique URL
+  if (currentView === 'formula-deck') {
+    return (
+      <div className="w-full min-h-screen bg-[#f9f9ff] font-['Plus_Jakarta_Sans',sans-serif]">
+        <FormulaDeckPage
+          onNavigateHome={handleNavigateHome}
+          onOpenAiTeacher={handleOpenAiTeacher}
+          onDownloadSheet={handleDownload}
+          onToast={showToast}
+          branding={branding}
+        />
+        <AiTeacherModal
+          isOpen={isAiTeacherOpen}
+          onClose={() => setIsAiTeacherOpen(false)}
+          currentUser={currentUser}
+          userProfile={userProfile}
+          onGoogleSignIn={handleGoogleSignIn}
+          onToast={showToast}
+          initialQuery={aiTeacherPresetQuery}
+        />
+        <UnauthorizedDomainModal
+          isOpen={showDomainModal}
+          onClose={() => setShowDomainModal(false)}
+          onQuickSignIn={handleQuickDemoSignIn}
+          onRetryGoogleSignIn={() => {
+            setShowDomainModal(false);
+            handleGoogleSignIn();
+          }}
         />
         {toastMessage && (
           <div className="fixed bottom-6 right-6 z-50 bg-[#111c2d] text-white px-5 py-3 rounded-2xl shadow-2xl flex items-center gap-2.5 text-xs font-bold animate-fadeIn border border-slate-700 max-w-[90vw]">
@@ -649,6 +863,9 @@ export default function App() {
 
   return (
     <div className="w-full max-w-full overflow-x-hidden bg-[#f9f9ff] font-['Plus_Jakarta_Sans',sans-serif] text-[#111c2d] antialiased min-h-screen flex flex-col selection:bg-blue-100 selection:text-blue-900">
+      {/* Social Media In-App Browser Warning & Chrome Intent Launcher */}
+      <InAppBrowserBanner />
+
       {/* Toast Notification */}
       {toastMessage && (
         <div className="fixed bottom-6 right-6 z-50 bg-[#111c2d] text-white px-5 py-3 rounded-2xl shadow-2xl flex items-center gap-2.5 text-xs font-bold animate-fadeIn border border-slate-700 max-w-[90vw]">
@@ -660,19 +877,27 @@ export default function App() {
       {/* Header with Google Login & Mobile Menu */}
       <Header
         activeClass={selectedClass}
+        onSelectClass={setSelectedClass}
         activeNav={activeNav}
         authLoading={authLoading}
         currentUser={currentUser}
         downloadsCount={downloads.length}
         onGoogleSignIn={handleGoogleSignIn}
         onOpenDownloads={() => setIsDownloadsOpen(true)}
-        onOpenFormulaDeck={() => setIsFormulaDeckOpen(true)}
+        onOpenFormulaDeck={handleNavigateToFormulaDeck}
+        onOpenAiTeacher={() => handleOpenAiTeacher()}
         onOpenProPass={() => setIsProPassModalOpen(true)}
         onOpenAdminPanel={handleOpenAdminPanel}
         onOpenDashboard={handleOpenDashboard}
         onOpenMobileRegister={() => setShowMobileRegisterModal(true)}
+        onShareWebsite={() => openShare(branding.siteTitle, window.location.origin)}
         onSearchChange={setSearchQuery}
-        onSelectNav={setActiveNav}
+        onSelectNav={(nav) => {
+          setActiveNav(nav);
+          if (nav === 'formula-deck') {
+            handleNavigateToFormulaDeck();
+          }
+        }}
         onSignOut={handleSignOut}
         searchQuery={searchQuery}
         userProfile={userProfile}
@@ -958,7 +1183,7 @@ export default function App() {
                       <span className="w-3 h-3 rounded-full bg-[#006242]"></span>
                     </div>
                     <button
-                      onClick={() => setIsFormulaDeckOpen(true)}
+                      onClick={handleNavigateToFormulaDeck}
                       className="text-[11px] font-bold bg-[#dbe1ff] text-[#00174b] px-2.5 py-0.5 rounded-full hover:bg-blue-200 transition-colors cursor-pointer truncate"
                     >
                       Interactive Formula Deck
@@ -967,7 +1192,7 @@ export default function App() {
 
                   {/* Illustrated Math Note Card Preview */}
                   <div
-                    onClick={() => setIsFormulaDeckOpen(true)}
+                    onClick={handleNavigateToFormulaDeck}
                     className="rounded-xl bg-[#f0f3ff] p-3.5 sm:p-4 relative overflow-hidden cursor-pointer hover:bg-blue-50/80 transition-all border border-blue-50 group"
                   >
                     <div className="flex items-center justify-between gap-2">
@@ -1475,25 +1700,24 @@ export default function App() {
                         </div>
                         <div className="flex items-center gap-2">
                           <button
-                            onClick={() => setShareResourceTitle(res.title)}
-                            className="flex-1 flex items-center justify-center gap-1 py-1 rounded bg-[#006242]/10 text-[#006242] text-[10px] sm:text-[11px] font-bold hover:bg-[#006242]/20 cursor-pointer"
+                            onClick={() => openShare(res.title, `${window.location.origin}${window.location.pathname}?resource=${res.id}`)}
+                            className="flex-1 flex items-center justify-center gap-1.5 py-1 rounded bg-[#006242]/10 text-[#006242] text-[10px] sm:text-[11px] font-bold hover:bg-[#006242]/20 cursor-pointer"
                           >
-                            <span className="material-symbols-outlined text-[13px]">chat</span> WhatsApp
+                            <WhatsAppIcon size={14} /> WhatsApp
                           </button>
                           <button
-                            onClick={() => setShareResourceTitle(res.title)}
-                            className="flex-1 flex items-center justify-center gap-1 py-1 rounded bg-[#004ac6]/10 text-[#004ac6] text-[10px] sm:text-[11px] font-bold hover:bg-[#004ac6]/20 cursor-pointer"
+                            onClick={() => openShare(res.title, `${window.location.origin}${window.location.pathname}?resource=${res.id}`)}
+                            className="flex-1 flex items-center justify-center gap-1.5 py-1 rounded bg-[#004ac6]/10 text-[#004ac6] text-[10px] sm:text-[11px] font-bold hover:bg-[#004ac6]/20 cursor-pointer"
                           >
-                            <span className="material-symbols-outlined text-[13px]">send</span> Telegram
+                            <TelegramIcon size={14} /> Telegram
                           </button>
                           <button
                             onClick={() => {
-                              navigator.clipboard?.writeText(window.location.href);
-                              showToast('Link copied to clipboard!');
+                              openShare(res.title, `${window.location.origin}${window.location.pathname}?resource=${res.id}`);
                             }}
                             className="flex-1 flex items-center justify-center gap-1 py-1 rounded bg-[#855300]/10 text-[#855300] text-[10px] sm:text-[11px] font-bold hover:bg-[#855300]/20 cursor-pointer"
                           >
-                            <span className="material-symbols-outlined text-[13px]">link</span> Copy
+                            <span className="material-symbols-outlined text-[13px]">share</span> Share
                           </button>
                         </div>
                       </div>
@@ -1597,15 +1821,21 @@ export default function App() {
                               setSelectedResource(res);
                               setIsVideoModalOpen(true);
                             }}
-                            style={{ backgroundColor: themeConfig.primaryColor }}
-                            className="flex-1 inline-flex items-center justify-center gap-1.5 sm:gap-2 text-white text-xs sm:text-[13px] font-bold py-2.5 px-3 rounded-xl hover:opacity-90 transition-transform active:translate-y-0.5 cursor-pointer tactile-btn-primary"
+                            style={{ backgroundColor: res.videoPlatform === 'facebook' ? '#1877f2' : res.videoPlatform === 'youtube' ? '#dc2626' : themeConfig.primaryColor }}
+                            className="flex-1 inline-flex items-center justify-center gap-1.5 sm:gap-2 text-white text-xs sm:text-[13px] font-bold py-2.5 px-3 rounded-xl hover:opacity-90 transition-transform active:translate-y-0.5 cursor-pointer tactile-btn-primary shadow-xs"
                           >
-                            <span className="material-symbols-outlined text-[16px] sm:text-[18px]">smart_display</span>
-                            <span>Watch Lesson</span>
+                            {res.videoPlatform === 'facebook' ? (
+                              <FacebookIcon size={16} />
+                            ) : res.videoPlatform === 'youtube' ? (
+                              <YouTubeIcon size={16} />
+                            ) : (
+                              <span className="material-symbols-outlined text-[16px] sm:text-[18px]">smart_display</span>
+                            )}
+                            <span>{res.videoPlatform === 'facebook' ? 'Play Facebook Video' : res.videoPlatform === 'youtube' ? 'Play YouTube HD' : 'Watch Video Lesson'}</span>
                           </button>
                         ) : (
                           <button
-                            onClick={() => handleDownload(res.title, res.sizeOrDuration)}
+                            onClick={() => handleDownload(res.title, res.sizeOrDuration, res)}
                             style={{ backgroundColor: themeConfig.primaryColor }}
                             className="flex-1 inline-flex items-center justify-center gap-1.5 sm:gap-2 text-white text-xs sm:text-[13px] font-bold py-2.5 px-3 rounded-xl hover:opacity-90 transition-transform active:translate-y-0.5 cursor-pointer tactile-btn-primary"
                           >
@@ -1630,9 +1860,9 @@ export default function App() {
                         </button>
 
                         <button
-                          onClick={() => setShareResourceTitle(res.title)}
+                          onClick={() => openShare(res.title, `${window.location.origin}${window.location.pathname}?resource=${res.id}#catalog`)}
                           className="p-2 sm:p-2.5 bg-[#e7eeff] rounded-xl text-[#434655] hover:text-[#004ac6] hover:bg-[#dbe1ff] transition-colors cursor-pointer shrink-0"
-                          title="Share with classmates"
+                          title="Share externally via Chrome direct link"
                           type="button"
                         >
                           <span className="material-symbols-outlined text-[18px] sm:text-[20px]">share</span>
@@ -1644,6 +1874,83 @@ export default function App() {
               );
             })}
           </div>
+        </section>
+
+        {/* AI TEACHER SPOTLIGHT BANNER */}
+        <section className="max-w-7xl mx-auto w-full px-3 sm:px-6 lg:px-8 mt-10 sm:mt-14">
+          <div className="bg-gradient-to-r from-[#002a78] via-[#004ac6] to-[#1e58d8] rounded-3xl p-6 sm:p-8 text-white shadow-xl relative overflow-hidden flex flex-col md:flex-row items-center justify-between gap-6 border border-blue-400/30">
+            <div className="max-w-2xl">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-400/20 text-amber-300 text-xs font-extrabold uppercase tracking-wider mb-3">
+                <span className="material-symbols-outlined text-[16px]">psychology</span>
+                <span>AI Teacher Assistant • Step-by-Step Solver</span>
+              </div>
+              <h2 className="text-xl sm:text-2xl lg:text-3xl font-extrabold tracking-tight">
+                Stuck on a Tricky Math Problem?
+              </h2>
+              <p className="text-xs sm:text-sm text-blue-100 mt-2 leading-relaxed">
+                Meet <strong>Prof. Raman</strong>, your 24/7 personal math faculty! Simply type your question or upload a photo from your textbook. Receive clear, pedagogical step-by-step working, applied formulas, and exam cautions.
+              </p>
+              <div className="flex items-center gap-3 mt-4 text-xs font-semibold text-blue-200 flex-wrap">
+                <span className="flex items-center gap-1">
+                  <span className="material-symbols-outlined text-[16px] text-emerald-400">check_circle</span>
+                  <span>Text or Photo Input</span>
+                </span>
+                <span className="flex items-center gap-1">
+                  <span className="material-symbols-outlined text-[16px] text-emerald-400">check_circle</span>
+                  <span>Step-by-Step Proofs</span>
+                </span>
+                <span className="flex items-center gap-1">
+                  <span className="material-symbols-outlined text-[16px] text-emerald-400">check_circle</span>
+                  <span>Class 5 - 10 &amp; Olympiad</span>
+                </span>
+              </div>
+            </div>
+
+            <div className="flex flex-col sm:flex-row items-center gap-3 shrink-0 w-full sm:w-auto">
+              <button
+                onClick={() => handleOpenAiTeacher()}
+                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-500 hover:to-amber-600 text-slate-950 font-extrabold text-sm px-6 py-3.5 rounded-2xl shadow-lg transition-all cursor-pointer transform hover:scale-102"
+              >
+                <span className="material-symbols-outlined text-[20px]">chat</span>
+                <span>Ask Teacher AI Now</span>
+              </button>
+            </div>
+          </div>
+        </section>
+
+        {/* INTERACTIVE FORMULA DECK ON HOME PAGE */}
+        <section id="formula-deck" className="max-w-7xl mx-auto w-full px-3 sm:px-6 lg:px-8 mt-12 sm:mt-16">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
+            <div>
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-50 border border-blue-200 text-[#004ac6] text-xs font-extrabold uppercase tracking-wider mb-2">
+                <span className="material-symbols-outlined text-[16px]">functions</span>
+                <span>Maths at Your Fingertips Sandbox</span>
+              </div>
+              <h2 className="text-xl sm:text-2xl lg:text-3xl font-extrabold text-[#111c2d] tracking-tight">
+                Interactive Formula Deck &amp; Mathematical Transitions
+              </h2>
+              <p className="text-xs sm:text-sm text-slate-600 mt-1 max-w-2xl">
+                Experience mathematical concepts in action. Adjust parameters in real-time, inspect dynamic proofs, and watch algebra and geometry morph seamlessly.
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                onClick={handleNavigateToFormulaDeck}
+                className="inline-flex items-center gap-1.5 bg-[#004ac6] hover:bg-blue-700 text-white font-bold text-xs sm:text-sm px-4 py-2.5 rounded-xl shadow-md transition-all cursor-pointer"
+                title="Open Dedicated Formula Deck Page"
+              >
+                <span>Launch Fullscreen Deck (/#formula-deck)</span>
+                <span className="material-symbols-outlined text-[18px]">open_in_new</span>
+              </button>
+            </div>
+          </div>
+
+          <FormulaDeckSandbox
+            onAskAiAboutFormula={(name) => handleOpenAiTeacher(`Can you teach me the full derivation, proof, and typical board exam questions for ${name}?`)}
+            onDownloadSheet={handleDownload}
+            isStandalonePage={false}
+          />
         </section>
 
         {/* Google AdSense Native Placement (728x90 format) */}
@@ -2212,8 +2519,9 @@ export default function App() {
         isOpen={!!selectedResource}
         resource={selectedResource}
         onClose={() => setSelectedResource(null)}
+        onShare={(title, r) => openShare(title, `${window.location.origin}${window.location.pathname}?resource=${r.id}`)}
         onDownload={(title, size) => {
-          handleDownload(title, size);
+          handleDownload(title, size, selectedResource || undefined);
           setSelectedResource(null);
         }}
         onOpenProPass={() => {
@@ -2226,6 +2534,8 @@ export default function App() {
         isOpen={isVideoModalOpen}
         resource={selectedResource || MATH_RESOURCES[3]}
         onClose={() => setIsVideoModalOpen(false)}
+        onShare={(title, r) => openShare(title, `${window.location.origin}${window.location.pathname}?resource=${r.id}`)}
+        onDownloadNotes={(title, size) => handleDownload(title, size, selectedResource || undefined)}
         onOpenProPass={() => {
           setIsVideoModalOpen(false);
           setIsProPassModalOpen(true);
@@ -2271,9 +2581,10 @@ export default function App() {
       />
 
       <ShareModal
-        isOpen={!!shareResourceTitle}
-        title={shareResourceTitle || ''}
-        onClose={() => setShareResourceTitle(null)}
+        isOpen={shareModalData.isOpen}
+        title={shareModalData.title || branding.siteTitle}
+        url={shareModalData.url}
+        onClose={() => setShareModalData({ ...shareModalData, isOpen: false })}
       />
 
       <OlympiadEnrollModal
@@ -2293,6 +2604,46 @@ export default function App() {
           showToast(`✓ Mobile number registered: ${phone}`);
         }}
         onToast={showToast}
+      />
+
+      {/* Floating Ask Math Teacher AI Action Button */}
+      <div className="fixed bottom-6 right-6 z-40">
+        <button
+          onClick={() => handleOpenAiTeacher()}
+          className="group flex items-center gap-2.5 bg-gradient-to-r from-amber-400 via-amber-500 to-amber-600 hover:from-amber-500 hover:to-amber-700 text-slate-950 font-extrabold text-xs sm:text-sm px-4 py-3 rounded-2xl shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-1 cursor-pointer border border-amber-300"
+          title="Ask Prof. Raman (AI Math Teacher)"
+        >
+          <div className="w-8 h-8 rounded-xl bg-slate-950 text-amber-400 flex items-center justify-center shadow-xs">
+            <span className="material-symbols-outlined text-[20px]">psychology</span>
+          </div>
+          <div className="flex flex-col text-left">
+            <span className="leading-tight">Ask Math Teacher AI</span>
+            <span className="text-[10px] text-slate-900 font-semibold opacity-85">Step-by-step solver</span>
+          </div>
+          <span className="w-2.5 h-2.5 rounded-full bg-emerald-600 animate-ping ml-0.5"></span>
+        </button>
+      </div>
+
+      {/* AI Teacher Assistant Modal */}
+      <AiTeacherModal
+        isOpen={isAiTeacherOpen}
+        onClose={() => setIsAiTeacherOpen(false)}
+        currentUser={currentUser}
+        userProfile={userProfile}
+        onGoogleSignIn={handleGoogleSignIn}
+        onToast={showToast}
+        initialQuery={aiTeacherPresetQuery}
+      />
+
+      {/* Firebase Domain Authorization & Quick Sign-in Modal */}
+      <UnauthorizedDomainModal
+        isOpen={showDomainModal}
+        onClose={() => setShowDomainModal(false)}
+        onQuickSignIn={handleQuickDemoSignIn}
+        onRetryGoogleSignIn={() => {
+          setShowDomainModal(false);
+          handleGoogleSignIn();
+        }}
       />
     </div>
   );

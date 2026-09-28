@@ -116,6 +116,25 @@
         "createdAt": { "type": "string" }
       },
       "required": ["id", "title", "grade", "topic", "tier"]
+    },
+    "aiQuery": {
+      "title": "AiQuery",
+      "description": "Student mathematics questions submitted to AI Teacher Assistant and step-by-step solutions",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "userEmail": { "type": "string" },
+        "userName": { "type": "string" },
+        "grade": { "type": "string" },
+        "topic": { "type": "string" },
+        "queryText": { "type": "string" },
+        "hasImage": { "type": "boolean" },
+        "imagePreview": { "type": "string" },
+        "solution": { "type": "string" },
+        "createdAt": { "type": "string" }
+      },
+      "required": ["id", "userId", "queryText", "createdAt"]
     }
   },
   "firestore": {
@@ -142,6 +161,10 @@
     "/custom_resources/{resourceId}": {
       "schema": "customResource",
       "description": "Uploaded notes, sheets, and lecture resources"
+    },
+    "/ai_queries/{queryId}": {
+      "schema": "aiQuery",
+      "description": "Student mathematics queries and AI Teacher step-by-step solutions"
     }
   }
 }

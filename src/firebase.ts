@@ -196,6 +196,9 @@ export async function signInWithGoogle(): Promise<User> {
     const result = await signInWithPopup(auth, googleProvider);
     const user = result.user;
 
+    // Clear any temporary local dev session when real Google Sign-In succeeds
+    clearDemoSession();
+
     // Check if user document already exists or create new
     const userRef = doc(db, 'users', user.uid);
     try {
@@ -219,14 +222,94 @@ export async function signInWithGoogle(): Promise<User> {
     }
 
     return user;
-  } catch (error) {
-    console.error('Google Sign-In Error:', error);
+  } catch (error: any) {
+    if (error?.code === 'auth/unauthorized-domain') {
+      const currentHost = typeof window !== 'undefined' ? window.location.hostname : '';
+      const consoleLink = `https://console.firebase.google.com/project/${firebaseConfig.projectId}/authentication/settings`;
+      error.unauthorizedDomain = currentHost;
+      error.consoleLink = consoleLink;
+      console.warn(
+        `[Firebase Auth Warning] Domain "${currentHost}" is not in the Firebase Authorized Domains list for project "${firebaseConfig.projectId}".\n` +
+        `To authorize, visit: ${consoleLink} and add "${currentHost}" under Authorized Domains.`
+      );
+    } else if (error?.code !== 'auth/popup-closed-by-user' && error?.code !== 'auth/cancelled-popup-request') {
+      console.error('Google Sign-In Error:', error);
+    }
     throw error;
+  }
+}
+
+// Demo / Development Student Session Helpers (for preview environments before domain authorization)
+export function createDemoStudentSession(
+  customEmail?: string,
+  customName?: string,
+  grade: string = 'Class 10'
+): any {
+  const email = customEmail || '2026vivekkushwah@gmail.com';
+  const isOwner = email.toLowerCase().includes('vivek') || email.toLowerCase().includes('admin');
+  const displayName = customName || (isOwner ? 'Vivek Kushwah (Admin)' : 'Math Student');
+  const uid = `demo_${btoa(email).replace(/=/g, '').toLowerCase()}`;
+
+  const mockUser: any = {
+    uid,
+    email,
+    displayName,
+    photoURL: `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(displayName)}`,
+    emailVerified: true,
+    isAnonymous: false,
+  };
+
+  try {
+    localStorage.setItem('maths_dev_session', JSON.stringify(mockUser));
+  } catch (e) {
+    // ignore
+  }
+
+  // Also persist user document in Firestore so queries and records work seamlessly
+  const userRef = doc(db, 'users', uid);
+  getDoc(userRef)
+    .then((snap) => {
+      if (!snap.exists()) {
+        const profile: UserProfile = {
+          userId: uid,
+          email,
+          displayName,
+          photoURL: mockUser.photoURL,
+          grade,
+          isPro: true,
+          bookmarks: ['res-quad-class10'],
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+        setDoc(userRef, profile).catch((e) => console.warn('Demo profile Firestore sync:', e));
+      }
+    })
+    .catch(() => {});
+
+  return mockUser;
+}
+
+export function getLocalDemoSession(): any | null {
+  try {
+    const raw = localStorage.getItem('maths_dev_session');
+    if (raw) return JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  return null;
+}
+
+export function clearDemoSession(): void {
+  try {
+    localStorage.removeItem('maths_dev_session');
+  } catch {
+    // ignore
   }
 }
 
 // Sign Out
 export async function logOut(): Promise<void> {
+  clearDemoSession();
   await fbSignOut(auth);
 }
 
@@ -281,7 +364,13 @@ export async function saveRazorpayOrder(orderData: {
 }
 
 // Admin Support & Credentials
-export const ADMIN_EMAILS = ['sachin.itig@gmail.com'];
+export { firebaseConfig };
+export const ADMIN_EMAILS = [
+  'sachin.itig@gmail.com',
+  '2026vivekkushwah@gmail.com',
+  'vivekkushwah@gmail.com',
+  'admin@mathsatyourfingertips.com',
+];
 export const MASTER_ADMIN_PASSCODE = 'MATHS2025';
 
 export function isUserAdmin(user: User | null): boolean {
@@ -514,6 +603,10 @@ export interface CustomResourceRecord {
   tier: 'free' | 'pro';
   downloadUrl?: string;
   youtubeId?: string;
+  facebookVideoUrl?: string;
+  videoUrl?: string;
+  videoPlatform?: 'youtube' | 'facebook' | 'direct';
+  embedHtml?: string;
   description?: string;
   views: number;
   downloads: number;
@@ -663,6 +756,125 @@ export async function loadSocialSettingsFromFirestore(): Promise<any | null> {
     console.warn('Could not load social settings from Firestore:', e);
   }
   return null;
+}
+
+// AI Teacher Query Log Records
+export interface AiQueryRecord {
+  id: string;
+  userId: string;
+  userEmail: string;
+  userName?: string;
+  grade: string;
+  topic?: string;
+  queryText: string;
+  hasImage: boolean;
+  imagePreview?: string;
+  solution: string;
+  modelUsed?: string;
+  createdAt: string;
+}
+
+export async function saveAiQueryRecord(record: AiQueryRecord): Promise<void> {
+  // Always save to localStorage backup for immediate availability
+  try {
+    const existingRaw = localStorage.getItem('mayf_ai_queries');
+    const existing: AiQueryRecord[] = existingRaw ? JSON.parse(existingRaw) : [];
+    const updated = [record, ...existing.filter((q) => q.id !== record.id)].slice(0, 100);
+    localStorage.setItem('mayf_ai_queries', JSON.stringify(updated));
+  } catch (e) {
+    console.warn('LocalStorage save error for AI query:', e);
+  }
+
+  // Save to Firestore
+  try {
+    const docRef = doc(db, 'ai_queries', record.id);
+    await setDoc(docRef, {
+      ...record,
+      updatedAt: new Date().toISOString(),
+    });
+  } catch (err) {
+    console.warn('Firestore save error for ai_queries (fallback stored locally):', err);
+  }
+}
+
+export async function fetchStudentAiQueries(userId: string): Promise<AiQueryRecord[]> {
+  try {
+    const qCol = collection(db, 'ai_queries');
+    const qSnap = await getDocs(qCol);
+    const results: AiQueryRecord[] = [];
+    qSnap.forEach((d) => {
+      const data = d.data() as AiQueryRecord;
+      if (data.userId === userId) {
+        results.push({ ...data, id: d.id });
+      }
+    });
+    if (results.length > 0) {
+      results.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      return results;
+    }
+  } catch (err) {
+    console.warn('Error fetching student AI queries from Firestore, reading local cache:', err);
+  }
+
+  try {
+    const local = localStorage.getItem('mayf_ai_queries');
+    if (local) {
+      const parsed: AiQueryRecord[] = JSON.parse(local);
+      return parsed.filter((q) => q.userId === userId);
+    }
+  } catch (e) {
+    // ignore
+  }
+
+  return [];
+}
+
+export async function fetchAllAiQueries(): Promise<AiQueryRecord[]> {
+  try {
+    const qCol = collection(db, 'ai_queries');
+    const qSnap = await getDocs(qCol);
+    const results: AiQueryRecord[] = [];
+    qSnap.forEach((d) => {
+      results.push({ ...(d.data() as AiQueryRecord), id: d.id });
+    });
+    if (results.length > 0) {
+      results.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
+      return results;
+    }
+  } catch (err) {
+    console.warn('Error fetching all AI queries from Firestore, using local cache:', err);
+  }
+
+  try {
+    const local = localStorage.getItem('mayf_ai_queries');
+    if (local) {
+      return JSON.parse(local);
+    }
+  } catch (e) {
+    // ignore
+  }
+
+  return [];
+}
+
+export async function deleteAiQueryRecord(queryId: string): Promise<void> {
+  try {
+    const docRef = doc(db, 'ai_queries', queryId);
+    await deleteDoc(docRef);
+  } catch (err) {
+    console.warn('Error deleting AI query from Firestore:', err);
+  }
+
+  try {
+    const local = localStorage.getItem('mayf_ai_queries');
+    if (local) {
+      const parsed: AiQueryRecord[] = JSON.parse(local);
+      const filtered = parsed.filter((q) => q.id !== queryId);
+      localStorage.setItem('mayf_ai_queries', JSON.stringify(filtered));
+    }
+  } catch (e) {
+    // ignore
+  }
 }
 
 

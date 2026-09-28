@@ -7,6 +7,12 @@ import {
   openInstagramDirectApp,
   openYouTubeDirectApp,
 } from '../services/social';
+import {
+  WhatsAppIcon,
+  InstagramIcon,
+  YouTubeIcon,
+  TelegramIcon,
+} from './SocialIcons';
 
 interface SocialMediaJoinBlockProps {
   currentUser: User | null;
@@ -182,8 +188,8 @@ export const SocialMediaJoinBlock: React.FC<SocialMediaJoinBlockProps> = ({
               <div className="bg-white/5 hover:bg-white/10 border border-white/10 rounded-2xl p-4 sm:p-5 flex flex-col justify-between gap-4 backdrop-blur-md transition-all group hover:border-emerald-400/40 hover:-translate-y-1">
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
-                    <div className="w-10 h-10 rounded-xl bg-emerald-500/20 border border-emerald-400/30 flex items-center justify-center text-emerald-400 shadow-sm">
-                      <span className="material-symbols-outlined text-[24px]">chat</span>
+                    <div className="w-10 h-10 rounded-xl bg-emerald-500/20 border border-emerald-400/30 flex items-center justify-center shadow-sm">
+                      <WhatsAppIcon size={24} />
                     </div>
                     <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-500/20 text-emerald-300 border border-emerald-500/30">
                       24k+ Students
@@ -203,9 +209,7 @@ export const SocialMediaJoinBlock: React.FC<SocialMediaJoinBlockProps> = ({
                   onClick={handleJoinWhatsApp}
                   className="w-full py-2.5 px-3 bg-emerald-500 hover:bg-emerald-600 text-white rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 shadow-lg shadow-emerald-950/30 active:scale-98 transition-all cursor-pointer"
                 >
-                  <span className="material-symbols-outlined text-[16px]">
-                    {clickedChannels.whatsapp ? 'check' : 'forum'}
-                  </span>
+                  <WhatsAppIcon size={16} />
                   <span>{clickedChannels.whatsapp ? 'Joined ✓ / Open Again' : 'Join WhatsApp Group'}</span>
                 </button>
               </div>
@@ -214,8 +218,8 @@ export const SocialMediaJoinBlock: React.FC<SocialMediaJoinBlockProps> = ({
               <div className="bg-white/5 hover:bg-white/10 border border-white/10 rounded-2xl p-4 sm:p-5 flex flex-col justify-between gap-4 backdrop-blur-md transition-all group hover:border-pink-400/40 hover:-translate-y-1">
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
-                    <div className="w-10 h-10 rounded-xl bg-gradient-to-tr from-amber-500/20 via-pink-500/20 to-purple-500/20 border border-pink-400/30 flex items-center justify-center text-pink-400 shadow-sm">
-                      <span className="material-symbols-outlined text-[24px]">photo_camera</span>
+                    <div className="w-10 h-10 rounded-xl bg-pink-500/20 border border-pink-400/30 flex items-center justify-center shadow-sm">
+                      <InstagramIcon size={24} />
                     </div>
                     <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-pink-500/20 text-pink-300 border border-pink-500/30">
                       Visual Math
@@ -235,9 +239,7 @@ export const SocialMediaJoinBlock: React.FC<SocialMediaJoinBlockProps> = ({
                   onClick={handleFollowInstagram}
                   className="w-full py-2.5 px-3 bg-gradient-to-r from-pink-600 to-rose-600 hover:from-pink-700 hover:to-rose-700 text-white rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 shadow-lg shadow-rose-950/30 active:scale-98 transition-all cursor-pointer"
                 >
-                  <span className="material-symbols-outlined text-[16px]">
-                    {clickedChannels.instagram ? 'check' : 'add_circle'}
-                  </span>
+                  <InstagramIcon size={16} />
                   <span>{clickedChannels.instagram ? 'Followed ✓ / Open' : 'Follow on Instagram'}</span>
                 </button>
               </div>
@@ -246,8 +248,8 @@ export const SocialMediaJoinBlock: React.FC<SocialMediaJoinBlockProps> = ({
               <div className="bg-white/5 hover:bg-white/10 border border-white/10 rounded-2xl p-4 sm:p-5 flex flex-col justify-between gap-4 backdrop-blur-md transition-all group hover:border-red-400/40 hover:-translate-y-1">
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
-                    <div className="w-10 h-10 rounded-xl bg-red-500/20 border border-red-400/30 flex items-center justify-center text-red-400 shadow-sm">
-                      <span className="material-symbols-outlined text-[24px]">smart_display</span>
+                    <div className="w-10 h-10 rounded-xl bg-red-500/20 border border-red-400/30 flex items-center justify-center shadow-sm">
+                      <YouTubeIcon size={24} />
                     </div>
                     <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-red-500/20 text-red-300 border border-red-500/30">
                       Micro-Lectures
@@ -267,9 +269,7 @@ export const SocialMediaJoinBlock: React.FC<SocialMediaJoinBlockProps> = ({
                   onClick={handleSubscribeYouTube}
                   className="w-full py-2.5 px-3 bg-red-600 hover:bg-red-700 text-white rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 shadow-lg shadow-red-950/30 active:scale-98 transition-all cursor-pointer"
                 >
-                  <span className="material-symbols-outlined text-[16px]">
-                    {clickedChannels.youtube ? 'check' : 'subscriptions'}
-                  </span>
+                  <YouTubeIcon size={16} />
                   <span>{clickedChannels.youtube ? 'Subscribed ✓ / Open' : 'Subscribe on YouTube'}</span>
                 </button>
               </div>
@@ -278,8 +278,8 @@ export const SocialMediaJoinBlock: React.FC<SocialMediaJoinBlockProps> = ({
               <div className="bg-white/5 hover:bg-white/10 border border-white/10 rounded-2xl p-4 sm:p-5 flex flex-col justify-between gap-4 backdrop-blur-md transition-all group hover:border-sky-400/40 hover:-translate-y-1">
                 <div className="space-y-2">
                   <div className="flex items-center justify-between">
-                    <div className="w-10 h-10 rounded-xl bg-sky-500/20 border border-sky-400/30 flex items-center justify-center text-sky-400 shadow-sm">
-                      <span className="material-symbols-outlined text-[24px]">send</span>
+                    <div className="w-10 h-10 rounded-xl bg-sky-500/20 border border-sky-400/30 flex items-center justify-center shadow-sm">
+                      <TelegramIcon size={24} />
                     </div>
                     <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-sky-500/20 text-sky-300 border border-sky-500/30">
                       PDF Vault
@@ -299,9 +299,7 @@ export const SocialMediaJoinBlock: React.FC<SocialMediaJoinBlockProps> = ({
                   onClick={handleJoinTelegram}
                   className="w-full py-2.5 px-3 bg-sky-600 hover:bg-sky-700 text-white rounded-xl font-bold text-xs flex items-center justify-center gap-1.5 shadow-lg shadow-sky-950/30 active:scale-98 transition-all cursor-pointer"
                 >
-                  <span className="material-symbols-outlined text-[16px]">
-                    {clickedChannels.telegram ? 'check' : 'send'}
-                  </span>
+                  <TelegramIcon size={16} />
                   <span>{clickedChannels.telegram ? 'Joined ✓ / Open' : 'Join Telegram Channel'}</span>
                 </button>
               </div>
