@@ -3,6 +3,7 @@ import { User } from 'firebase/auth';
 import { UserProfile, OrderRecord, fetchUserOrders, updateUserProfile, isUserAdmin } from '../firebase';
 import { MathResource } from '../data/mathResources';
 import { formatPrice, getUserCurrency, setUserCurrency, SUPPORTED_CURRENCIES } from '../services/currency';
+import { AdPlacement } from './AdPlacement';
 
 interface DownloadedItem {
   id: string;
@@ -280,6 +281,9 @@ export const UserDashboardPage: React.FC<UserDashboardPageProps> = ({
 
       {/* 2. DASHBOARD BODY */}
       <main className="max-w-7xl mx-auto w-full px-3 sm:px-6 lg:px-8 py-6 sm:py-8 flex-1 space-y-6">
+        {/* Top Dashboard Ad Unit */}
+        <AdPlacement location="dashboard_top" className="mb-4" />
+
         {/* User Profile Header Card */}
         <section className="bg-white rounded-3xl p-5 sm:p-7 shadow-sm border border-blue-50 relative overflow-hidden">
           <div className="absolute top-0 right-0 w-80 h-80 bg-gradient-to-br from-blue-50 to-indigo-50/50 rounded-full blur-3xl pointer-events-none -mr-20 -mt-20"></div>
@@ -1130,6 +1134,11 @@ export const UserDashboardPage: React.FC<UserDashboardPageProps> = ({
             )}
           </div>
         )}
+
+        {/* Universal Footer Top Ad Banner */}
+        <div className="mt-10 mb-4">
+          <AdPlacement location="footer_top" />
+        </div>
       </main>
 
       {/* 5. INVOICE RECEIPT MODAL */}

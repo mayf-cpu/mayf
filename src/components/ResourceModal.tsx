@@ -1,7 +1,8 @@
 import React, { useState } from 'react';
 import { MathResource } from '../data/mathResources';
 import { formatPrice } from '../services/currency';
-import { downloadResourceToSystem } from '../services/fileDownloader';
+import { downloadResourceToSystem, printResourceInA4 } from '../services/fileDownloader';
+import { AdPlacement } from './AdPlacement';
 
 interface ResourceModalProps {
   resource: MathResource | null;
@@ -55,7 +56,16 @@ export const ResourceModal: React.FC<ResourceModalProps> = ({
   };
 
   const handlePrint = () => {
-    window.print();
+    printResourceInA4({
+      title: resource.title,
+      grade: resource.grade,
+      topic: resource.topic,
+      format: resource.format,
+      downloadUrl: resource.downloadUrl,
+      description: resource.description,
+      keyFormulas: resource.keyFormulas,
+      examTraps: resource.examTraps,
+    });
   };
 
   return (
@@ -277,8 +287,11 @@ export const ResourceModal: React.FC<ResourceModalProps> = ({
               </div>
             )}
 
+            {/* Ad Placement */}
+            <AdPlacement location="resource_modal_bottom" className="mt-4" />
+
             {/* Document Watermark */}
-            <div className="mt-8 pt-4 border-t border-gray-100 flex items-center justify-between text-[11px] text-gray-400 font-medium">
+            <div className="mt-4 pt-4 border-t border-gray-100 flex items-center justify-between text-[11px] text-gray-400 font-medium">
               <span>© Maths at Your Fingertips • Official Study Deck</span>
               <span>Class {resource.grade} • Verified Curriculum</span>
             </div>
@@ -286,7 +299,7 @@ export const ResourceModal: React.FC<ResourceModalProps> = ({
         </div>
 
         {/* Footer Actions */}
-        <div className="px-6 py-4 bg-white border-t border-gray-100 flex items-center justify-between gap-4 shrink-0">
+        <div className="px-4 sm:px-6 py-3.5 bg-white border-t border-gray-100 flex flex-col sm:flex-row items-stretch sm:items-center justify-between gap-3 shrink-0">
           <div className="flex items-center gap-2">
             <div className="flex items-center text-[#fea619]">
               <span className="material-symbols-outlined text-[18px]">star</span>
@@ -296,11 +309,21 @@ export const ResourceModal: React.FC<ResourceModalProps> = ({
             <span className="text-xs text-gray-500">{resource.downloadsCount} learners</span>
           </div>
 
-          <div className="flex items-center gap-3">
+          <div className="flex items-center gap-2 sm:gap-3">
+            <button
+              type="button"
+              onClick={handlePrint}
+              className="inline-flex items-center justify-center gap-1.5 bg-slate-100 hover:bg-slate-200 text-slate-800 text-xs sm:text-sm font-bold px-3.5 sm:px-4 py-2 sm:py-2.5 rounded-xl transition-colors cursor-pointer border border-slate-200"
+              title="Print standard A4 format or Save as PDF via Print Preview"
+            >
+              <span className="material-symbols-outlined text-[18px]">print</span>
+              <span>Print A4</span>
+            </button>
+
             {resource.tier === 'pro' ? (
               <button
                 onClick={onOpenProPass}
-                className="inline-flex items-center gap-2 bg-[#fea619] text-[#2a1700] text-sm font-bold px-5 py-2.5 rounded-xl hover:bg-amber-400 tactile-btn-secondary cursor-pointer"
+                className="inline-flex items-center justify-center gap-2 bg-[#fea619] text-[#2a1700] text-xs sm:text-sm font-bold px-4 sm:px-5 py-2 sm:py-2.5 rounded-xl hover:bg-amber-400 tactile-btn-secondary cursor-pointer"
               >
                 <span className="material-symbols-outlined text-[18px]">lock</span>
                 <span>Unlock for {formatPrice(resource.price || 199)}</span>
@@ -309,12 +332,12 @@ export const ResourceModal: React.FC<ResourceModalProps> = ({
               <button
                 onClick={handleStartDownload}
                 disabled={downloading}
-                className="inline-flex items-center gap-2 bg-[#2563eb] text-white text-sm font-bold px-5 py-2.5 rounded-xl hover:bg-blue-700 tactile-btn-primary cursor-pointer disabled:opacity-75"
+                className="inline-flex items-center justify-center gap-2 bg-[#2563eb] text-white text-xs sm:text-sm font-bold px-4 sm:px-5 py-2 sm:py-2.5 rounded-xl hover:bg-blue-700 tactile-btn-primary cursor-pointer disabled:opacity-75"
               >
                 <span className="material-symbols-outlined text-[18px]">
                   {downloading ? 'sync' : 'download'}
                 </span>
-                <span>{downloading ? 'Generating PDF...' : 'Download Free PDF'}</span>
+                <span>{downloading ? 'Exporting PDF...' : 'Download PDF'}</span>
               </button>
             )}
           </div>

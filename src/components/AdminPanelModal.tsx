@@ -63,6 +63,13 @@ import { AdminSeoTab } from './admin/AdminSeoTab';
 import { AdminCategoriesTab } from './admin/AdminCategoriesTab';
 import { AdminThemeTab } from './admin/AdminThemeTab';
 import { AdminSocialTab } from './admin/AdminSocialTab';
+import { AdminAdsTab } from './admin/AdminAdsTab';
+import {
+  AdsGlobalConfig,
+  getAdsConfig,
+  loadAdsConfigFromFirestore,
+  saveAdsConfigLocally,
+} from '../services/ads';
 
 interface AdminPanelModalProps {
   isOpen: boolean;
@@ -92,9 +99,13 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
     | 'notifications'
     | 'gateway'
     | 'branding'
+    | 'ads'
     | 'seo'
     | 'orders'
   >('analytics');
+
+  // Ads state
+  const [adsConfig, setAdsConfig] = useState<AdsGlobalConfig>(getAdsConfig());
 
   // Categories state
   const [categories, setCategories] = useState<CategoryItem[]>(getCategories());
@@ -159,6 +170,7 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
         cloudCategories,
         cloudTheme,
         cloudSocial,
+        cloudAds,
       ] = await Promise.all([
         fetchAllOrders(),
         fetchAllUsers(),
@@ -171,6 +183,7 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
         loadCategorySettingsFromFirestore(),
         loadThemeSettingsFromFirestore(),
         loadSocialSettingsFromFirestore(),
+        loadAdsConfigFromFirestore(),
       ]);
 
       if (fetchedOrders && fetchedOrders.length > 0) {
@@ -212,9 +225,23 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
         saveRazorpayGatewayConfig(merged);
       }
       if (cloudBranding) {
-        const mergedBranding = { ...brandingConfig, ...cloudBranding };
+        const mergedBranding = {
+          ...brandingConfig,
+          ...cloudBranding,
+          siteTitle: cloudBranding.siteTitle !== undefined ? cloudBranding.siteTitle : '',
+          tagline: cloudBranding.tagline !== undefined ? cloudBranding.tagline : '',
+        };
         setBrandingConfig(mergedBranding);
         saveBrandingConfigLocally(mergedBranding);
+      }
+      if (cloudAds) {
+        const mergedAds = {
+          ...adsConfig,
+          ...cloudAds,
+          placements: { ...adsConfig.placements, ...(cloudAds.placements || {}) },
+        };
+        setAdsConfig(mergedAds);
+        saveAdsConfigLocally(mergedAds);
       }
     } catch (e) {
       console.warn('Admin data load notice:', e);
@@ -600,6 +627,18 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
               </button>
 
               <button
+                onClick={() => setActiveTab('ads')}
+                className={`py-3 px-3 sm:px-3.5 text-xs sm:text-sm font-bold border-b-2 flex items-center gap-1.5 cursor-pointer whitespace-nowrap transition-colors ${
+                  activeTab === 'ads'
+                    ? 'border-blue-600 text-blue-600'
+                    : 'border-transparent text-slate-500 hover:text-slate-800'
+                }`}
+              >
+                <span className="material-symbols-outlined text-[18px]">ads_click</span>
+                <span>AdSense &amp; Ads</span>
+              </button>
+
+              <button
                 onClick={() => setActiveTab('seo')}
                 className={`py-3 px-3 sm:px-3.5 text-xs sm:text-sm font-bold border-b-2 flex items-center gap-1.5 cursor-pointer whitespace-nowrap transition-colors ${
                   activeTab === 'seo'
@@ -689,6 +728,15 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                 <AdminNotificationsTab
                   notifications={notifications}
                   onRefresh={loadData}
+                  onToast={onToast}
+                />
+              )}
+
+              {/* TAB: AdSense & Ad Placements */}
+              {activeTab === 'ads' && (
+                <AdminAdsTab
+                  adsConfig={adsConfig}
+                  setAdsConfig={setAdsConfig}
                   onToast={onToast}
                 />
               )}
@@ -1244,13 +1292,14 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                             </label>
                             <input
                               type="text"
-                              value={brandingConfig.siteTitle}
+                              value={brandingConfig.siteTitle || ''}
                               onChange={(e) =>
                                 setBrandingConfig({ ...brandingConfig, siteTitle: e.target.value })
                               }
-                              placeholder="Maths at Your Fingertips"
+                              placeholder="Leave empty to display logo only"
                               className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none font-semibold text-slate-900"
                             />
+                            <span className="text-[10px] text-slate-400 mt-1 block">Leave empty to hide platform title text completely from header.</span>
                           </div>
 
                           <div>
@@ -1259,13 +1308,14 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                             </label>
                             <input
                               type="text"
-                              value={brandingConfig.tagline}
+                              value={brandingConfig.tagline || ''}
                               onChange={(e) =>
                                 setBrandingConfig({ ...brandingConfig, tagline: e.target.value })
                               }
-                              placeholder="Class 5 – 10 Learning Hub"
+                              placeholder="Leave empty to hide subtitle"
                               className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-sm focus:ring-2 focus:ring-blue-500 focus:outline-none font-semibold text-slate-900"
                             />
+                            <span className="text-[10px] text-slate-400 mt-1 block">Leave empty to hide subtitle completely from header.</span>
                           </div>
                         </div>
                       </div>

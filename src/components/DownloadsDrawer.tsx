@@ -1,4 +1,5 @@
 import React from 'react';
+import { printResourceInA4 } from '../services/fileDownloader';
 
 export interface DownloadedItem {
   id: string;
@@ -12,6 +13,7 @@ interface DownloadsDrawerProps {
   onClose: () => void;
   items: DownloadedItem[];
   onOpenItem: (title: string) => void;
+  onPrintItem?: (title: string) => void;
   onClearDownloads: () => void;
 }
 
@@ -20,6 +22,7 @@ export const DownloadsDrawer: React.FC<DownloadsDrawerProps> = ({
   onClose,
   items,
   onOpenItem,
+  onPrintItem,
   onClearDownloads,
 }) => {
   if (!isOpen) return null;
@@ -93,9 +96,15 @@ export const DownloadsDrawer: React.FC<DownloadsDrawerProps> = ({
                     <span>View Sheet</span>
                   </button>
                   <button
-                    onClick={() => window.print()}
+                    onClick={() => {
+                      if (onPrintItem) {
+                        onPrintItem(item.title);
+                      } else {
+                        printResourceInA4({ title: item.title });
+                      }
+                    }}
                     className="p-1.5 bg-gray-100 hover:bg-gray-200 text-gray-700 rounded-lg cursor-pointer"
-                    title="Print"
+                    title="Print A4"
                   >
                     <span className="material-symbols-outlined text-[16px]">print</span>
                   </button>

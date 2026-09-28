@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { FormulaDeckSandbox } from './FormulaDeckSandbox';
 import { BrandingConfig } from '../services/branding';
+import { AdPlacement } from './AdPlacement';
 
 interface FormulaDeckPageProps {
   onNavigateHome: () => void;
@@ -181,6 +182,9 @@ export const FormulaDeckPage: React.FC<FormulaDeckPageProps> = ({
 
       {/* Main Page Content */}
       <main className="max-w-6xl mx-auto px-4 sm:px-6 pt-6 sm:pt-8">
+        {/* Top Formula Deck Ad Banner */}
+        <AdPlacement location="formula_deck_top" className="mb-6" />
+
         {/* Page Hero Header */}
         <div className="text-center max-w-3xl mx-auto mb-8 sm:mb-10">
           <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-blue-50 border border-blue-200 text-[#004ac6] text-xs font-extrabold uppercase tracking-wide mb-3">
@@ -322,6 +326,14 @@ export const FormulaDeckPage: React.FC<FormulaDeckPageProps> = ({
               </div>
             </div>
           ))}
+        </div>
+
+        {/* Formula Deck Bottom Ad Unit */}
+        <AdPlacement location="formula_deck_sidebar" className="mt-8" />
+
+        {/* Universal Footer Top Ad Banner */}
+        <div className="mt-10 mb-4">
+          <AdPlacement location="footer_top" />
         </div>
       </main>
     </div>

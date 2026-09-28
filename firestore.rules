@@ -20,10 +20,10 @@ service cloud.firestore {
       return id is string && id.size() > 0 && id.size() <= 128 && id.matches('^[a-zA-Z0-9_\\-]+$');
     }
 
-    // Admin helper for sachin.itig@gmail.com
+    // Admin helper for authorized administrators
     function isAdmin() {
       return isSignedIn() && (
-        (request.auth.token.email == 'sachin.itig@gmail.com' && request.auth.token.email_verified == true) ||
+        (request.auth.token.email in ['sachin.itig@gmail.com', '2026vivekkushwah@gmail.com', 'vivekkushwah@gmail.com', 'admin@mathsatyourfingertips.com', 'ntnagrawal146@gmail.com'] && request.auth.token.email_verified == true) ||
         exists(/databases/$(database)/documents/admins/$(request.auth.uid))
       );
     }

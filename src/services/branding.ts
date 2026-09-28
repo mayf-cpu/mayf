@@ -17,8 +17,8 @@ export const DEFAULT_BRANDING_CONFIG: BrandingConfig = {
   logoUrl: 'https://lh3.googleusercontent.com/aida/AEtjO1UjgWp59CcYsKXuqwB2FYHcehNEDlMGhbND9VEHl154aFff2EPvt39mUwZ6qXVc-edHZxj5IPmP7JbzGPqzLaCgdQX4S4GUMQBtC4KxFgHHUCu_55VykewYAvz0ReMRXT-l8SNrEHvxLcCxtTX0zVGZ6bSEQvSxd3WcuoKgXa3gTPPWl-czWwPLaYldf3jK6W4CDevlmvi08ew8Ag-k6FiBm7lx3ROJP5G9hsY15VySSpP-r5sf3fqLFLs',
   iconUrl: '/favicon.svg',
   faviconUrl: '/favicon.svg',
-  siteTitle: 'Maths at Your Fingertips',
-  tagline: 'Class 5 – 10 Learning Hub',
+  siteTitle: '',
+  tagline: '',
   announcementText: '🎉 Term 2 Formula Sheets & Chapter Cheat-Sheets are LIVE!',
   announcementLinkText: 'Get PDFs →',
   showAnnouncement: true,
@@ -38,6 +38,8 @@ export function getBrandingConfig(): BrandingConfig {
       return {
         ...DEFAULT_BRANDING_CONFIG,
         ...parsed,
+        siteTitle: parsed.siteTitle !== undefined ? parsed.siteTitle : '',
+        tagline: parsed.tagline !== undefined ? parsed.tagline : '',
       };
     }
   } catch (e) {

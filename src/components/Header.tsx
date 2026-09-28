@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { User } from 'firebase/auth';
 import { UserProfile, isUserAdmin, NotificationRecord } from '../firebase';
 import { BrandingConfig } from '../services/branding';
@@ -6,6 +6,8 @@ import { SocialConfig, getSocialConfig } from '../services/social';
 import { ThemeConfig } from '../services/theme';
 import { syncAndLoadNotifications, getLocalNotifications } from '../services/notifications';
 import { getUserCurrency, setUserCurrency, SUPPORTED_CURRENCIES } from '../services/currency';
+import { MathResource } from '../data/mathResources';
+import { AdPlacement } from './AdPlacement';
 import {
   YouTubeIcon,
   WhatsAppIcon,
@@ -39,6 +41,8 @@ interface HeaderProps {
   branding?: BrandingConfig;
   socialConfig?: SocialConfig;
   themeConfig?: ThemeConfig;
+  allResources?: MathResource[];
+  onSelectResource?: (res: MathResource) => void;
 }
 
 export const Header: React.FC<HeaderProps> = ({
@@ -65,14 +69,139 @@ export const Header: React.FC<HeaderProps> = ({
   branding,
   socialConfig = getSocialConfig(),
   themeConfig,
+  allResources = [],
+  onSelectResource,
 }) => {
   const [showNotifications, setShowNotifications] = useState(false);
   const [showProfileMenu, setShowProfileMenu] = useState(false);
   const [sidebarOpen, setSidebarOpen] = useState(false);
   const [mobileSearchOpen, setMobileSearchOpen] = useState(false);
+  const [desktopDropdownOpen, setDesktopDropdownOpen] = useState(false);
+  const [mobileDropdownOpen, setMobileDropdownOpen] = useState(false);
+  const desktopSearchRef = useRef<HTMLDivElement>(null);
+  const mobileSearchRef = useRef<HTMLDivElement>(null);
+
   const [notificationsList, setNotificationsList] = useState<NotificationRecord[]>(getLocalNotifications);
   const [hasUnread, setHasUnread] = useState(true);
   const [userCurrencyState, setUserCurrencyState] = useState(getUserCurrency());
+
+  // Check if title and tagline are non-empty
+  const hasSiteTitle = Boolean(branding?.siteTitle && branding.siteTitle.trim().length > 0);
+  const hasTagline = Boolean(branding?.tagline && branding.tagline.trim().length > 0);
+
+  // Close search dropdowns on outside click
+  useEffect(() => {
+    const handleOutsideClick = (e: MouseEvent | TouchEvent) => {
+      if (desktopSearchRef.current && !desktopSearchRef.current.contains(e.target as Node)) {
+        setDesktopDropdownOpen(false);
+      }
+      if (mobileSearchRef.current && !mobileSearchRef.current.contains(e.target as Node)) {
+        setMobileDropdownOpen(false);
+      }
+    };
+
+    document.addEventListener('mousedown', handleOutsideClick);
+    document.addEventListener('touchstart', handleOutsideClick);
+    return () => {
+      document.removeEventListener('mousedown', handleOutsideClick);
+      document.removeEventListener('touchstart', handleOutsideClick);
+    };
+  }, []);
+
+  // Compute live search suggestions
+  const trimmedSearch = searchQuery.trim().toLowerCase();
+
+  const matchingResources = useMemo(() => {
+    if (!trimmedSearch || !allResources || allResources.length === 0) return [];
+    const terms = trimmedSearch.split(/\s+/).filter(Boolean);
+
+    // Score and filter each resource
+    const scored = allResources
+      .map((r) => {
+        const titleLower = r.title.toLowerCase();
+        const topicLower = (r.topic || '').toLowerCase();
+        const gradeLower = (r.grade || '').toLowerCase();
+        const formatLower = (r.format || '').toLowerCase();
+        const descLower = (r.description || '').toLowerCase();
+        const tagsLower = (r.tags || []).map((t) => t.toLowerCase()).join(' ');
+        const fullHaystack = `${titleLower} ${topicLower} ${gradeLower} ${formatLower} ${tagsLower} ${descLower}`;
+
+        // Every term must match somewhere in the resource
+        const matchesAll = terms.every((term) => fullHaystack.includes(term));
+        if (!matchesAll) return null;
+
+        // Calculate relevance score
+        let score = 0;
+        if (titleLower === trimmedSearch) score += 100;
+        else if (titleLower.startsWith(trimmedSearch)) score += 60;
+        else if (titleLower.includes(trimmedSearch)) score += 40;
+
+        terms.forEach((term) => {
+          if (titleLower.includes(term)) score += 20;
+          if (topicLower.includes(term)) score += 15;
+          if (gradeLower.includes(term)) score += 10;
+          if (formatLower.includes(term)) score += 10;
+          if (tagsLower.includes(term)) score += 8;
+        });
+
+        return { resource: r, score };
+      })
+      .filter((item): item is { resource: MathResource; score: number } => item !== null)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 6)
+      .map((item) => item.resource);
+
+    return scored;
+  }, [trimmedSearch, allResources]);
+
+  const matchingTopics = useMemo(() => {
+    if (!trimmedSearch || !allResources || allResources.length === 0) return [];
+    const set = new Set<string>();
+    const terms = trimmedSearch.split(/\s+/).filter(Boolean);
+    allResources.forEach((r) => {
+      const topLower = (r.topic || '').toLowerCase();
+      if (topLower.includes(trimmedSearch) || terms.some((t) => topLower.includes(t))) {
+        set.add(r.topic);
+      }
+    });
+    return Array.from(set).slice(0, 4);
+  }, [trimmedSearch, allResources]);
+
+  const matchingGrades = useMemo(() => {
+    if (!trimmedSearch) return [];
+    const grades = ['Class 5', 'Class 6', 'Class 7', 'Class 8', 'Class 9', 'Class 10'];
+    const terms = trimmedSearch.split(/\s+/).filter(Boolean);
+    return grades.filter((g) => {
+      const gLower = g.toLowerCase();
+      const numOnly = gLower.replace('class', '').trim();
+      return (
+        gLower.includes(trimmedSearch) ||
+        terms.some((t) => gLower.includes(t) || t === numOnly)
+      );
+    });
+  }, [trimmedSearch]);
+
+  const handleExecuteSearch = (queryToUse?: string) => {
+    if (queryToUse !== undefined) {
+      onSearchChange(queryToUse);
+    }
+    setDesktopDropdownOpen(false);
+    setMobileDropdownOpen(false);
+    onSelectNav('explore-notes');
+    const el = document.getElementById('resource-catalog') || document.getElementById('cards-grid');
+    el?.scrollIntoView({ behavior: 'smooth' });
+  };
+
+  const handleSelectResourceItem = (res: MathResource) => {
+    setDesktopDropdownOpen(false);
+    setMobileDropdownOpen(false);
+    if (onSelectResource) {
+      onSelectResource(res);
+    } else {
+      onSearchChange(res.title);
+      handleExecuteSearch(res.title);
+    }
+  };
 
   useEffect(() => {
     const handleCurrencyChange = (e: Event) => {
@@ -162,6 +291,9 @@ export const Header: React.FC<HeaderProps> = ({
   return (
     <>
       <header className="fixed top-0 left-0 right-0 z-50 w-full max-w-full bg-[#ffffff]/95 backdrop-blur-xl shadow-[0_1px_8px_rgba(0,0,0,0.04)] border-b border-gray-100">
+        {/* Universal Top Ad Placement */}
+        <AdPlacement location="header_top" className="my-0" />
+
         {/* Top Announcement Banner (Optional) */}
         {branding?.showAnnouncement !== false && (
           <div
@@ -206,22 +338,28 @@ export const Header: React.FC<HeaderProps> = ({
                   'https://lh3.googleusercontent.com/aida/AEtjO1UjgWp59CcYsKXuqwB2FYHcehNEDlMGhbND9VEHl154aFff2EPvt39mUwZ6qXVc-edHZxj5IPmP7JbzGPqzLaCgdQX4S4GUMQBtC4KxFgHHUCu_55VykewYAvz0ReMRXT-l8SNrEHvxLcCxtTX0zVGZ6bSEQvSxd3WcuoKgXa3gTPPWl-czWwPLaYldf3jK6W4CDevlmvi08ew8Ag-k6FiBm7lx3ROJP5G9hsY15VySSpP-r5sf3fqLFLs'
                 }
               />
-              <div className="flex flex-col min-w-0">
-                <span
-                  className="text-sm sm:text-base lg:text-[19px] font-extrabold leading-tight tracking-tight truncate max-w-[150px] sm:max-w-[210px] md:max-w-none transition-colors"
-                  style={{ color: themeConfig?.primaryColor || '#004ac6' }}
-                >
-                  {branding?.siteTitle || 'Maths at Your Fingertips'}
-                </span>
-                <span className="hidden sm:block text-[10px] font-bold text-[#434655] uppercase tracking-wider truncate">
-                  {branding?.tagline || 'Class 5 – 10 Learning Hub'}
-                </span>
-              </div>
+              {(hasSiteTitle || hasTagline) && (
+                <div className="flex flex-col min-w-0">
+                  {hasSiteTitle && (
+                    <span
+                      className="text-sm sm:text-base lg:text-[19px] font-extrabold leading-tight tracking-tight truncate max-w-[150px] sm:max-w-[210px] md:max-w-none transition-colors"
+                      style={{ color: themeConfig?.primaryColor || '#004ac6' }}
+                    >
+                      {branding!.siteTitle}
+                    </span>
+                  )}
+                  {hasTagline && (
+                    <span className="hidden sm:block text-[10px] font-bold text-[#434655] uppercase tracking-wider truncate">
+                      {branding!.tagline}
+                    </span>
+                  )}
+                </div>
+              )}
             </button>
           </div>
 
-          {/* 2. SEARCH BAR (Desktop & Tablet) */}
-          <div className="hidden md:flex flex-1 max-w-sm lg:max-w-md items-center relative mx-2">
+          {/* 2. SEARCH BAR (Desktop & Tablet) WITH AUTO-SUGGESTIONS DROPDOWN */}
+          <div ref={desktopSearchRef} className="hidden md:flex flex-1 max-w-sm lg:max-w-md items-center relative mx-2">
             <div className="w-full flex items-center bg-[#f0f3ff] rounded-xl px-3 py-1.5 shadow-[0_1px_4px_rgba(0,0,0,0.03)] focus-within:ring-2 focus-within:ring-blue-500 transition-all border border-blue-50">
               <span className="material-symbols-outlined text-[#737686] mr-2 text-[20px]">search</span>
               <input
@@ -229,11 +367,23 @@ export const Header: React.FC<HeaderProps> = ({
                 placeholder="Search formula sheets, notes, NCERT..."
                 type="text"
                 value={searchQuery}
-                onChange={(e) => onSearchChange(e.target.value)}
+                onFocus={() => setDesktopDropdownOpen(true)}
+                onChange={(e) => {
+                  onSearchChange(e.target.value);
+                  setDesktopDropdownOpen(true);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    handleExecuteSearch();
+                  }
+                }}
               />
               {searchQuery && (
                 <button
-                  onClick={() => onSearchChange('')}
+                  onClick={() => {
+                    onSearchChange('');
+                    setDesktopDropdownOpen(false);
+                  }}
                   className="text-gray-400 hover:text-gray-600 mr-1 p-0.5 cursor-pointer"
                   title="Clear search"
                 >
@@ -246,6 +396,130 @@ export const Header: React.FC<HeaderProps> = ({
                 </span>
               </div>
             </div>
+
+            {/* Desktop Suggestions Dropdown */}
+            {desktopDropdownOpen && trimmedSearch && (
+              <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-2xl shadow-2xl border border-blue-100 z-50 overflow-hidden max-h-[440px] overflow-y-auto animate-fadeIn divide-y divide-slate-100 text-left">
+                {/* Topic / Chapter Quick Matches */}
+                {matchingTopics.length > 0 && (
+                  <div className="p-2.5 bg-slate-50/70">
+                    <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 px-2 block mb-1.5">
+                      Matching Topics &amp; Chapters
+                    </span>
+                    <div className="flex flex-wrap gap-1.5 px-1">
+                      {matchingTopics.map((topicName) => (
+                        <button
+                          key={topicName}
+                          type="button"
+                          onClick={() => handleExecuteSearch(topicName)}
+                          className="inline-flex items-center gap-1 bg-white hover:bg-blue-50 text-blue-700 border border-blue-200 text-xs font-bold px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
+                        >
+                          <span className="material-symbols-outlined text-[14px]">auto_stories</span>
+                          <span>{topicName}</span>
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Grade Matches */}
+                {matchingGrades.length > 0 && onSelectClass && (
+                  <div className="p-2 bg-indigo-50/50 flex items-center gap-2 px-3">
+                    <span className="text-[11px] font-bold text-indigo-700">Filter by Grade:</span>
+                    <div className="flex items-center gap-1">
+                      {matchingGrades.map((g) => (
+                        <button
+                          key={g}
+                          type="button"
+                          onClick={() => {
+                            onSelectClass(g);
+                            handleExecuteSearch();
+                          }}
+                          className="text-[10px] font-extrabold bg-indigo-600 text-white px-2 py-0.5 rounded cursor-pointer hover:bg-indigo-700"
+                        >
+                          {g}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Resource Item Suggestions */}
+                {matchingResources.length > 0 ? (
+                  <div className="py-1">
+                    <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 px-3.5 py-1 block">
+                      Suggested Study Materials
+                    </span>
+                    {matchingResources.map((res) => (
+                      <div
+                        key={res.id}
+                        onClick={() => handleSelectResourceItem(res)}
+                        className="px-3.5 py-2 hover:bg-blue-50/60 transition-colors cursor-pointer flex items-center justify-between gap-3 group"
+                      >
+                        <div className="flex items-center gap-2.5 min-w-0">
+                          <span className="w-7 h-7 rounded-lg bg-blue-100 text-blue-700 flex items-center justify-center shrink-0">
+                            <span className="material-symbols-outlined text-[16px]">
+                              {res.hasVideo ? 'smart_display' : 'description'}
+                            </span>
+                          </span>
+                          <div className="min-w-0">
+                            <div className="text-xs font-bold text-slate-800 group-hover:text-blue-700 truncate">
+                              {res.title}
+                            </div>
+                            <div className="text-[10px] text-slate-500 flex items-center gap-1.5 truncate">
+                              <span className="font-semibold text-blue-600">{res.grade}</span>
+                              <span>•</span>
+                              <span>{res.topic}</span>
+                              <span>•</span>
+                              <span>{res.format}</span>
+                            </div>
+                          </div>
+                        </div>
+
+                        <div className="flex items-center gap-1.5 shrink-0">
+                          <span
+                            className={`text-[9px] font-extrabold px-1.5 py-0.5 rounded ${
+                              res.tier === 'free'
+                                ? 'bg-emerald-100 text-emerald-800'
+                                : 'bg-amber-100 text-amber-800'
+                            }`}
+                          >
+                            {res.tier === 'free' ? 'FREE' : 'PRO'}
+                          </span>
+                          <span className="material-symbols-outlined text-gray-400 group-hover:text-blue-600 text-[16px]">
+                            chevron_right
+                          </span>
+                        </div>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="p-4 text-center">
+                    <span className="material-symbols-outlined text-slate-300 text-3xl mb-1">search_off</span>
+                    <p className="text-xs font-semibold text-slate-600">
+                      No exact matches for &quot;{searchQuery}&quot;
+                    </p>
+                    <p className="text-[11px] text-slate-400 mt-0.5">
+                      Press enter to explore all resources or try searching Quadratic, Trigonometry, or NCERT.
+                    </p>
+                  </div>
+                )}
+
+                {/* View All Matching Results Footer */}
+                <div className="p-2 bg-slate-50 flex items-center justify-between">
+                  <span className="text-[11px] text-slate-500 font-medium px-2">
+                    Search query: &quot;{searchQuery}&quot;
+                  </span>
+                  <button
+                    type="button"
+                    onClick={() => handleExecuteSearch()}
+                    className="text-xs font-extrabold text-blue-600 hover:text-blue-800 px-3 py-1 rounded-lg hover:bg-blue-100/70 transition-colors cursor-pointer"
+                  >
+                    View In Catalog &rarr;
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
 
           {/* RIGHT ACTION ICONS & BUTTONS */}
@@ -558,7 +832,7 @@ export const Header: React.FC<HeaderProps> = ({
 
         {/* MOBILE ONLY: Search Bar Input Expansion (Toggled via search icon) */}
         {mobileSearchOpen && (
-          <div className="md:hidden px-3 py-2 bg-[#f0f3ff] border-t border-blue-50 animate-fadeIn">
+          <div ref={mobileSearchRef} className="md:hidden px-3 py-2 bg-[#f0f3ff] border-t border-blue-50 animate-fadeIn relative">
             <div className="w-full flex items-center bg-white rounded-xl px-3 py-1.5 shadow-2xs border border-blue-100">
               <span className="material-symbols-outlined text-[#737686] mr-2 text-[18px]">search</span>
               <input
@@ -566,18 +840,101 @@ export const Header: React.FC<HeaderProps> = ({
                 placeholder="Search notes, formula sheets, NCERT..."
                 type="text"
                 value={searchQuery}
-                onChange={(e) => onSearchChange(e.target.value)}
+                onFocus={() => setMobileDropdownOpen(true)}
+                onChange={(e) => {
+                  onSearchChange(e.target.value);
+                  setMobileDropdownOpen(true);
+                }}
+                onKeyDown={(e) => {
+                  if (e.key === 'Enter') {
+                    handleExecuteSearch();
+                  }
+                }}
                 autoFocus
               />
               {searchQuery && (
                 <button
-                  onClick={() => onSearchChange('')}
+                  onClick={() => {
+                    onSearchChange('');
+                    setMobileDropdownOpen(false);
+                  }}
                   className="text-gray-400 hover:text-gray-600 p-0.5"
                 >
                   <span className="material-symbols-outlined text-[16px]">close</span>
                 </button>
               )}
             </div>
+
+            {/* Mobile Suggestions Dropdown */}
+            {mobileDropdownOpen && trimmedSearch && (
+              <div className="mt-2 bg-white rounded-2xl shadow-xl border border-blue-100 overflow-hidden max-h-[380px] overflow-y-auto divide-y divide-slate-100 text-left">
+                {/* Topic / Chapter Quick Matches */}
+                {matchingTopics.length > 0 && (
+                  <div className="p-2.5 bg-slate-50/70">
+                    <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 px-1 block mb-1">
+                      Topics &amp; Chapters
+                    </span>
+                    <div className="flex flex-wrap gap-1">
+                      {matchingTopics.map((topicName) => (
+                        <button
+                          key={topicName}
+                          type="button"
+                          onClick={() => handleExecuteSearch(topicName)}
+                          className="bg-white text-blue-700 border border-blue-200 text-[11px] font-bold px-2 py-0.5 rounded-lg"
+                        >
+                          {topicName}
+                        </button>
+                      ))}
+                    </div>
+                  </div>
+                )}
+
+                {/* Resource Item Suggestions */}
+                {matchingResources.length > 0 ? (
+                  <div className="py-1">
+                    {matchingResources.map((res) => (
+                      <div
+                        key={res.id}
+                        onClick={() => handleSelectResourceItem(res)}
+                        className="px-3 py-2 hover:bg-blue-50/60 transition-colors cursor-pointer flex items-center justify-between gap-2"
+                      >
+                        <div className="min-w-0">
+                          <div className="text-xs font-bold text-slate-800 truncate">
+                            {res.title}
+                          </div>
+                          <div className="text-[10px] text-slate-500 truncate">
+                            {res.grade} • {res.topic}
+                          </div>
+                        </div>
+                        <span
+                          className={`text-[9px] font-extrabold px-1.5 py-0.5 rounded shrink-0 ${
+                            res.tier === 'free'
+                              ? 'bg-emerald-100 text-emerald-800'
+                              : 'bg-amber-100 text-amber-800'
+                          }`}
+                        >
+                          {res.tier === 'free' ? 'FREE' : 'PRO'}
+                        </span>
+                      </div>
+                    ))}
+                  </div>
+                ) : (
+                  <div className="p-3 text-center text-xs text-slate-500">
+                    No results for &quot;{searchQuery}&quot;. Press enter to search catalog.
+                  </div>
+                )}
+
+                <div className="p-2 bg-slate-50 text-right">
+                  <button
+                    type="button"
+                    onClick={() => handleExecuteSearch()}
+                    className="text-xs font-bold text-blue-600 hover:text-blue-800 px-2 py-1"
+                  >
+                    View All Matching Results &rarr;
+                  </button>
+                </div>
+              </div>
+            )}
           </div>
         )}
       </header>
@@ -614,9 +971,11 @@ export const Header: React.FC<HeaderProps> = ({
                     'https://lh3.googleusercontent.com/aida/AEtjO1UjgWp59CcYsKXuqwB2FYHcehNEDlMGhbND9VEHl154aFff2EPvt39mUwZ6qXVc-edHZxj5IPmP7JbzGPqzLaCgdQX4S4GUMQBtC4KxFgHHUCu_55VykewYAvz0ReMRXT-l8SNrEHvxLcCxtTX0zVGZ6bSEQvSxd3WcuoKgXa3gTPPWl-czWwPLaYldf3jK6W4CDevlmvi08ew8Ag-k6FiBm7lx3ROJP5G9hsY15VySSpP-r5sf3fqLFLs'
                   }
                 />
-                <span className="font-extrabold text-sm text-[#004ac6] truncate">
-                  {branding?.siteTitle || 'Maths at Your Fingertips'}
-                </span>
+                {hasSiteTitle && (
+                  <span className="font-extrabold text-sm text-[#004ac6] truncate">
+                    {branding?.siteTitle}
+                  </span>
+                )}
               </div>
 
               <button

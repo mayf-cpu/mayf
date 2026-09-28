@@ -370,6 +370,7 @@ export const ADMIN_EMAILS = [
   '2026vivekkushwah@gmail.com',
   'vivekkushwah@gmail.com',
   'admin@mathsatyourfingertips.com',
+  'ntnagrawal146@gmail.com',
 ];
 export const MASTER_ADMIN_PASSCODE = 'MATHS2025';
 

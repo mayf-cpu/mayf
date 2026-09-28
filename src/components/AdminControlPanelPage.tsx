@@ -87,7 +87,14 @@ import { AdminCategoriesTab } from './admin/AdminCategoriesTab';
 import { AdminThemeTab } from './admin/AdminThemeTab';
 import { AdminSocialTab } from './admin/AdminSocialTab';
 import { AdminAiTeacherTab } from './admin/AdminAiTeacherTab';
+import { AdminAdsTab } from './admin/AdminAdsTab';
 import { resetAllAdminFeaturesToDefaults } from '../services/adminReset';
+import {
+  AdsGlobalConfig,
+  getAdsConfig,
+  loadAdsConfigFromFirestore,
+  saveAdsConfigLocally,
+} from '../services/ads';
 
 interface AdminControlPanelPageProps {
   currentUser: User | null;
@@ -118,9 +125,13 @@ export const AdminControlPanelPage: React.FC<AdminControlPanelPageProps> = ({
     | 'notifications'
     | 'gateway'
     | 'branding'
+    | 'ads'
     | 'seo'
     | 'orders'
   >('analytics');
+
+  // Ads & AdSense state
+  const [adsConfig, setAdsConfig] = useState<AdsGlobalConfig>(getAdsConfig);
 
   // Categories state
   const [categories, setCategories] = useState<CategoryItem[]>(getCategories);
@@ -187,6 +198,7 @@ export const AdminControlPanelPage: React.FC<AdminControlPanelPageProps> = ({
         cloudCategories,
         cloudTheme,
         cloudSocial,
+        cloudAds,
       ] = await Promise.all([
         fetchAllOrders(),
         fetchAllUsers(),
@@ -199,6 +211,7 @@ export const AdminControlPanelPage: React.FC<AdminControlPanelPageProps> = ({
         loadCategorySettingsFromFirestore(),
         loadThemeSettingsFromFirestore(),
         loadSocialSettingsFromFirestore(),
+        loadAdsConfigFromFirestore(),
       ]);
 
       if (fetchedOrders && fetchedOrders.length > 0) {
@@ -245,9 +258,23 @@ export const AdminControlPanelPage: React.FC<AdminControlPanelPageProps> = ({
         saveRazorpayGatewayConfig(merged);
       }
       if (cloudBranding) {
-        const mergedBranding = { ...brandingConfig, ...cloudBranding };
+        const mergedBranding = {
+          ...brandingConfig,
+          ...cloudBranding,
+          siteTitle: cloudBranding.siteTitle !== undefined ? cloudBranding.siteTitle : '',
+          tagline: cloudBranding.tagline !== undefined ? cloudBranding.tagline : '',
+        };
         setBrandingConfig(mergedBranding);
         saveBrandingConfigLocally(mergedBranding);
+      }
+      if (cloudAds) {
+        const mergedAds = {
+          ...adsConfig,
+          ...cloudAds,
+          placements: { ...adsConfig.placements, ...(cloudAds.placements || {}) },
+        };
+        setAdsConfig(mergedAds);
+        saveAdsConfigLocally(mergedAds);
       }
     } catch (e) {
       console.warn('Admin data load notice:', e);
@@ -600,6 +627,7 @@ export const AdminControlPanelPage: React.FC<AdminControlPanelPageProps> = ({
             { id: 'notifications', label: `Broadcasts (${notifications.length})`, icon: 'campaign' },
             { id: 'gateway', label: 'Payment Gateway', icon: 'credit_card' },
             { id: 'branding', label: 'Branding & Logo', icon: 'palette' },
+            { id: 'ads', label: 'AdSense & Ads', icon: 'ads_click' },
             { id: 'seo', label: 'SEO & Meta', icon: 'travel_explore' },
             { id: 'orders', label: `Orders (${orders.length})`, icon: 'receipt_long' },
           ].map((tab) => (
@@ -1043,6 +1071,17 @@ export const AdminControlPanelPage: React.FC<AdminControlPanelPageProps> = ({
                 </div>
               </div>
             </div>
+          </div>
+        )}
+
+        {/* TAB: ADSENSE & AD PLACEMENTS */}
+        {activeTab === 'ads' && (
+          <div className="max-w-6xl mx-auto">
+            <AdminAdsTab
+              adsConfig={adsConfig}
+              setAdsConfig={setAdsConfig}
+              onToast={onToast}
+            />
           </div>
         )}
 

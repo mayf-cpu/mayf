@@ -3,7 +3,7 @@
  * SPDX-License-Identifier: Apache-2.0
  */
 
-import React, { useState, useMemo, useEffect } from 'react';
+import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { User, onAuthStateChanged } from 'firebase/auth';
 import {
   auth,
@@ -28,7 +28,7 @@ import { ShareModal } from './components/ShareModal';
 import { OlympiadEnrollModal } from './components/OlympiadEnrollModal';
 import { InAppBrowserBanner } from './components/InAppBrowserBanner';
 import { YouTubeIcon, FacebookIcon, WhatsAppIcon, TelegramIcon } from './components/SocialIcons';
-import { downloadResourceToSystem } from './services/fileDownloader';
+import { downloadResourceToSystem, printResourceInA4 } from './services/fileDownloader';
 import { attemptAutoLaunchExternalBrowser } from './services/externalBrowser';
 import { AdminControlPanelPage } from './components/AdminControlPanelPage';
 import { StudentMobileRegisterModal } from './components/StudentMobileRegisterModal';
@@ -84,6 +84,8 @@ import {
   refineUserCurrencyWithIp,
   CurrencyInfo,
 } from './services/currency';
+import { AdPlacement } from './components/AdPlacement';
+import { loadAdsConfigFromFirestore, saveAdsConfigLocally } from './services/ads';
 
 export default function App() {
   // Page view routing: 'store' for student portal, 'admin' for dedicated Control Panel, 'dashboard' for User Dashboard, 'formula-deck' for dedicated interactive sandbox
@@ -125,6 +127,23 @@ export default function App() {
   const [selectedClass, setSelectedClass] = useState<string>('Class 9');
   const [searchQuery, setSearchQuery] = useState<string>('');
   const [activeNav, setActiveNav] = useState<string>('explore-notes');
+  const [catalogSearchOpen, setCatalogSearchOpen] = useState(false);
+  const catalogSearchRef = useRef<HTMLDivElement>(null);
+
+  // Close catalog search dropdown on click outside
+  useEffect(() => {
+    const handleOutsideClick = (e: MouseEvent | TouchEvent) => {
+      if (catalogSearchRef.current && !catalogSearchRef.current.contains(e.target as Node)) {
+        setCatalogSearchOpen(false);
+      }
+    };
+    document.addEventListener('mousedown', handleOutsideClick);
+    document.addEventListener('touchstart', handleOutsideClick);
+    return () => {
+      document.removeEventListener('mousedown', handleOutsideClick);
+      document.removeEventListener('touchstart', handleOutsideClick);
+    };
+  }, []);
 
   // Filter states
   const [priceTier, setPriceTier] = useState<'all' | 'free' | 'pro'>('all');
@@ -306,7 +325,12 @@ export default function App() {
     loadBrandingSettingsFromFirestore().then((cloudCfg) => {
       if (cloudCfg) {
         setBranding((prev) => {
-          const merged = { ...prev, ...cloudCfg };
+          const merged = {
+            ...prev,
+            ...cloudCfg,
+            siteTitle: cloudCfg.siteTitle !== undefined ? cloudCfg.siteTitle : '',
+            tagline: cloudCfg.tagline !== undefined ? cloudCfg.tagline : '',
+          };
           if (merged.faviconUrl) {
             applyFaviconToDocument(merged.faviconUrl);
           }
@@ -353,6 +377,13 @@ export default function App() {
       }
     };
     window.addEventListener('seo-changed', handleSeoChanged);
+
+    // Ads settings sync
+    loadAdsConfigFromFirestore().then((cloudAds) => {
+      if (cloudAds) {
+        saveAdsConfigLocally(cloudAds);
+      }
+    });
 
     // Initial resources sync & listeners
     syncAndLoadAllResources().then(({ allResources }) => {
@@ -614,21 +645,57 @@ export default function App() {
     return categories.filter((c) => c.parentId === parentGrade.id && c.enabled);
   }, [categories, selectedClass]);
 
+  // Catalog search suggestions
+  const catalogMatchingResources = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q || !allCatalogResources || allCatalogResources.length === 0) return [];
+    const terms = q.split(/\s+/).filter(Boolean);
+    return allCatalogResources
+      .map((r) => {
+        const fullHaystack = `${r.title} ${r.topic || ''} ${r.grade || ''} ${r.format || ''} ${(r.tags || []).join(' ')} ${r.description || ''}`.toLowerCase();
+        const matchesAll = terms.every((term) => fullHaystack.includes(term));
+        if (!matchesAll) return null;
+        let score = 0;
+        if (r.title.toLowerCase().includes(q)) score += 50;
+        terms.forEach((term) => {
+          if (r.title.toLowerCase().includes(term)) score += 20;
+          if ((r.topic || '').toLowerCase().includes(term)) score += 10;
+        });
+        return { resource: r, score };
+      })
+      .filter((item): item is { resource: MathResource; score: number } => item !== null)
+      .sort((a, b) => b.score - a.score)
+      .slice(0, 6)
+      .map((item) => item.resource);
+  }, [searchQuery, allCatalogResources]);
+
+  const catalogMatchingTopics = useMemo(() => {
+    const q = searchQuery.trim().toLowerCase();
+    if (!q || !allCatalogResources || allCatalogResources.length === 0) return [];
+    const set = new Set<string>();
+    const terms = q.split(/\s+/).filter(Boolean);
+    allCatalogResources.forEach((r) => {
+      const topLower = (r.topic || '').toLowerCase();
+      if (topLower.includes(q) || terms.some((t) => topLower.includes(t))) {
+        set.add(r.topic);
+      }
+    });
+    return Array.from(set).slice(0, 4);
+  }, [searchQuery, allCatalogResources]);
+
   // Filtered resources calculation (including custom uploaded resources, tier overrides, format, topic & stream)
   const filteredResources = useMemo(() => {
     return allCatalogResources.filter((res) => {
-      // Search match
+      // Search match - multi-term search
       if (searchQuery.trim()) {
-        const q = searchQuery.toLowerCase();
-        const matchesQuery =
-          res.title.toLowerCase().includes(q) ||
-          res.description.toLowerCase().includes(q) ||
-          res.topic.toLowerCase().includes(q) ||
-          res.tags.some((t) => t.toLowerCase().includes(q));
+        const q = searchQuery.toLowerCase().trim();
+        const terms = q.split(/\s+/).filter(Boolean);
+        const fullHaystack = `${res.title} ${res.description || ''} ${res.topic || ''} ${res.grade || ''} ${res.format || ''} ${(res.tags || []).join(' ')} ${res.categoryTitle || ''}`.toLowerCase();
+        const matchesQuery = terms.every((term) => fullHaystack.includes(term));
         if (!matchesQuery) return false;
       }
 
-      // Grade match
+      // Grade match (bypassed if searching)
       if (selectedClass !== 'All' && !searchQuery.trim()) {
         if (res.grade !== selectedClass) {
           // If resource is not an exact match, check prefix match (e.g. 'Class 10' matches 'Class 10')
@@ -642,8 +709,8 @@ export default function App() {
       if (priceTier === 'free' && res.tier !== 'free') return false;
       if (priceTier === 'pro' && res.tier !== 'pro') return false;
 
-      // Format filter (flexible match to support custom format naming & video category)
-      if (selectedFormat && selectedFormat !== 'All Formats') {
+      // Format filter (flexible match to support custom format naming & video category - bypassed if searching)
+      if (selectedFormat && selectedFormat !== 'All Formats' && !searchQuery.trim()) {
         const normFmt = selectedFormat.toLowerCase().trim();
         const resFmt = (res.format || '').toLowerCase().trim();
         if (normFmt.includes('video')) {
@@ -657,8 +724,8 @@ export default function App() {
         }
       }
 
-      // Topic match (filtered live when topic chip or chapter is selected)
-      if (selectedTopic && selectedTopic !== 'All Topics') {
+      // Topic match (filtered live when topic chip or chapter is selected - bypassed if searching)
+      if (selectedTopic && selectedTopic !== 'All Topics' && !searchQuery.trim()) {
         const qTopic = selectedTopic.toLowerCase().trim();
         const resTopic = (res.topic || '').toLowerCase().trim();
         const resCat = (res.categoryTitle || '').toLowerCase().trim();
@@ -672,8 +739,8 @@ export default function App() {
         if (!matchesTopic) return false;
       }
 
-      // Stream / Board Curriculum match
-      if (selectedStream && selectedStream !== 'All Streams') {
+      // Stream / Board Curriculum match - bypassed if searching
+      if (selectedStream && selectedStream !== 'All Streams' && !searchQuery.trim()) {
         const qStream = selectedStream.toLowerCase().trim();
         const resCat = (res.categoryTitle || '').toLowerCase();
         const resDesc = (res.description || '').toLowerCase();
@@ -891,11 +958,18 @@ export default function App() {
         onOpenDashboard={handleOpenDashboard}
         onOpenMobileRegister={() => setShowMobileRegisterModal(true)}
         onShareWebsite={() => openShare(branding.siteTitle, window.location.origin)}
-        onSearchChange={setSearchQuery}
+        onSearchChange={(q) => {
+          setSearchQuery(q);
+          if (q.trim() && currentView !== 'store') {
+            setCurrentView('store');
+          }
+        }}
         onSelectNav={(nav) => {
           setActiveNav(nav);
           if (nav === 'formula-deck') {
             handleNavigateToFormulaDeck();
+          } else {
+            setCurrentView('store');
           }
         }}
         onSignOut={handleSignOut}
@@ -904,6 +978,14 @@ export default function App() {
         branding={branding}
         socialConfig={socialConfig}
         themeConfig={themeConfig}
+        allResources={allCatalogResources}
+        onSelectResource={(res) => {
+          setCurrentView('store');
+          setSelectedResource(res);
+          if (res.hasVideo && res.videoUrl) {
+            setIsVideoModalOpen(true);
+          }
+        }}
       />
 
       <main className="w-full max-w-full overflow-x-hidden pt-24 sm:pt-28 bg-[#f9f9ff] min-h-screen flex-1">
@@ -1288,6 +1370,11 @@ export default function App() {
           )}
         </section>
 
+        {/* Ad Placement: Home Hero Bottom */}
+        <section className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-2 w-full">
+          <AdPlacement location="home_hero_bottom" />
+        </section>
+
         {/* Interactive Grade / Class Quick Switcher Rail */}
         <section className="max-w-7xl mx-auto w-full px-3 sm:px-6 lg:px-8 py-4">
           <div className="flex flex-col gap-2.5">
@@ -1435,18 +1522,42 @@ export default function App() {
           <div className="bg-white rounded-2xl p-4 sm:p-5 shadow-sm border border-blue-50 space-y-3 sm:space-y-4 max-w-full overflow-hidden">
             {/* Search & Main Category Chips */}
             <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
-              {/* Search Field */}
-              <div className="flex-1 relative flex items-center bg-[#f0f3ff] rounded-xl px-3 py-2 border border-blue-50">
+              {/* Search Field with Dropdown Suggestions */}
+              <div ref={catalogSearchRef} className="flex-1 relative flex items-center bg-[#f0f3ff] rounded-xl px-3 py-2 border border-blue-50">
                 <span className="material-symbols-outlined text-[#737686] mr-2 text-[18px] sm:text-[20px]">search</span>
                 <input
                   className="w-full bg-transparent border-0 outline-none text-xs sm:text-[14px] text-[#111c2d] placeholder:text-[#737686]"
                   placeholder="Type a chapter or theorem name (e.g. 'Coordinate Geometry', 'Circles')..."
                   type="text"
                   value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
+                  onFocus={() => setCatalogSearchOpen(true)}
+                  onChange={(e) => {
+                    setSearchQuery(e.target.value);
+                    setCatalogSearchOpen(true);
+                  }}
+                  onKeyDown={(e) => {
+                    if (e.key === 'Enter') {
+                      setCatalogSearchOpen(false);
+                      const el = document.getElementById('cards-grid');
+                      el?.scrollIntoView({ behavior: 'smooth' });
+                    }
+                  }}
                 />
+                {searchQuery && (
+                  <button
+                    onClick={() => {
+                      setSearchQuery('');
+                      setCatalogSearchOpen(false);
+                    }}
+                    className="text-gray-400 hover:text-gray-600 mr-2 p-0.5 cursor-pointer"
+                    title="Clear search"
+                  >
+                    <span className="material-symbols-outlined text-[16px]">close</span>
+                  </button>
+                )}
                 <button
                   onClick={() => {
+                    setCatalogSearchOpen(false);
                     const el = document.getElementById('cards-grid');
                     el?.scrollIntoView({ behavior: 'smooth' });
                   }}
@@ -1455,6 +1566,75 @@ export default function App() {
                 >
                   Search
                 </button>
+
+                {/* Catalog Suggestions Dropdown */}
+                {catalogSearchOpen && searchQuery.trim() && (
+                  <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-2xl shadow-2xl border border-blue-100 z-50 overflow-hidden max-h-[380px] overflow-y-auto animate-fadeIn divide-y divide-slate-100 text-left">
+                    {catalogMatchingTopics.length > 0 && (
+                      <div className="p-2.5 bg-slate-50/70">
+                        <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 px-1 block mb-1">
+                          Matching Chapters &amp; Topics
+                        </span>
+                        <div className="flex flex-wrap gap-1.5">
+                          {catalogMatchingTopics.map((topicName) => (
+                            <button
+                              key={topicName}
+                              type="button"
+                              onClick={() => {
+                                setSearchQuery(topicName);
+                                setCatalogSearchOpen(false);
+                                document.getElementById('cards-grid')?.scrollIntoView({ behavior: 'smooth' });
+                              }}
+                              className="bg-white hover:bg-blue-50 text-blue-700 border border-blue-200 text-xs font-bold px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
+                            >
+                              {topicName}
+                            </button>
+                          ))}
+                        </div>
+                      </div>
+                    )}
+
+                    {catalogMatchingResources.length > 0 ? (
+                      <div className="py-1">
+                        <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 px-3 py-1 block">
+                          Matching Resources ({catalogMatchingResources.length})
+                        </span>
+                        {catalogMatchingResources.map((res) => (
+                          <div
+                            key={res.id}
+                            onClick={() => {
+                              setSelectedResource(res);
+                              setCatalogSearchOpen(false);
+                            }}
+                            className="px-3.5 py-2 hover:bg-blue-50/60 transition-colors cursor-pointer flex items-center justify-between gap-3 group"
+                          >
+                            <div className="min-w-0">
+                              <div className="text-xs font-bold text-slate-800 group-hover:text-blue-700 truncate">
+                                {res.title}
+                              </div>
+                              <div className="text-[10px] text-slate-500 truncate">
+                                {res.grade} • {res.topic} • {res.format}
+                              </div>
+                            </div>
+                            <span
+                              className={`text-[9px] font-extrabold px-1.5 py-0.5 rounded shrink-0 ${
+                                res.tier === 'free'
+                                  ? 'bg-emerald-100 text-emerald-800'
+                                  : 'bg-amber-100 text-amber-800'
+                              }`}
+                            >
+                              {res.tier === 'free' ? 'FREE' : 'PRO'}
+                            </span>
+                          </div>
+                        ))}
+                      </div>
+                    ) : (
+                      <div className="p-3 text-center text-xs text-slate-500">
+                        No direct matches. Press &quot;Search&quot; to inspect all filtered resources.
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
 
               {/* Price Tier Switcher Pill */}
@@ -1572,13 +1752,13 @@ export default function App() {
                 : 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3'
             }`}
           >
-            {filteredResources.map((res) => {
+            {filteredResources.map((res, index) => {
               const isBookmarked = bookmarkedIds.includes(res.id);
 
               return (
-                <div
-                  key={res.id}
-                  className={`transition-all duration-200 flex flex-col justify-between group max-w-full overflow-hidden ${
+                <React.Fragment key={res.id}>
+                  <div
+                    className={`transition-all duration-200 flex flex-col justify-between group max-w-full overflow-hidden ${
                     themeConfig.borderRadius === 'rounded-3xl'
                       ? 'rounded-3xl'
                       : themeConfig.borderRadius === 'rounded-2xl'
@@ -1871,8 +2051,20 @@ export default function App() {
                     )}
                   </div>
                 </div>
+                {/* Native In-Feed Ad Insertion */}
+                  {index === 3 && (
+                    <div className="col-span-full my-2">
+                      <AdPlacement location="catalog_infeed" />
+                    </div>
+                  )}
+                </React.Fragment>
               );
             })}
+          </div>
+
+          {/* Catalog Bottom Leaderboard Ad */}
+          <div className="mt-8">
+            <AdPlacement location="catalog_bottom" />
           </div>
         </section>
 
@@ -2256,6 +2448,11 @@ export default function App() {
         </section>
       </main>
 
+      {/* Above Footer Universal Ad Placement */}
+      <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 w-full my-4">
+        <AdPlacement location="footer_top" />
+      </div>
+
       {/* Footer */}
       <footer className="w-full max-w-full bg-[#f0f3ff] pt-10 sm:pt-12 pb-8 border-t border-blue-100">
         <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 w-full">
@@ -2265,13 +2462,15 @@ export default function App() {
                 {branding.iconUrl && (
                   <img
                     src={branding.iconUrl}
-                    alt={branding.siteTitle}
+                    alt={branding.siteTitle || 'Logo'}
                     className="w-6 h-6 object-contain rounded-md"
                   />
                 )}
-                <span className="text-lg sm:text-[20px] font-bold text-[#004ac6]">
-                  {branding.siteTitle || 'Maths at Your Fingertips'}
-                </span>
+                {branding.siteTitle && (
+                  <span className="text-lg sm:text-[20px] font-bold text-[#004ac6]">
+                    {branding.siteTitle}
+                  </span>
+                )}
               </div>
               <p className="text-xs sm:text-[14px] text-[#434655] mb-4 pr-2 sm:pr-4 leading-relaxed">
                 Demystifying school mathematics for Class 5 to Class 10. Step-by-step NCERT solutions,
@@ -2577,6 +2776,18 @@ export default function App() {
           } else {
             setIsFormulaDeckOpen(true);
           }
+        }}
+        onPrintItem={(title) => {
+          const found = allCatalogResources.find((r) => r.title === title);
+          printResourceInA4({
+            title,
+            grade: found?.grade,
+            topic: found?.topic,
+            format: found?.format,
+            description: found?.description,
+            keyFormulas: found?.keyFormulas,
+            examTraps: found?.examTraps,
+          });
         }}
       />
 
