@@ -25,14 +25,15 @@ export const DEFAULT_BRANDING_CONFIG: BrandingConfig = {
   heroBadgeText: 'CBSE, ICSE & State Boards • New 2025 Edition',
 };
 
-const STORAGE_KEY = 'mayf_branding_config';
+const STORAGE_KEY = 'maths_hub_branding_config';
+const LEGACY_STORAGE_KEY = 'mayf_branding_config';
 
 /**
  * Retrieve current branding configuration from localStorage or defaults
  */
 export function getBrandingConfig(): BrandingConfig {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = localStorage.getItem(STORAGE_KEY) || localStorage.getItem(LEGACY_STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
       return {

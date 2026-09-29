@@ -76,7 +76,12 @@ import {
   loadThemeSettingsFromFirestore,
   loadSocialSettingsFromFirestore,
   loadSeoSettingsFromFirestore,
+  loadPageTextSettingsFromFirestore,
 } from './firebase';
+import {
+  PageTextConfig,
+  getPageTextConfig,
+} from './services/pageText';
 import { UserDashboardPage } from './components/UserDashboardPage';
 import {
   formatPrice,
@@ -117,6 +122,8 @@ export default function App() {
   const [socialConfig, setSocialConfig] = useState<SocialConfig>(getSocialConfig);
   // Dynamic Resources state (combining MATH_RESOURCES + custom uploaded content + tier overrides)
   const [allCatalogResources, setAllCatalogResources] = useState<MathResource[]>(MATH_RESOURCES);
+  // Dynamic Page Content & Blocks text state
+  const [pageText, setPageText] = useState<PageTextConfig>(getPageTextConfig);
 
   // Firebase Auth State
   const [currentUser, setCurrentUser] = useState<User | null>(null);
@@ -385,6 +392,21 @@ export default function App() {
       }
     });
 
+    // Custom Page Text settings sync
+    loadPageTextSettingsFromFirestore().then((cloudText) => {
+      if (cloudText) {
+        setPageText(cloudText);
+      }
+    });
+
+    const handlePageTextChanged = (e: Event) => {
+      const customEvent = e as CustomEvent<PageTextConfig>;
+      if (customEvent.detail) {
+        setPageText(customEvent.detail);
+      }
+    };
+    window.addEventListener('page-text-changed', handlePageTextChanged);
+
     // Initial resources sync & listeners
     syncAndLoadAllResources().then(({ allResources }) => {
       if (allResources && allResources.length > 0) {
@@ -417,6 +439,7 @@ export default function App() {
       });
       const defSeo = getSeoSettingsLocally();
       applySeoToDocument(defSeo);
+      setPageText(getPageTextConfig());
       showToast('🎉 All admin features reset to clean working defaults!');
     };
     window.addEventListener('admin-master-reset', handleMasterReset);
@@ -480,6 +503,7 @@ export default function App() {
       window.removeEventListener('theme-changed', handleThemeChange);
       window.removeEventListener('social-changed', handleSocialChange);
       window.removeEventListener('seo-changed', handleSeoChanged);
+      window.removeEventListener('page-text-changed', handlePageTextChanged);
       window.removeEventListener('resources-changed', handleResourcesChanged);
       window.removeEventListener('tier-overrides-changed', handleResourcesChanged);
       window.removeEventListener('admin-master-reset', handleMasterReset);
@@ -899,6 +923,7 @@ export default function App() {
           onDownloadSheet={handleDownload}
           onToast={showToast}
           branding={branding}
+          pageText={pageText}
         />
         <AiTeacherModal
           isOpen={isAiTeacherOpen}
@@ -990,44 +1015,46 @@ export default function App() {
 
       <main className="w-full max-w-full overflow-x-hidden pt-24 sm:pt-28 bg-[#f9f9ff] min-h-screen flex-1">
         {/* Top Advertisement / Olympiad Banner */}
-        <section className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 pt-3 pb-2 w-full">
-          <div className="w-full bg-[#f0f3ff] rounded-2xl p-3 flex flex-col items-center justify-center border border-dashed border-[#c3c6d7] text-center">
-            <div className="flex items-center gap-1.5 mb-1.5">
-              <span className="text-[11px] font-bold tracking-wider uppercase text-[#737686]">
-                Advertisement
-              </span>
-              <span className="material-symbols-outlined text-[14px] text-[#737686]">info</span>
-            </div>
-            <div className="w-full max-w-[728px] min-h-[76px] bg-white rounded-xl flex flex-col sm:flex-row items-center justify-between shadow-[0_1px_4px_rgba(0,0,0,0.02)] p-3 sm:px-5 gap-3 border border-gray-100">
-              <div className="flex items-center gap-3 text-left w-full sm:w-auto">
-                <div className="w-10 h-10 rounded-xl bg-[#e7eeff] flex items-center justify-center text-[#004ac6] shrink-0">
-                  <span className="material-symbols-outlined text-[22px]">school</span>
-                </div>
-                <div className="min-w-0">
-                  <div className="text-xs sm:text-[13px] font-bold text-[#111c2d] truncate">
-                    National Math Olympiad Preparatory Kit 2025
-                  </div>
-                  <div className="text-[11px] sm:text-[13px] text-[#434655] truncate">
-                    NCERT Aligned • Mock Tests &amp; AI Live Doubts
-                  </div>
-                </div>
+        {pageText.announcement.enabled && (
+          <section className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 pt-3 pb-2 w-full">
+            <div className="w-full bg-[#f0f3ff] rounded-2xl p-3 flex flex-col items-center justify-center border border-dashed border-[#c3c6d7] text-center">
+              <div className="flex items-center gap-1.5 mb-1.5">
+                <span className="text-[11px] font-bold tracking-wider uppercase text-[#737686]">
+                  {pageText.announcement.badge || 'Advertisement'}
+                </span>
+                <span className="material-symbols-outlined text-[14px] text-[#737686]">info</span>
               </div>
-              <button
-                onClick={() =>
-                  setEnrollModalData({
-                    isOpen: true,
-                    title: 'National Math Olympiad Kit 2025',
-                    subtitle: 'NCERT Aligned • 3 Mock Tests & AI Doubts',
-                    isFree: false,
-                  })
-                }
-                className="w-full sm:w-auto text-center shrink-0 text-xs sm:text-[13px] font-bold bg-[#2563eb] text-white px-4 py-2 rounded-xl hover:bg-blue-700 transition-colors cursor-pointer tactile-btn-primary"
-              >
-                Enroll Now
-              </button>
+              <div className="w-full max-w-[728px] min-h-[76px] bg-white rounded-xl flex flex-col sm:flex-row items-center justify-between shadow-[0_1px_4px_rgba(0,0,0,0.02)] p-3 sm:px-5 gap-3 border border-gray-100">
+                <div className="flex items-center gap-3 text-left w-full sm:w-auto">
+                  <div className="w-10 h-10 rounded-xl bg-[#e7eeff] flex items-center justify-center text-[#004ac6] shrink-0">
+                    <span className="material-symbols-outlined text-[22px]">school</span>
+                  </div>
+                  <div className="min-w-0">
+                    <div className="text-xs sm:text-[13px] font-bold text-[#111c2d] truncate">
+                      {pageText.announcement.title || 'National Math Olympiad Preparatory Kit 2025'}
+                    </div>
+                    <div className="text-[11px] sm:text-[13px] text-[#434655] truncate">
+                      {pageText.announcement.subtitle || 'NCERT Aligned • Mock Tests & AI Live Doubts'}
+                    </div>
+                  </div>
+                </div>
+                <button
+                  onClick={() =>
+                    setEnrollModalData({
+                      isOpen: true,
+                      title: pageText.announcement.title || 'National Math Olympiad Kit 2025',
+                      subtitle: pageText.announcement.subtitle || 'NCERT Aligned • 3 Mock Tests & AI Doubts',
+                      isFree: false,
+                    })
+                  }
+                  className="w-full sm:w-auto text-center shrink-0 text-xs sm:text-[13px] font-bold bg-[#2563eb] text-white px-4 py-2 rounded-xl hover:bg-blue-700 transition-colors cursor-pointer tactile-btn-primary"
+                >
+                  {pageText.announcement.buttonText || 'Enroll Now'}
+                </button>
+              </div>
             </div>
-          </div>
-        </section>
+          </section>
+        )}
 
         {/* Hero Section */}
         <section className="relative w-full overflow-hidden bg-gradient-to-b from-[#dee8ff]/40 via-[#f9f9ff] to-[#f9f9ff] px-3 sm:px-6 lg:px-8 py-8 sm:py-12 lg:py-16">
@@ -1042,38 +1069,23 @@ export default function App() {
                   <span className="material-symbols-outlined text-[14px]">bolt</span>
                 </span>
                 <span className="text-xs sm:text-[13px] font-bold text-[#111c2d] truncate">
-                  {branding.heroBadgeText || 'CBSE, ICSE & State Boards • New 2025 Edition'}
+                  {pageText.hero.badgeText || branding.heroBadgeText || 'CBSE, ICSE & State Boards • New 2025 Edition'}
                 </span>
               </div>
 
               <h1 className="text-3xl sm:text-4xl lg:text-5xl font-extrabold text-[#111c2d] tracking-tight leading-[1.2] max-w-3xl">
-                {branding.siteTitle ? (
-                  <>
-                    {branding.siteTitle}{' '}
-                    <span
-                      className="underline decoration-wavy decoration-2"
-                      style={{ color: themeConfig.primaryColor, textDecorationColor: themeConfig.accentColor || '#fea619' }}
-                    >
-                      {branding.tagline || 'Without the Stress!'}
-                    </span>{' '}
-                    📐✨
-                  </>
-                ) : (
-                  <>
-                    Ace School Maths{' '}
-                    <span
-                      className="underline decoration-wavy decoration-2"
-                      style={{ color: themeConfig.primaryColor, textDecorationColor: themeConfig.accentColor || '#fea619' }}
-                    >
-                      Without the Stress!
-                    </span>{' '}
-                    📐✨
-                  </>
-                )}
+                {pageText.hero.headlineMain || 'Ace School Maths'}{' '}
+                <span
+                  className="underline decoration-wavy decoration-2"
+                  style={{ color: themeConfig.primaryColor, textDecorationColor: themeConfig.accentColor || '#fea619' }}
+                >
+                  {pageText.hero.headlineHighlight || branding.tagline || 'Without the Stress!'}
+                </span>{' '}
+                📐✨
               </h1>
 
               <p className="mt-4 text-sm sm:text-base lg:text-lg text-[#434655] max-w-2xl leading-relaxed">
-                {branding.tagline ? `${branding.tagline} • ` : ''}Handcrafted chapter notes, 2-minute formula sheets, NCERT walkthroughs, and animated video lessons tailor-made for Class 5 to 10.
+                {pageText.hero.tagline || 'Handcrafted chapter notes, 2-minute formula sheets, NCERT walkthroughs, and animated video lessons tailor-made for Class 5 to 10.'}
               </p>
 
               <div className="mt-6 sm:mt-8 flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-4 w-full sm:w-auto">
@@ -1086,7 +1098,7 @@ export default function App() {
                   className="w-full sm:w-auto inline-flex items-center justify-center gap-2 text-white text-sm sm:text-[15px] font-bold px-6 py-3.5 rounded-xl shadow-md hover:shadow-lg transition-transform active:translate-y-1 cursor-pointer tactile-btn-primary"
                 >
                   <span className="material-symbols-outlined text-[20px]">auto_awesome</span>
-                  <span>Explore Free Notes</span>
+                  <span>{pageText.hero.ctaPrimaryText || 'Explore Free Notes'}</span>
                 </button>
 
                 <button
@@ -1095,7 +1107,7 @@ export default function App() {
                   className="w-full sm:w-auto inline-flex items-center justify-center gap-2 text-[#2a1700] text-sm sm:text-[15px] font-bold px-6 py-3.5 rounded-xl shadow-md hover:shadow-lg transition-transform active:translate-y-1 cursor-pointer tactile-btn-secondary"
                 >
                   <span className="material-symbols-outlined text-[20px]">workspace_premium</span>
-                  <span>{isUserPro ? 'Manage Pro Vault' : 'Unlock Pro Masterclass'}</span>
+                  <span>{isUserPro ? 'Manage Pro Vault' : (pageText.hero.ctaSecondaryText || 'Unlock Pro Masterclass')}</span>
                   <span className="bg-white text-[#855300] text-[11px] font-bold px-2 py-0.5 rounded-md ml-1 shadow-2xs">
                     {isUserPro ? 'ACTIVE' : 'PRO'}
                   </span>
@@ -1105,16 +1117,16 @@ export default function App() {
               {/* Social Proof */}
               <div className="mt-8 pt-6 flex flex-wrap items-center justify-center gap-6 sm:gap-10 border-t border-blue-50">
                 <div className="flex items-center gap-2">
-                  <span className="text-base sm:text-lg font-black text-[#111c2d]">50,000+</span>
-                  <span className="text-xs text-[#434655]">Active Students</span>
+                  <span className="text-base sm:text-lg font-black text-[#111c2d]">{pageText.hero.stat1Value || '50,000+'}</span>
+                  <span className="text-xs text-[#434655]">{pageText.hero.stat1Label || 'Active Students'}</span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="text-base sm:text-lg font-black text-[#111c2d]">4.9 / 5</span>
-                  <span className="text-xs text-[#434655]">Top Reviews</span>
+                  <span className="text-base sm:text-lg font-black text-[#111c2d]">{pageText.hero.stat3Value || '4.9 / 5'}</span>
+                  <span className="text-xs text-[#434655]">{pageText.hero.stat3Label || 'Top Reviews'}</span>
                 </div>
                 <div className="flex items-center gap-2">
-                  <span className="text-base sm:text-lg font-black text-[#111c2d]">100%</span>
-                  <span className="text-xs text-[#434655]">Curriculum Aligned</span>
+                  <span className="text-base sm:text-lg font-black text-[#111c2d]">{pageText.hero.stat2Value || '100%'}</span>
+                  <span className="text-xs text-[#434655]">{pageText.hero.stat2Label || 'Curriculum Aligned'}</span>
                 </div>
               </div>
             </div>
@@ -1123,11 +1135,15 @@ export default function App() {
             <div className="max-w-7xl mx-auto flex flex-col md:flex-row items-center justify-between gap-6">
               <div className="flex-1">
                 <div className="inline-flex items-center gap-2 bg-white px-3 py-1 rounded-full shadow-sm mb-3 border border-gray-100 text-xs font-bold text-[#111c2d]">
-                  <span>⚡ {branding.heroBadgeText || 'Curated Formula Decks'}</span>
+                  <span>⚡ {pageText.hero.badgeText || branding.heroBadgeText || 'Curated Formula Decks'}</span>
                 </div>
                 <h1 className="text-2xl sm:text-3xl font-extrabold text-[#111c2d] tracking-tight">
-                  {branding.siteTitle || 'Maths at Your Fingertips'}
-                  {branding.tagline && <span className="text-sm font-normal text-slate-500 block">{branding.tagline}</span>}
+                  {pageText.hero.headlineMain || branding.siteTitle || 'Maths at Your Fingertips'}
+                  {(pageText.hero.tagline || branding.tagline) && (
+                    <span className="text-sm font-normal text-slate-500 block">
+                      {pageText.hero.tagline || branding.tagline}
+                    </span>
+                  )}
                 </h1>
               </div>
               <div className="flex items-center gap-3">
@@ -1139,14 +1155,14 @@ export default function App() {
                   style={{ backgroundColor: themeConfig.primaryColor }}
                   className="px-5 py-3 text-white text-xs sm:text-sm font-bold rounded-xl shadow-md cursor-pointer tactile-btn-primary"
                 >
-                  Browse Catalog
+                  {pageText.hero.ctaPrimaryText || 'Browse Catalog'}
                 </button>
                 <button
                   onClick={() => setIsProPassModalOpen(true)}
                   style={{ backgroundColor: themeConfig.accentColor || '#fea619' }}
                   className="px-5 py-3 text-[#2a1700] text-xs sm:text-sm font-bold rounded-xl shadow-md cursor-pointer tactile-btn-secondary"
                 >
-                  Pro Pass
+                  {pageText.hero.ctaSecondaryText || 'Pro Pass'}
                 </button>
               </div>
             </div>
@@ -1160,38 +1176,23 @@ export default function App() {
                     <span className="material-symbols-outlined text-[14px]">bolt</span>
                   </span>
                   <span className="text-xs sm:text-[13px] font-bold text-[#111c2d] truncate">
-                    {branding.heroBadgeText || 'CBSE, ICSE & State Boards • New 2025 Edition'}
+                    {pageText.hero.badgeText || branding.heroBadgeText || 'CBSE, ICSE & State Boards • New 2025 Edition'}
                   </span>
                 </div>
 
                 <h1 className="text-2xl sm:text-3xl md:text-4xl lg:text-[42px] font-extrabold text-[#111c2d] tracking-tight leading-[1.2] max-w-2xl">
-                  {branding.siteTitle ? (
-                    <>
-                      {branding.siteTitle}{' '}
-                      <span
-                        className="underline decoration-wavy decoration-2"
-                        style={{ color: themeConfig.primaryColor, textDecorationColor: themeConfig.accentColor || '#fea619' }}
-                      >
-                        {branding.tagline || 'Without the Stress!'}
-                      </span>{' '}
-                      📐✨
-                    </>
-                  ) : (
-                    <>
-                      Ace School Maths{' '}
-                      <span
-                        className="underline decoration-wavy decoration-2"
-                        style={{ color: themeConfig.primaryColor, textDecorationColor: themeConfig.accentColor || '#fea619' }}
-                      >
-                        Without the Stress!
-                      </span>{' '}
-                      📐✨
-                    </>
-                  )}
+                  {pageText.hero.headlineMain || branding.siteTitle || 'Ace School Maths'}{' '}
+                  <span
+                    className="underline decoration-wavy decoration-2"
+                    style={{ color: themeConfig.primaryColor, textDecorationColor: themeConfig.accentColor || '#fea619' }}
+                  >
+                    {pageText.hero.headlineHighlight || branding.tagline || 'Without the Stress!'}
+                  </span>{' '}
+                  📐✨
                 </h1>
 
                 <p className="mt-3 sm:mt-4 text-sm sm:text-base lg:text-lg text-[#434655] max-w-xl leading-relaxed">
-                  {branding.tagline ? `${branding.tagline} • ` : ''}Handcrafted chapter notes, 2-minute formula sheets, NCERT walkthroughs, and animated video lessons tailor-made for Class 5 to 10.
+                  {pageText.hero.tagline || (branding.tagline ? `${branding.tagline} • Handcrafted chapter notes, 2-minute formula sheets, NCERT walkthroughs, and animated video lessons tailor-made for Class 5 to 10.` : 'Handcrafted chapter notes, 2-minute formula sheets, NCERT walkthroughs, and animated video lessons tailor-made for Class 5 to 10.')}
                 </p>
 
                 {/* CTA Buttons with tactile bottom borders */}
@@ -1205,7 +1206,7 @@ export default function App() {
                     className="inline-flex items-center justify-center gap-2 text-white text-sm sm:text-[15px] font-bold px-6 py-3.5 rounded-xl shadow-md hover:shadow-lg transition-transform active:translate-y-1 cursor-pointer tactile-btn-primary"
                   >
                     <span className="material-symbols-outlined text-[20px]">auto_awesome</span>
-                    <span>Explore Free Notes</span>
+                    <span>{pageText.hero.ctaPrimaryText || 'Explore Free Notes'}</span>
                   </button>
 
                   <button
@@ -1214,7 +1215,7 @@ export default function App() {
                     className="inline-flex items-center justify-center gap-2 text-[#2a1700] text-sm sm:text-[15px] font-bold px-6 py-3.5 rounded-xl shadow-md hover:shadow-lg transition-transform active:translate-y-1 cursor-pointer tactile-btn-secondary"
                   >
                     <span className="material-symbols-outlined text-[20px]">workspace_premium</span>
-                    <span>{isUserPro ? 'Manage Pro Vault' : 'Unlock Pro Masterclass'}</span>
+                    <span>{isUserPro ? 'Manage Pro Vault' : (pageText.hero.ctaSecondaryText || 'Unlock Pro Masterclass')}</span>
                     <span className="bg-white text-[#855300] text-[11px] font-bold px-2 py-0.5 rounded-md ml-1 shadow-2xs">
                       {isUserPro ? 'ACTIVE' : 'PRO'}
                     </span>
@@ -1228,8 +1229,8 @@ export default function App() {
                       <span className="material-symbols-outlined text-[20px] sm:text-[22px]">groups</span>
                     </div>
                     <div className="flex flex-col">
-                      <span className="text-lg sm:text-[20px] text-[#111c2d] font-extrabold leading-tight">50,000+</span>
-                      <span className="text-[11px] font-bold text-[#434655]">Active Students</span>
+                      <span className="text-lg sm:text-[20px] text-[#111c2d] font-extrabold leading-tight">{pageText.hero.stat1Value || '50,000+'}</span>
+                      <span className="text-[11px] font-bold text-[#434655]">{pageText.hero.stat1Label || 'Active Students'}</span>
                     </div>
                   </div>
 
@@ -1238,8 +1239,8 @@ export default function App() {
                       <span className="material-symbols-outlined text-[20px] sm:text-[22px]">star</span>
                     </div>
                     <div className="flex flex-col">
-                      <span className="text-lg sm:text-[20px] text-[#111c2d] font-extrabold leading-tight">4.9 / 5</span>
-                      <span className="text-[11px] font-bold text-[#434655]">Top-Rated Reviews</span>
+                      <span className="text-lg sm:text-[20px] text-[#111c2d] font-extrabold leading-tight">{pageText.hero.stat3Value || '4.9 / 5'}</span>
+                      <span className="text-[11px] font-bold text-[#434655]">{pageText.hero.stat3Label || 'Top-Rated Reviews'}</span>
                     </div>
                   </div>
 
@@ -1248,8 +1249,8 @@ export default function App() {
                       <span className="material-symbols-outlined text-[20px] sm:text-[22px]">verified</span>
                     </div>
                     <div className="flex flex-col">
-                      <span className="text-lg sm:text-[20px] text-[#111c2d] font-extrabold leading-tight">100%</span>
-                      <span className="text-[11px] font-bold text-[#434655]">Curriculum Aligned</span>
+                      <span className="text-lg sm:text-[20px] text-[#111c2d] font-extrabold leading-tight">{pageText.hero.stat2Value || '100%'}</span>
+                      <span className="text-[11px] font-bold text-[#434655]">{pageText.hero.stat2Label || 'Curriculum Aligned'}</span>
                     </div>
                   </div>
                 </div>
@@ -1514,6 +1515,7 @@ export default function App() {
             userProfile={userProfile}
             socialConfig={socialConfig}
             onToast={showToast}
+            pageText={pageText}
           />
         )}
 
@@ -1527,7 +1529,7 @@ export default function App() {
                 <span className="material-symbols-outlined text-[#737686] mr-2 text-[18px] sm:text-[20px]">search</span>
                 <input
                   className="w-full bg-transparent border-0 outline-none text-xs sm:text-[14px] text-[#111c2d] placeholder:text-[#737686]"
-                  placeholder="Type a chapter or theorem name (e.g. 'Coordinate Geometry', 'Circles')..."
+                  placeholder={pageText.catalog.searchPlaceholder || "Type a chapter or theorem name (e.g. 'Coordinate Geometry', 'Circles')..."}
                   type="text"
                   value={searchQuery}
                   onFocus={() => setCatalogSearchOpen(true)}
@@ -1730,14 +1732,21 @@ export default function App() {
         <section className="max-w-7xl mx-auto w-full px-3 sm:px-6 lg:px-8 py-5 sm:py-6" id="cards-grid">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 sm:mb-6 gap-2">
             <div className="flex items-center gap-2">
-              <h2 className="text-xl sm:text-[24px] font-bold text-[#111c2d]">Trending Study Decks &amp; Notes</h2>
+              <h2 className="text-xl sm:text-[24px] font-bold text-[#111c2d]">{pageText.catalog.title || 'Trending Study Decks & Notes'}</h2>
               <span className="bg-[#6ffbbe] text-[#002113] text-[10px] sm:text-[11px] font-bold px-2 py-0.5 rounded-full shrink-0">
-                Term 2 Updated
+                {pageText.catalog.sectionBadge || 'Term 2 Updated'}
               </span>
             </div>
-            <span className="text-xs sm:text-[14px] text-[#434655]">
-              Showing {filteredResources.length} of 148 verified resources
-            </span>
+            <div className="flex flex-col sm:items-end">
+              <span className="text-xs sm:text-[14px] text-[#434655]">
+                {pageText.catalog.subtitle ? `${pageText.catalog.subtitle} • ` : ''}Showing {filteredResources.length} of 148 verified resources
+              </span>
+              {pageText.catalog.activeFilterHint && (
+                <span className="text-[11px] font-semibold text-emerald-700 mt-0.5">
+                  ✓ {pageText.catalog.activeFilterHint}
+                </span>
+              )}
+            </div>
           </div>
 
           {/* Cards Grid */}
@@ -2074,26 +2083,26 @@ export default function App() {
             <div className="max-w-2xl">
               <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-400/20 text-amber-300 text-xs font-extrabold uppercase tracking-wider mb-3">
                 <span className="material-symbols-outlined text-[16px]">psychology</span>
-                <span>AI Teacher Assistant • Step-by-Step Solver</span>
+                <span>{pageText.aiTeacher.badge || 'AI Teacher Assistant • Step-by-Step Solver'}</span>
               </div>
               <h2 className="text-xl sm:text-2xl lg:text-3xl font-extrabold tracking-tight">
-                Stuck on a Tricky Math Problem?
+                {pageText.aiTeacher.title || 'Stuck on a Tricky Math Problem?'}
               </h2>
               <p className="text-xs sm:text-sm text-blue-100 mt-2 leading-relaxed">
-                Meet <strong>Prof. Raman</strong>, your 24/7 personal math faculty! Simply type your question or upload a photo from your textbook. Receive clear, pedagogical step-by-step working, applied formulas, and exam cautions.
+                {pageText.aiTeacher.description || 'Meet Prof. Raman, your 24/7 personal math faculty! Simply type your question or upload a photo from your textbook. Receive clear, pedagogical step-by-step working, applied formulas, and exam cautions.'}
               </p>
               <div className="flex items-center gap-3 mt-4 text-xs font-semibold text-blue-200 flex-wrap">
                 <span className="flex items-center gap-1">
                   <span className="material-symbols-outlined text-[16px] text-emerald-400">check_circle</span>
-                  <span>Text or Photo Input</span>
+                  <span>{pageText.aiTeacher.feature1 || 'Text or Photo Input'}</span>
                 </span>
                 <span className="flex items-center gap-1">
                   <span className="material-symbols-outlined text-[16px] text-emerald-400">check_circle</span>
-                  <span>Step-by-Step Proofs</span>
+                  <span>{pageText.aiTeacher.feature2 || 'Step-by-Step Proofs'}</span>
                 </span>
                 <span className="flex items-center gap-1">
                   <span className="material-symbols-outlined text-[16px] text-emerald-400">check_circle</span>
-                  <span>Class 5 - 10 &amp; Olympiad</span>
+                  <span>{pageText.aiTeacher.feature3 || 'Class 5 - 10 & Olympiad'}</span>
                 </span>
               </div>
             </div>
@@ -2104,7 +2113,7 @@ export default function App() {
                 className="w-full sm:w-auto inline-flex items-center justify-center gap-2 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-500 hover:to-amber-600 text-slate-950 font-extrabold text-sm px-6 py-3.5 rounded-2xl shadow-lg transition-all cursor-pointer transform hover:scale-102"
               >
                 <span className="material-symbols-outlined text-[20px]">chat</span>
-                <span>Ask Teacher AI Now</span>
+                <span>{pageText.aiTeacher.buttonText || 'Ask Teacher AI Now'}</span>
               </button>
             </div>
           </div>
@@ -2116,13 +2125,13 @@ export default function App() {
             <div>
               <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-50 border border-blue-200 text-[#004ac6] text-xs font-extrabold uppercase tracking-wider mb-2">
                 <span className="material-symbols-outlined text-[16px]">functions</span>
-                <span>Maths at Your Fingertips Sandbox</span>
+                <span>{pageText.formulaDeck.badge || 'Maths at Your Fingertips Sandbox'}</span>
               </div>
               <h2 className="text-xl sm:text-2xl lg:text-3xl font-extrabold text-[#111c2d] tracking-tight">
-                Interactive Formula Deck &amp; Mathematical Transitions
+                {pageText.formulaDeck.title || 'Interactive Formula Deck & Mathematical Transitions'}
               </h2>
               <p className="text-xs sm:text-sm text-slate-600 mt-1 max-w-2xl">
-                Experience mathematical concepts in action. Adjust parameters in real-time, inspect dynamic proofs, and watch algebra and geometry morph seamlessly.
+                {pageText.formulaDeck.description || 'Experience mathematical concepts in action. Adjust parameters in real-time, inspect dynamic proofs, and watch algebra and geometry morph seamlessly.'}
               </p>
             </div>
 
@@ -2132,7 +2141,7 @@ export default function App() {
                 className="inline-flex items-center gap-1.5 bg-[#004ac6] hover:bg-blue-700 text-white font-bold text-xs sm:text-sm px-4 py-2.5 rounded-xl shadow-md transition-all cursor-pointer"
                 title="Open Dedicated Formula Deck Page"
               >
-                <span>Launch Fullscreen Deck (/#formula-deck)</span>
+                <span>{pageText.formulaDeck.buttonText || 'Launch Fullscreen Deck (/#formula-deck)'}</span>
                 <span className="material-symbols-outlined text-[18px]">open_in_new</span>
               </button>
             </div>
@@ -2145,12 +2154,13 @@ export default function App() {
           />
         </section>
 
-        {/* Google AdSense Native Placement (728x90 format) */}
+        {/* Google AdSense Native Placement / Mid-Page Sponsored / Camp Banner */}
+        {pageText.midBanner.enabled && (
         <section className="max-w-7xl mx-auto w-full px-3 sm:px-6 lg:px-8 my-5 sm:my-6">
           <div className="w-full bg-[#f0f3ff] rounded-2xl p-3 sm:p-4 flex flex-col items-center justify-center text-center shadow-sm border border-gray-100">
             <div className="flex items-center gap-1.5 mb-2">
               <span className="text-[11px] font-bold tracking-wider uppercase text-[#737686]">
-                Sponsored Content
+                {pageText.midBanner.badge || 'Sponsored Content'}
               </span>
               <span className="material-symbols-outlined text-[14px] text-[#737686]">info</span>
             </div>
@@ -2161,10 +2171,10 @@ export default function App() {
                 </div>
                 <div className="min-w-0">
                   <div className="text-xs sm:text-[13px] font-bold text-[#111c2d] truncate">
-                    Mental Math Master: Speed Multiplication Camp
+                    {pageText.midBanner.title || 'Mental Math Master: Speed Multiplication Camp'}
                   </div>
                   <div className="text-[11px] sm:text-[13px] text-[#434655] truncate">
-                    Live weekend sessions for ages 10-15 • Learn Vedic Math tricks
+                    {pageText.midBanner.subtitle || 'Live weekend sessions for ages 10-15 • Learn Vedic Math tricks'}
                   </div>
                 </div>
               </div>
@@ -2172,18 +2182,19 @@ export default function App() {
                 onClick={() =>
                   setEnrollModalData({
                     isOpen: true,
-                    title: 'Speed Multiplication & Vedic Math Camp',
-                    subtitle: 'Live weekend masterclass for ages 10-15',
+                    title: pageText.midBanner.title || 'Speed Multiplication & Vedic Math Camp',
+                    subtitle: pageText.midBanner.subtitle || 'Live weekend masterclass for ages 10-15',
                     isFree: true,
                   })
                 }
                 className="w-full sm:w-auto text-center shrink-0 bg-[#2563eb] text-white text-xs sm:text-[13px] font-bold px-4 py-2 rounded-xl hover:bg-blue-700 transition-colors shadow-sm cursor-pointer"
               >
-                Claim Free Seat →
+                {pageText.midBanner.buttonText || 'Claim Free Seat →'}
               </button>
             </div>
           </div>
         </section>
+        )}
 
         {/* Formula Cheat-Sheet Teaser & Pro Masterclass Highlight */}
         <section className="max-w-7xl mx-auto w-full px-3 sm:px-6 lg:px-8 py-6 sm:py-8" id="paid-masterclasses">
@@ -2193,14 +2204,13 @@ export default function App() {
             <div className="relative z-10 flex flex-col lg:flex-row items-center justify-between gap-6 sm:gap-8">
               <div className="max-w-2xl w-full">
                 <div className="inline-flex items-center gap-1.5 bg-[#fea619] text-[#2a1700] text-[10px] sm:text-[11px] font-bold px-3 py-1 rounded-full mb-3 sm:mb-4">
-                  <span className="material-symbols-outlined text-[14px]">stars</span> THE ULTIMATE CLASS 9 &amp; 10 MATHS VAULT
+                  <span className="material-symbols-outlined text-[14px]">stars</span> {pageText.proMasterclass.badge || 'THE ULTIMATE CLASS 9 & 10 MATHS VAULT'}
                 </div>
                 <h2 className="text-2xl sm:text-3xl lg:text-[40px] font-extrabold leading-tight">
-                  Stop Memorizing Formulas. Understand Them Visually.
+                  {pageText.proMasterclass.headline || 'Stop Memorizing Formulas. Understand Them Visually.'}
                 </h2>
                 <p className="mt-2.5 sm:mt-3 text-sm sm:text-base lg:text-lg text-[#eeefff] max-w-xl leading-relaxed">
-                  Get unlimited access to all 48 chapter cheatsheets, video derivation library, and instant
-                  live doubt support before your board exams.
+                  {pageText.proMasterclass.subtitle || 'Get unlimited access to all 48 chapter cheatsheets, video derivation library, and instant live doubt support before your board exams.'}
                 </p>
 
                 <div className="mt-5 sm:mt-6 flex flex-wrap items-center gap-3 sm:gap-4">
@@ -2208,19 +2218,19 @@ export default function App() {
                     <span className="material-symbols-outlined text-[#ffddb8] text-[18px] sm:text-[20px]">
                       check_circle
                     </span>
-                    <span className="text-xs sm:text-[13px] font-bold">Printable Pocket Flashcards</span>
+                    <span className="text-xs sm:text-[13px] font-bold">{pageText.proMasterclass.perk1 || 'Printable Pocket Flashcards'}</span>
                   </div>
                   <div className="flex items-center gap-1.5 sm:gap-2">
                     <span className="material-symbols-outlined text-[#ffddb8] text-[18px] sm:text-[20px]">
                       check_circle
                     </span>
-                    <span className="text-xs sm:text-[13px] font-bold">NCERT Exemplar Video Solutions</span>
+                    <span className="text-xs sm:text-[13px] font-bold">{pageText.proMasterclass.perk2 || 'NCERT Exemplar Video Solutions'}</span>
                   </div>
                   <div className="flex items-center gap-1.5 sm:gap-2">
                     <span className="material-symbols-outlined text-[#ffddb8] text-[18px] sm:text-[20px]">
                       check_circle
                     </span>
-                    <span className="text-xs sm:text-[13px] font-bold">WhatsApp Mentor Hotline</span>
+                    <span className="text-xs sm:text-[13px] font-bold">{pageText.proMasterclass.perk3 || 'WhatsApp Mentor Hotline'}</span>
                   </div>
                 </div>
               </div>
@@ -2228,14 +2238,14 @@ export default function App() {
               {/* Pricing Card */}
               <div className="shrink-0 bg-white text-[#111c2d] rounded-2xl p-5 sm:p-6 shadow-xl max-w-full sm:max-w-xs w-full text-center border border-blue-50">
                 <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-[#855300]">
-                  Limited Time Semester Deal
+                  {pageText.proMasterclass.dealTag || 'Limited Time Semester Deal'}
                 </span>
                 <div className="my-1.5 sm:my-2">
                   <span className="text-3xl sm:text-[40px] font-extrabold text-[#004ac6]">{formatPrice(499, currentCurrency.code)}</span>
                   <span className="text-xs sm:text-[14px] text-[#737686]"> / Year</span>
                 </div>
                 <p className="text-xs sm:text-[14px] text-[#434655] mb-3 sm:mb-4">
-                  Covers complete syllabus for your selected grade with monthly updates.
+                  {pageText.proMasterclass.dealDescription || 'Covers complete syllabus for your selected grade with monthly updates.'}
                 </p>
                 <button
                   onClick={() => setIsProPassModalOpen(true)}
@@ -2244,10 +2254,10 @@ export default function App() {
                   <span className="material-symbols-outlined text-[18px] sm:text-[20px]">
                     shopping_cart_checkout
                   </span>
-                  <span>{isUserPro ? 'Manage Active Pass' : 'Get All-Access Pass'}</span>
+                  <span>{isUserPro ? 'Manage Active Pass' : (pageText.proMasterclass.buttonText || 'Get All-Access Pass')}</span>
                 </button>
                 <span className="text-[10px] sm:text-[11px] font-bold text-[#737686] block mt-2.5">
-                  Cancel anytime • 7-day money-back guarantee
+                  {pageText.proMasterclass.guaranteeText || 'Cancel anytime • 7-day money-back guarantee'}
                 </span>
               </div>
             </div>
@@ -2258,14 +2268,13 @@ export default function App() {
         <section className="max-w-7xl mx-auto w-full px-3 sm:px-6 lg:px-8 py-8 sm:py-10">
           <div className="text-center max-w-2xl mx-auto mb-6 sm:mb-8">
             <div className="inline-flex items-center gap-2 bg-[#dee8ff] px-3 py-1 rounded-full text-[#004ac6] text-[11px] font-bold uppercase tracking-wider mb-2">
-              <span>Study Together • Grow Faster</span>
+              <span>{pageText.socialCommunity.badge || 'Study Together • Grow Faster'}</span>
             </div>
             <h2 className="text-2xl sm:text-[28px] lg:text-[32px] font-bold text-[#111c2d]">
-              Join 150k+ Maths Champions on Our Channels
+              {pageText.socialCommunity.title || 'Join 150k+ Maths Champions on Our Channels'}
             </h2>
             <p className="text-xs sm:text-base text-[#434655] mt-1.5 sm:mt-2">
-              Daily morning formulas, 60-second theorem reels, previous year question polls, and
-              round-the-clock homework peer support.
+              {pageText.socialCommunity.subtitle || 'Daily morning formulas, 60-second theorem reels, previous year question polls, and round-the-clock homework peer support.'}
             </p>
           </div>
 
@@ -2369,81 +2378,35 @@ export default function App() {
         <section className="max-w-4xl mx-auto w-full px-3 sm:px-6 lg:px-8 py-6 sm:py-8 mb-4">
           <div className="text-center mb-5 sm:mb-6">
             <h2 className="text-xl sm:text-[24px] font-bold text-[#111c2d]">
-              Frequently Asked Questions by Students &amp; Parents
+              {pageText.faq.title || 'Frequently Asked Questions by Students & Parents'}
             </h2>
             <p className="text-xs sm:text-[14px] text-[#434655] mt-1">
-              Everything you need to know about downloading and using our curriculum guides
+              {pageText.faq.subtitle || 'Everything you need to know about downloading and using our curriculum guides'}
             </p>
           </div>
 
           <div className="space-y-2.5 sm:space-y-3">
-            {/* FAQ 1 */}
-            <div className="bg-white rounded-xl p-3.5 sm:p-4 shadow-sm border border-gray-100">
-              <button
-                className="w-full flex items-center justify-between text-left cursor-pointer gap-2"
-                onClick={() => setOpenFaqIndex(openFaqIndex === 0 ? null : 0)}
-                type="button"
-              >
-                <span className="text-xs sm:text-[15px] font-bold text-[#111c2d]">
-                  Are all Class 5 to Class 10 formula sheets completely free?
-                </span>
-                <span className="material-symbols-outlined text-[#737686] transition-transform duration-200 shrink-0">
-                  {openFaqIndex === 0 ? 'expand_less' : 'expand_more'}
-                </span>
-              </button>
-              {openFaqIndex === 0 && (
-                <p className="mt-2 text-xs sm:text-[14px] text-[#434655] leading-relaxed animate-fadeIn">
-                  Yes! All 1-page formula summaries, basic cheat sheets, and NCERT exercise overviews are
-                  100% free to download without any mandatory login or payment. Premium packs contain
-                  extended video lectures and full answer keys.
-                </p>
-              )}
-            </div>
-
-            {/* FAQ 2 */}
-            <div className="bg-white rounded-xl p-3.5 sm:p-4 shadow-sm border border-gray-100">
-              <button
-                className="w-full flex items-center justify-between text-left cursor-pointer gap-2"
-                onClick={() => setOpenFaqIndex(openFaqIndex === 1 ? null : 1)}
-                type="button"
-              >
-                <span className="text-xs sm:text-[15px] font-bold text-[#111c2d]">
-                  Can I print these sheets on normal A4 paper?
-                </span>
-                <span className="material-symbols-outlined text-[#737686] transition-transform duration-200 shrink-0">
-                  {openFaqIndex === 1 ? 'expand_less' : 'expand_more'}
-                </span>
-              </button>
-              {openFaqIndex === 1 && (
-                <p className="mt-2 text-xs sm:text-[14px] text-[#434655] leading-relaxed animate-fadeIn">
-                  Absolutely. Every PDF is calibrated with 0.5-inch margins and high-contrast vector
-                  typography so it prints crisply on any standard home or school black &amp; white or color
-                  printer.
-                </p>
-              )}
-            </div>
-
-            {/* FAQ 3 */}
-            <div className="bg-white rounded-xl p-3.5 sm:p-4 shadow-sm border border-gray-100">
-              <button
-                className="w-full flex items-center justify-between text-left cursor-pointer gap-2"
-                onClick={() => setOpenFaqIndex(openFaqIndex === 2 ? null : 2)}
-                type="button"
-              >
-                <span className="text-xs sm:text-[15px] font-bold text-[#111c2d]">
-                  How are the paid masterclasses accessed after purchase?
-                </span>
-                <span className="material-symbols-outlined text-[#737686] transition-transform duration-200 shrink-0">
-                  {openFaqIndex === 2 ? 'expand_less' : 'expand_more'}
-                </span>
-              </button>
-              {openFaqIndex === 2 && (
-                <p className="mt-2 text-xs sm:text-[14px] text-[#434655] leading-relaxed animate-fadeIn">
-                  Instantly upon successful payment via Razorpay, your Pro pass is activated and the
-                  direct download links and private student portal materials will be immediately unlocked.
-                </p>
-              )}
-            </div>
+            {pageText.faq.items && pageText.faq.items.map((faqItem, idx) => (
+              <div key={faqItem.id || idx} className="bg-white rounded-xl p-3.5 sm:p-4 shadow-sm border border-gray-100">
+                <button
+                  className="w-full flex items-center justify-between text-left cursor-pointer gap-2"
+                  onClick={() => setOpenFaqIndex(openFaqIndex === idx ? null : idx)}
+                  type="button"
+                >
+                  <span className="text-xs sm:text-[15px] font-bold text-[#111c2d]">
+                    {faqItem.question}
+                  </span>
+                  <span className="material-symbols-outlined text-[#737686] transition-transform duration-200 shrink-0">
+                    {openFaqIndex === idx ? 'expand_less' : 'expand_more'}
+                  </span>
+                </button>
+                {openFaqIndex === idx && (
+                  <p className="mt-2 text-xs sm:text-[14px] text-[#434655] leading-relaxed animate-fadeIn">
+                    {faqItem.answer}
+                  </p>
+                )}
+              </div>
+            ))}
           </div>
         </section>
       </main>
@@ -2473,8 +2436,7 @@ export default function App() {
                 )}
               </div>
               <p className="text-xs sm:text-[14px] text-[#434655] mb-4 pr-2 sm:pr-4 leading-relaxed">
-                Demystifying school mathematics for Class 5 to Class 10. Step-by-step NCERT solutions,
-                animated concept summaries, and rapid revision sheets created by expert educators.
+                {pageText.footer.aboutText || 'Demystifying school mathematics for Class 5 to Class 10. Step-by-step NCERT solutions, animated concept summaries, and rapid revision sheets created by expert educators.'}
               </p>
               <div className="flex items-center gap-2 flex-wrap">
                 {socialConfig.platforms.youtube.enabled && (
@@ -2679,9 +2641,9 @@ export default function App() {
           </div>
 
           <div className="pt-4 sm:pt-6 mt-4 sm:mt-6 border-t border-[#e7eeff] flex flex-col md:flex-row items-center justify-between text-[#434655] text-xs sm:text-[14px] gap-3">
-            <p>© 2025 Maths at Your Fingertips. Empowering young mathematical thinkers everywhere.</p>
+            <p>{pageText.footer.copyrightText || '© 2025 Maths at Your Fingertips. Empowering young mathematical thinkers everywhere.'}</p>
             <div className="flex items-center gap-4 sm:gap-6 text-[10px] sm:text-[11px] font-bold">
-              <span>NCERT • CBSE • ICSE • State Boards</span>
+              <span>{pageText.footer.mentorSignoff || 'NCERT • CBSE • ICSE • State Boards'}</span>
               {currentUser && (
                 <button
                   onClick={handleOpenDashboard}

@@ -8,6 +8,7 @@ import {
   fetchAllUsers,
   OrderRecord,
   UserProfile,
+  saveRazorpayOrder,
   saveGatewaySettingsToFirestore,
   loadGatewaySettingsFromFirestore,
   saveBrandingSettingsToFirestore,
@@ -26,6 +27,8 @@ import {
   saveCategorySettingsToFirestore,
   saveThemeSettingsToFirestore,
   saveSocialSettingsToFirestore,
+  savePageTextSettingsToFirestore,
+  loadPageTextSettingsFromFirestore,
 } from '../firebase';
 import {
   getRazorpayGatewayConfig,
@@ -88,6 +91,13 @@ import { AdminThemeTab } from './admin/AdminThemeTab';
 import { AdminSocialTab } from './admin/AdminSocialTab';
 import { AdminAiTeacherTab } from './admin/AdminAiTeacherTab';
 import { AdminAdsTab } from './admin/AdminAdsTab';
+import { AdminPageTextTab } from './admin/AdminPageTextTab';
+import {
+  PageTextConfig,
+  getPageTextConfig,
+  savePageTextConfigLocally,
+  DEFAULT_PAGE_TEXT,
+} from '../services/pageText';
 import { resetAllAdminFeaturesToDefaults } from '../services/adminReset';
 import {
   AdsGlobalConfig,
@@ -127,8 +137,13 @@ export const AdminControlPanelPage: React.FC<AdminControlPanelPageProps> = ({
     | 'branding'
     | 'ads'
     | 'seo'
+    | 'page-text'
     | 'orders'
   >('analytics');
+
+  // Page text & blocks state
+  const [pageText, setPageText] = useState<PageTextConfig>(getPageTextConfig);
+  const [isSavingPageText, setIsSavingPageText] = useState(false);
 
   // Ads & AdSense state
   const [adsConfig, setAdsConfig] = useState<AdsGlobalConfig>(getAdsConfig);
@@ -177,6 +192,7 @@ export const AdminControlPanelPage: React.FC<AdminControlPanelPageProps> = ({
     setNotifications(getLocalNotifications());
     setCustomResources(getLocalCustomResources());
     setSeoSettings(getSeoSettingsLocally());
+    setPageText(getPageTextConfig());
 
     if (isAuthorized) {
       loadData();
@@ -199,6 +215,7 @@ export const AdminControlPanelPage: React.FC<AdminControlPanelPageProps> = ({
         cloudTheme,
         cloudSocial,
         cloudAds,
+        cloudPageText,
       ] = await Promise.all([
         fetchAllOrders(),
         fetchAllUsers(),
@@ -212,6 +229,7 @@ export const AdminControlPanelPage: React.FC<AdminControlPanelPageProps> = ({
         loadThemeSettingsFromFirestore(),
         loadSocialSettingsFromFirestore(),
         loadAdsConfigFromFirestore(),
+        loadPageTextSettingsFromFirestore(),
       ]);
 
       if (fetchedOrders && fetchedOrders.length > 0) {
@@ -275,6 +293,10 @@ export const AdminControlPanelPage: React.FC<AdminControlPanelPageProps> = ({
         };
         setAdsConfig(mergedAds);
         saveAdsConfigLocally(mergedAds);
+      }
+      if (cloudPageText) {
+        setPageText(cloudPageText);
+        savePageTextConfigLocally(cloudPageText);
       }
     } catch (e) {
       console.warn('Admin data load notice:', e);
@@ -397,12 +419,53 @@ export const AdminControlPanelPage: React.FC<AdminControlPanelPageProps> = ({
           email: currentUser?.email || 'sachin.itig@gmail.com',
           contact: '9999999999',
         },
-        handler: (res) => {
+        handler: async (res) => {
+          const testOrder: OrderRecord = {
+            orderId: `order_test_${Date.now()}`,
+            userId: currentUser?.uid || 'admin_tester',
+            userEmail: currentUser?.email || 'admin@mathsatyourfingertips.com',
+            plan: 'Admin Diagnostic Test Pass',
+            amount: 1,
+            currency: 'INR',
+            paymentId: res.razorpay_payment_id || `pay_test_${Date.now()}`,
+            status: 'captured',
+            createdAt: new Date().toISOString(),
+          };
+          try {
+            await saveRazorpayOrder(testOrder);
+          } catch {}
+          try {
+            const raw = localStorage.getItem('maths_portal_local_orders');
+            const arr = raw ? JSON.parse(raw) : [];
+            localStorage.setItem('maths_portal_local_orders', JSON.stringify([testOrder, ...arr]));
+          } catch {}
           onToast(`Test payment success! Payment ID: ${res.razorpay_payment_id}`);
+          loadData();
         },
       },
-      () => {
-        onToast('Test opened in Sandbox Mode simulation.');
+      async () => {
+        // Fallback simulation mode
+        const testOrder: OrderRecord = {
+          orderId: `order_sim_${Date.now()}`,
+          userId: currentUser?.uid || 'admin_tester',
+          userEmail: currentUser?.email || 'admin@mathsatyourfingertips.com',
+          plan: 'Admin Diagnostic Test Pass',
+          amount: 1,
+          currency: 'INR',
+          paymentId: `pay_sim_${Date.now()}`,
+          status: 'captured',
+          createdAt: new Date().toISOString(),
+        };
+        try {
+          await saveRazorpayOrder(testOrder);
+        } catch {}
+        try {
+          const raw = localStorage.getItem('maths_portal_local_orders');
+          const arr = raw ? JSON.parse(raw) : [];
+          localStorage.setItem('maths_portal_local_orders', JSON.stringify([testOrder, ...arr]));
+        } catch {}
+        onToast('Test opened in Sandbox Mode simulation & order recorded.');
+        loadData();
       }
     );
 
@@ -424,6 +487,7 @@ export const AdminControlPanelPage: React.FC<AdminControlPanelPageProps> = ({
       setNotifications(getLocalNotifications());
       setCustomResources(getLocalCustomResources());
       setSeoSettings(getSeoSettingsLocally());
+      setPageText(getPageTextConfig());
       setGatewayConfig(getRazorpayGatewayConfig());
       setShowResetConfirmModal(false);
       onToast('🎉 All Admin Features & Settings Reset to Defaults Successfully!');
@@ -628,6 +692,7 @@ export const AdminControlPanelPage: React.FC<AdminControlPanelPageProps> = ({
             { id: 'gateway', label: 'Payment Gateway', icon: 'credit_card' },
             { id: 'branding', label: 'Branding & Logo', icon: 'palette' },
             { id: 'ads', label: 'AdSense & Ads', icon: 'ads_click' },
+            { id: 'page-text', label: 'Page Text & Blocks', icon: 'edit_note' },
             { id: 'seo', label: 'SEO & Meta', icon: 'travel_explore' },
             { id: 'orders', label: `Orders (${orders.length})`, icon: 'receipt_long' },
           ].map((tab) => (
@@ -1080,6 +1145,33 @@ export const AdminControlPanelPage: React.FC<AdminControlPanelPageProps> = ({
             <AdminAdsTab
               adsConfig={adsConfig}
               setAdsConfig={setAdsConfig}
+              onToast={onToast}
+            />
+          </div>
+        )}
+
+        {/* TAB: PAGE TEXT & BLOCKS MANAGER */}
+        {activeTab === 'page-text' && (
+          <div className="max-w-7xl mx-auto">
+            <AdminPageTextTab
+              pageText={pageText}
+              onChange={(updated) => {
+                setPageText(updated);
+                savePageTextConfigLocally(updated);
+              }}
+              onSave={async () => {
+                setIsSavingPageText(true);
+                try {
+                  savePageTextConfigLocally(pageText);
+                  await savePageTextSettingsToFirestore(pageText);
+                  onToast('🎉 All page and block texts saved and published live!');
+                } catch (e) {
+                  onToast('Saved locally in browser cache.');
+                } finally {
+                  setIsSavingPageText(false);
+                }
+              }}
+              isSaving={isSavingPageText}
               onToast={onToast}
             />
           </div>

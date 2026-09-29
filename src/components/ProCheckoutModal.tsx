@@ -83,18 +83,33 @@ export const ProCheckoutModal: React.FC<ProCheckoutModalProps> = ({
 
     const orderId = `order_${Date.now()}`;
     const userId = currentUser?.uid || `guest_${Date.now()}`;
+    const userEmail = currentUser?.email || 'student@domain.com';
+    const planName = selectedPlan === 'yearly' ? 'All-Access 1 Year' : 'Trigonometry Booklet';
+
+    const orderData = {
+      orderId,
+      userId,
+      userEmail,
+      plan: planName,
+      amount: finalPrice,
+      currency: userCurrency.code || 'INR',
+      paymentId,
+      status: 'captured',
+      createdAt: new Date().toISOString(),
+    };
+
+    // Save locally for instant offline and dashboard sync
+    try {
+      const localRaw = localStorage.getItem('maths_portal_local_orders');
+      const existing = localRaw ? JSON.parse(localRaw) : [];
+      localStorage.setItem('maths_portal_local_orders', JSON.stringify([orderData, ...existing]));
+    } catch (e) {
+      // ignore
+    }
 
     try {
       if (currentUser) {
-        await saveRazorpayOrder({
-          orderId,
-          userId,
-          plan: selectedPlan === 'yearly' ? 'All-Access 1 Year' : 'Trigonometry Booklet',
-          amount: finalPrice,
-          currency: 'INR',
-          paymentId,
-          status: 'captured',
-        });
+        await saveRazorpayOrder(orderData);
       }
     } catch (err) {
       console.warn('Order sync warning: ', err);

@@ -13,12 +13,14 @@ import {
   YouTubeIcon,
   TelegramIcon,
 } from './SocialIcons';
+import { PageTextConfig } from '../services/pageText';
 
 interface SocialMediaJoinBlockProps {
   currentUser: User | null;
   userProfile: UserProfile | null;
   socialConfig: SocialConfig;
   onToast: (msg: string) => void;
+  pageText?: PageTextConfig;
 }
 
 const STORAGE_JOINED_KEY = 'maths_portal_student_joined_social_v1';
@@ -29,6 +31,7 @@ export const SocialMediaJoinBlock: React.FC<SocialMediaJoinBlockProps> = ({
   userProfile,
   socialConfig,
   onToast,
+  pageText,
 }) => {
   const [hasJoinedLocally, setHasJoinedLocally] = useState<boolean>(() => {
     return localStorage.getItem(STORAGE_JOINED_KEY) === 'true';
@@ -146,16 +149,16 @@ export const SocialMediaJoinBlock: React.FC<SocialMediaJoinBlockProps> = ({
             <div>
               <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-500/20 text-blue-300 text-xs font-bold border border-blue-400/20 mb-2">
                 <span className="material-symbols-outlined text-[15px]">diversity_3</span>
-                Official Student Learning Community
+                {pageText?.socialCommunity?.badge || 'Official Student Learning Community'}
               </div>
               <h2 className="text-xl sm:text-2xl lg:text-3xl font-black tracking-tight flex items-center gap-2 flex-wrap">
                 <span>Welcome, {studentName}!</span>
                 <span className="text-blue-300 font-semibold text-lg sm:text-xl">
-                  Join our official channels for daily formula drops
+                  {pageText?.socialCommunity?.title || 'Join our official channels for daily formula drops'}
                 </span>
               </h2>
               <p className="text-slate-300 text-xs sm:text-sm mt-1 max-w-2xl leading-relaxed">
-                Stay ahead in your CBSE Class 9 &amp; 10 board prep! Join our official student groups to get instant PDF notes, 1-minute visual mnemonic reels, and live teacher doubt clearing.
+                {pageText?.socialCommunity?.subtitle || 'Stay ahead in your CBSE Class 9 & 10 board prep! Join our official student groups to get instant PDF notes, 1-minute visual mnemonic reels, and live teacher doubt clearing.'}
               </p>
             </div>
 

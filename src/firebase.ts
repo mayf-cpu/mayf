@@ -398,24 +398,59 @@ export async function fetchUserOrders(userId: string): Promise<OrderRecord[]> {
     const snap = await getDocs(ordersRef);
     const all = snap.docs.map((d) => d.data() as OrderRecord);
     const userOrders = all.filter((o) => o.userId === userId);
-    return userOrders.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+    if (userOrders.length > 0) {
+      return userOrders.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
+    }
   } catch (err) {
-    console.warn('Could not fetch user orders:', err);
-    return [];
+    console.warn('Could not fetch user orders from Firestore, reading local fallback:', err);
   }
+
+  // Local fallback
+  try {
+    const localRaw = localStorage.getItem('maths_portal_local_orders');
+    if (localRaw) {
+      const parsed = JSON.parse(localRaw);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed.filter((o: any) => o.userId === userId || !o.userId);
+      }
+    }
+  } catch {
+    // ignore
+  }
+
+  return [];
 }
 
 // Fetch all captured orders from Firestore
 export async function fetchAllOrders(): Promise<OrderRecord[]> {
+  let cloudOrders: OrderRecord[] = [];
   try {
     const ordersRef = collection(db, 'orders');
     const q = query(ordersRef, orderBy('createdAt', 'desc'), limit(50));
     const snap = await getDocs(q);
-    return snap.docs.map((d) => d.data() as OrderRecord);
+    cloudOrders = snap.docs.map((d) => d.data() as OrderRecord);
   } catch (err) {
-    console.warn('Could not fetch all orders (may be permissions or initial empty state):', err);
-    return [];
+    console.warn('Could not fetch all orders from cloud (may be permissions or initial empty state):', err);
   }
+
+  // Merge any local orders not yet reflected in cloud
+  try {
+    const localRaw = localStorage.getItem('maths_portal_local_orders');
+    if (localRaw) {
+      const parsed: OrderRecord[] = JSON.parse(localRaw);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        const cloudIds = new Set(cloudOrders.map((o) => o.orderId));
+        const missingLocal = parsed.filter((o) => !cloudIds.has(o.orderId));
+        return [...cloudOrders, ...missingLocal].sort((a, b) =>
+          (b.createdAt || '').localeCompare(a.createdAt || '')
+        );
+      }
+    }
+  } catch {
+    // ignore
+  }
+
+  return cloudOrders;
 }
 
 // Fetch all registered students
@@ -481,6 +516,33 @@ export async function loadBrandingSettingsFromFirestore(): Promise<any | null> {
     }
   } catch (error) {
     console.warn('Could not load branding settings from Firestore:', error);
+  }
+  return null;
+}
+
+// Save Custom Page Content & Blocks Text Config to Firestore Settings
+export async function savePageTextSettingsToFirestore(pageTextData: any): Promise<void> {
+  const settingsRef = doc(db, 'settings', 'pageContent');
+  try {
+    await setDoc(settingsRef, {
+      ...pageTextData,
+      updatedAt: new Date().toISOString(),
+    }, { merge: true });
+  } catch (error) {
+    handleFirestoreError(error, OperationType.WRITE, 'settings/pageContent');
+  }
+}
+
+// Load Custom Page Content & Blocks Text Config from Firestore Settings
+export async function loadPageTextSettingsFromFirestore(): Promise<any | null> {
+  try {
+    const settingsRef = doc(db, 'settings', 'pageContent');
+    const snap = await getDoc(settingsRef);
+    if (snap.exists()) {
+      return snap.data();
+    }
+  } catch (error) {
+    console.warn('Could not load page text settings from Firestore:', error);
   }
   return null;
 }
@@ -778,10 +840,10 @@ export interface AiQueryRecord {
 export async function saveAiQueryRecord(record: AiQueryRecord): Promise<void> {
   // Always save to localStorage backup for immediate availability
   try {
-    const existingRaw = localStorage.getItem('mayf_ai_queries');
+    const existingRaw = localStorage.getItem('maths_hub_ai_queries') || localStorage.getItem('mayf_ai_queries');
     const existing: AiQueryRecord[] = existingRaw ? JSON.parse(existingRaw) : [];
     const updated = [record, ...existing.filter((q) => q.id !== record.id)].slice(0, 100);
-    localStorage.setItem('mayf_ai_queries', JSON.stringify(updated));
+    localStorage.setItem('maths_hub_ai_queries', JSON.stringify(updated));
   } catch (e) {
     console.warn('LocalStorage save error for AI query:', e);
   }
@@ -818,7 +880,7 @@ export async function fetchStudentAiQueries(userId: string): Promise<AiQueryReco
   }
 
   try {
-    const local = localStorage.getItem('mayf_ai_queries');
+    const local = localStorage.getItem('maths_hub_ai_queries') || localStorage.getItem('mayf_ai_queries');
     if (local) {
       const parsed: AiQueryRecord[] = JSON.parse(local);
       return parsed.filter((q) => q.userId === userId);
@@ -847,7 +909,7 @@ export async function fetchAllAiQueries(): Promise<AiQueryRecord[]> {
   }
 
   try {
-    const local = localStorage.getItem('mayf_ai_queries');
+    const local = localStorage.getItem('maths_hub_ai_queries') || localStorage.getItem('mayf_ai_queries');
     if (local) {
       return JSON.parse(local);
     }
@@ -867,11 +929,11 @@ export async function deleteAiQueryRecord(queryId: string): Promise<void> {
   }
 
   try {
-    const local = localStorage.getItem('mayf_ai_queries');
+    const local = localStorage.getItem('maths_hub_ai_queries') || localStorage.getItem('mayf_ai_queries');
     if (local) {
       const parsed: AiQueryRecord[] = JSON.parse(local);
       const filtered = parsed.filter((q) => q.id !== queryId);
-      localStorage.setItem('mayf_ai_queries', JSON.stringify(filtered));
+      localStorage.setItem('maths_hub_ai_queries', JSON.stringify(filtered));
     }
   } catch (e) {
     // ignore

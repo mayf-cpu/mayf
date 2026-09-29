@@ -35,7 +35,8 @@ export interface AnalyticsSummary {
   updatedAt: string;
 }
 
-const STORAGE_KEY = 'mayf_analytics_metrics_v2';
+const STORAGE_KEY = 'maths_hub_analytics_metrics_v2';
+const LEGACY_STORAGE_KEY = 'mayf_analytics_metrics_v2';
 
 export const INITIAL_ANALYTICS: AnalyticsSummary = {
   totalVisitors: 14820,
@@ -165,7 +166,7 @@ export const INITIAL_ANALYTICS: AnalyticsSummary = {
 
 export function getAnalyticsMetrics(): AnalyticsSummary {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = localStorage.getItem(STORAGE_KEY) || localStorage.getItem(LEGACY_STORAGE_KEY);
     if (raw) {
       return JSON.parse(raw);
     }

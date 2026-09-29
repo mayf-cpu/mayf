@@ -8,6 +8,7 @@ import {
   fetchAllUsers,
   OrderRecord,
   UserProfile,
+  saveRazorpayOrder,
   saveGatewaySettingsToFirestore,
   loadGatewaySettingsFromFirestore,
   saveBrandingSettingsToFirestore,
@@ -23,7 +24,15 @@ import {
   loadCategorySettingsFromFirestore,
   loadThemeSettingsFromFirestore,
   loadSocialSettingsFromFirestore,
+  savePageTextSettingsToFirestore,
+  loadPageTextSettingsFromFirestore,
 } from '../firebase';
+import { AdminPageTextTab } from './admin/AdminPageTextTab';
+import {
+  PageTextConfig,
+  getPageTextConfig,
+  savePageTextConfigLocally,
+} from '../services/pageText';
 import {
   getRazorpayGatewayConfig,
   saveRazorpayGatewayConfig,
@@ -100,9 +109,14 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
     | 'gateway'
     | 'branding'
     | 'ads'
+    | 'page-text'
     | 'seo'
     | 'orders'
   >('analytics');
+
+  // Page Text state
+  const [pageText, setPageText] = useState<PageTextConfig>(getPageTextConfig());
+  const [isSavingPageText, setIsSavingPageText] = useState(false);
 
   // Ads state
   const [adsConfig, setAdsConfig] = useState<AdsGlobalConfig>(getAdsConfig());
@@ -171,6 +185,7 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
         cloudTheme,
         cloudSocial,
         cloudAds,
+        cloudPageText,
       ] = await Promise.all([
         fetchAllOrders(),
         fetchAllUsers(),
@@ -184,6 +199,7 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
         loadThemeSettingsFromFirestore(),
         loadSocialSettingsFromFirestore(),
         loadAdsConfigFromFirestore(),
+        loadPageTextSettingsFromFirestore(),
       ]);
 
       if (fetchedOrders && fetchedOrders.length > 0) {
@@ -242,6 +258,10 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
         };
         setAdsConfig(mergedAds);
         saveAdsConfigLocally(mergedAds);
+      }
+      if (cloudPageText) {
+        setPageText(cloudPageText);
+        savePageTextConfigLocally(cloudPageText);
       }
     } catch (e) {
       console.warn('Admin data load notice:', e);
@@ -358,12 +378,52 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
           email: currentUser?.email || 'sachin.itig@gmail.com',
           contact: '9999999999',
         },
-        handler: (res) => {
+        handler: async (res) => {
+          const testOrder: OrderRecord = {
+            orderId: `order_test_${Date.now()}`,
+            userId: currentUser?.uid || 'admin_tester',
+            userEmail: currentUser?.email || 'admin@mathsatyourfingertips.com',
+            plan: 'Admin Diagnostic Test Pass',
+            amount: 1,
+            currency: 'INR',
+            paymentId: res.razorpay_payment_id || `pay_test_${Date.now()}`,
+            status: 'captured',
+            createdAt: new Date().toISOString(),
+          };
+          try {
+            await saveRazorpayOrder(testOrder);
+          } catch {}
+          try {
+            const raw = localStorage.getItem('maths_portal_local_orders');
+            const arr = raw ? JSON.parse(raw) : [];
+            localStorage.setItem('maths_portal_local_orders', JSON.stringify([testOrder, ...arr]));
+          } catch {}
           onToast(`Test payment success! Payment ID: ${res.razorpay_payment_id}`);
+          loadData();
         },
       },
-      () => {
-        onToast('Test opened in Sandbox Mode simulation.');
+      async () => {
+        const testOrder: OrderRecord = {
+          orderId: `order_sim_${Date.now()}`,
+          userId: currentUser?.uid || 'admin_tester',
+          userEmail: currentUser?.email || 'admin@mathsatyourfingertips.com',
+          plan: 'Admin Diagnostic Test Pass',
+          amount: 1,
+          currency: 'INR',
+          paymentId: `pay_sim_${Date.now()}`,
+          status: 'captured',
+          createdAt: new Date().toISOString(),
+        };
+        try {
+          await saveRazorpayOrder(testOrder);
+        } catch {}
+        try {
+          const raw = localStorage.getItem('maths_portal_local_orders');
+          const arr = raw ? JSON.parse(raw) : [];
+          localStorage.setItem('maths_portal_local_orders', JSON.stringify([testOrder, ...arr]));
+        } catch {}
+        onToast('Test opened in Sandbox Mode simulation & order recorded.');
+        loadData();
       }
     );
 
@@ -636,6 +696,18 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
               >
                 <span className="material-symbols-outlined text-[18px]">ads_click</span>
                 <span>AdSense &amp; Ads</span>
+              </button>
+
+              <button
+                onClick={() => setActiveTab('page-text')}
+                className={`py-3 px-3 sm:px-3.5 text-xs sm:text-sm font-bold border-b-2 flex items-center gap-1.5 cursor-pointer whitespace-nowrap transition-colors ${
+                  activeTab === 'page-text'
+                    ? 'border-blue-600 text-blue-600'
+                    : 'border-transparent text-slate-500 hover:text-slate-800'
+                }`}
+              >
+                <span className="material-symbols-outlined text-[18px]">edit_note</span>
+                <span>Page Text &amp; Blocks</span>
               </button>
 
               <button
@@ -1381,6 +1453,33 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
                       </div>
                     </div>
                   </div>
+                </div>
+              )}
+
+              {/* TAB: PAGE TEXT & BLOCKS MANAGER */}
+              {activeTab === 'page-text' && (
+                <div className="max-w-6xl mx-auto">
+                  <AdminPageTextTab
+                    pageText={pageText}
+                    onChange={(updated) => {
+                      setPageText(updated);
+                      savePageTextConfigLocally(updated);
+                    }}
+                    onSave={async () => {
+                      setIsSavingPageText(true);
+                      try {
+                        savePageTextConfigLocally(pageText);
+                        await savePageTextSettingsToFirestore(pageText);
+                        onToast('🎉 All page and block texts saved and published live!');
+                      } catch (e) {
+                        onToast('Saved locally in browser cache.');
+                      } finally {
+                        setIsSavingPageText(false);
+                      }
+                    }}
+                    isSaving={isSavingPageText}
+                    onToast={onToast}
+                  />
                 </div>
               )}
 

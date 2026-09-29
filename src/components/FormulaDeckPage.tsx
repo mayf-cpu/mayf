@@ -1,6 +1,7 @@
 import React, { useState } from 'react';
 import { FormulaDeckSandbox } from './FormulaDeckSandbox';
 import { BrandingConfig } from '../services/branding';
+import { PageTextConfig } from '../services/pageText';
 import { AdPlacement } from './AdPlacement';
 
 interface FormulaDeckPageProps {
@@ -9,6 +10,7 @@ interface FormulaDeckPageProps {
   onDownloadSheet: (title: string, size: string) => void;
   onToast: (msg: string) => void;
   branding?: BrandingConfig;
+  pageText?: PageTextConfig;
 }
 
 interface FormulaCard {
@@ -109,6 +111,7 @@ export const FormulaDeckPage: React.FC<FormulaDeckPageProps> = ({
   onDownloadSheet,
   onToast,
   branding,
+  pageText,
 }) => {
   const [selectedCategory, setSelectedCategory] = useState<string>('all');
   const [selectedGrade, setSelectedGrade] = useState<string>('all');
@@ -189,13 +192,13 @@ export const FormulaDeckPage: React.FC<FormulaDeckPageProps> = ({
         <div className="text-center max-w-3xl mx-auto mb-8 sm:mb-10">
           <div className="inline-flex items-center gap-2 px-3.5 py-1.5 rounded-full bg-blue-50 border border-blue-200 text-[#004ac6] text-xs font-extrabold uppercase tracking-wide mb-3">
             <span className="material-symbols-outlined text-[16px]">functions</span>
-            <span>Class 5 to 10 Visual Mathematics</span>
+            <span>{pageText?.formulaDeckPage?.badgeText || 'Class 5 to 10 Visual Mathematics'}</span>
           </div>
           <h1 className="text-2xl sm:text-4xl font-extrabold text-[#111c2d] tracking-tight">
-            Interactive Formula Deck & Mathematical Transitions
+            {pageText?.formulaDeckPage?.title || 'Interactive Formula Deck & Mathematical Transitions'}
           </h1>
           <p className="text-sm sm:text-base text-slate-600 mt-2">
-            Demystifying algebra, geometry, trigonometry, and mensuration through animated visual proofs and real-time interactive sliders.
+            {pageText?.formulaDeckPage?.subtitle || 'Demystifying algebra, geometry, trigonometry, and mensuration through animated visual proofs and real-time interactive sliders.'}
           </p>
         </div>
 

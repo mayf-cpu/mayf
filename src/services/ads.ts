@@ -236,14 +236,15 @@ export const DEFAULT_ADS_CONFIG: AdsGlobalConfig = {
   },
 };
 
-const STORAGE_KEY = 'mayf_adsense_config';
+const STORAGE_KEY = 'maths_hub_adsense_config';
+const LEGACY_STORAGE_KEY = 'mayf_adsense_config';
 
 /**
  * Get current ads configuration from localStorage or default
  */
 export function getAdsConfig(): AdsGlobalConfig {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY);
+    const raw = localStorage.getItem(STORAGE_KEY) || localStorage.getItem(LEGACY_STORAGE_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
       return {

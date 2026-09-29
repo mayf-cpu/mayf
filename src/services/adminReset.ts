@@ -38,12 +38,17 @@ import {
   saveTierOverrides,
 } from './resources';
 import {
+  DEFAULT_PAGE_TEXT,
+  savePageTextConfigLocally,
+} from './pageText';
+import {
   saveBrandingSettingsToFirestore,
   saveCategorySettingsToFirestore,
   saveThemeSettingsToFirestore,
   saveSocialSettingsToFirestore,
   saveGatewaySettingsToFirestore,
   saveSeoSettingsToFirestore,
+  savePageTextSettingsToFirestore,
 } from '../firebase';
 
 export interface AdminResetResult {
@@ -94,7 +99,10 @@ export async function resetAllAdminFeaturesToDefaults(): Promise<AdminResetResul
     saveTierOverrides({});
     saveLocalCustomResources([]);
 
-    // 10. Sync defaults to Firestore in parallel (non-blocking)
+    // 10. Reset Page & Block Texts
+    savePageTextConfigLocally(DEFAULT_PAGE_TEXT);
+
+    // 11. Sync defaults to Firestore in parallel (non-blocking)
     Promise.allSettled([
       saveBrandingSettingsToFirestore(DEFAULT_BRANDING_CONFIG),
       saveCategorySettingsToFirestore(DEFAULT_CATEGORIES),
@@ -102,6 +110,7 @@ export async function resetAllAdminFeaturesToDefaults(): Promise<AdminResetResul
       saveSocialSettingsToFirestore(DEFAULT_SOCIAL_CONFIG),
       saveGatewaySettingsToFirestore(DEFAULT_GATEWAY_CONFIG),
       saveSeoSettingsToFirestore(DEFAULT_SEO_SETTINGS),
+      savePageTextSettingsToFirestore(DEFAULT_PAGE_TEXT),
     ]).catch((err) => {
       console.warn('Notice while saving reset settings to cloud Firestore:', err);
     });
