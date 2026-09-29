@@ -34,6 +34,7 @@ import {
   saveSocialSettingsToFirestore,
   savePageTextSettingsToFirestore,
   loadPageTextSettingsFromFirestore,
+  migrateAndRestoreLegacyDatabaseData,
 } from '../firebase';
 import {
   getRazorpayGatewayConfig,
@@ -189,9 +190,27 @@ export const AdminControlPanelPage: React.FC<AdminControlPanelPageProps> = ({
   const [customResources, setCustomResources] = useState<CustomResourceRecord[]>(getLocalCustomResources);
   const [seoSettings, setSeoSettings] = useState<SeoSettings | null>(getSeoSettingsLocally);
   const [loadingOrders, setLoadingOrders] = useState(false);
+  const [isMigratingLegacy, setIsMigratingLegacy] = useState(false);
 
   const isGoogleAdmin = isUserAdmin(currentUser, userProfile);
   const isAuthorized = isGoogleAdmin || isPasscodeUnlocked;
+
+  const handleSyncLegacyData = async () => {
+    setIsMigratingLegacy(true);
+    try {
+      const res = await migrateAndRestoreLegacyDatabaseData();
+      if (res.success) {
+        onToast('🎉 All data from previous database successfully migrated & saved to current database!');
+        await loadData();
+      } else {
+        onToast(`Notice: ${res.message}`);
+      }
+    } catch (e: any) {
+      onToast(`Sync error: ${e?.message || 'Failed to sync'}`);
+    } finally {
+      setIsMigratingLegacy(false);
+    }
+  };
 
   // Load gateway settings and data on mount & authorization
   useEffect(() => {
@@ -723,6 +742,19 @@ export const AdminControlPanelPage: React.FC<AdminControlPanelPageProps> = ({
           {/* Right: Status Badges & Quick Links */}
           <div className="flex items-center gap-2 sm:gap-3">
             <button
+              onClick={handleSyncLegacyData}
+              disabled={isMigratingLegacy}
+              className="flex items-center gap-1.5 px-3 py-1.5 bg-gradient-to-r from-amber-600 via-orange-600 to-amber-700 hover:from-amber-500 hover:to-orange-500 text-white rounded-lg text-xs font-bold cursor-pointer border border-amber-400/50 transition-all shadow-xs"
+              title="Push all custom texts, branding, theme, and settings from previous database into current Firestore database"
+            >
+              <span className={`material-symbols-outlined text-[16px] ${isMigratingLegacy ? 'animate-spin' : ''}`}>
+                sync
+              </span>
+              <span className="hidden sm:inline">{isMigratingLegacy ? 'Syncing...' : 'Sync Previous DB Data'}</span>
+              <span className="sm:hidden">{isMigratingLegacy ? '...' : 'Sync DB'}</span>
+            </button>
+
+            <button
               onClick={() => setShowResetConfirmModal(true)}
               className="flex items-center gap-1.5 px-3 py-1.5 bg-rose-900/60 hover:bg-rose-800 text-rose-200 hover:text-white rounded-lg text-xs font-bold cursor-pointer border border-rose-700/60 transition-colors shadow-xs"
               title="Reset all admin features and settings to clean factory defaults"
@@ -748,7 +780,7 @@ export const AdminControlPanelPage: React.FC<AdminControlPanelPageProps> = ({
             <div className="flex items-center gap-2 bg-slate-800/80 px-2.5 py-1 rounded-xl border border-slate-700 text-xs">
               <span className="w-2 h-2 rounded-full bg-blue-400"></span>
               <span className="text-slate-300 font-mono text-[11px] truncate max-w-[140px] sm:max-w-none">
-                {currentUser?.email || 'sachin.itig@gmail.com'}
+                {currentUser?.email || 'sachinagrawal16@gmail.com'}
               </span>
             </div>
           </div>

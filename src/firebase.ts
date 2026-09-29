@@ -27,8 +27,11 @@ import firebaseConfig from '../firebase-applet-config.json';
 // Initialize Firebase
 const app = initializeApp(firebaseConfig);
 
-// CRITICAL: Database initialized with firestoreDatabaseId
-export const db = getFirestore(app, firebaseConfig.firestoreDatabaseId);
+// CRITICAL: Database initialized with firestoreDatabaseId (or default)
+export const db =
+  firebaseConfig.firestoreDatabaseId && firebaseConfig.firestoreDatabaseId !== '(default)'
+    ? getFirestore(app, firebaseConfig.firestoreDatabaseId)
+    : getFirestore(app);
 export const auth = getAuth(app);
 export const googleProvider = new GoogleAuthProvider();
 
@@ -246,9 +249,9 @@ export function createDemoStudentSession(
   customName?: string,
   grade: string = 'Class 10'
 ): any {
-  const email = customEmail || '2026vivekkushwah@gmail.com';
-  const isOwner = email.toLowerCase().includes('vivek') || email.toLowerCase().includes('admin');
-  const displayName = customName || (isOwner ? 'Vivek Kushwah (Admin)' : 'Math Student');
+  const email = customEmail || 'sachinagrawal16@gmail.com';
+  const isOwner = email.toLowerCase().includes('sachin') || email.toLowerCase().includes('admin');
+  const displayName = customName || (isOwner ? 'Sachin Agrawal (Admin)' : 'Math Student');
   const uid = `demo_${btoa(email).replace(/=/g, '').toLowerCase()}`;
 
   const mockUser: any = {
@@ -376,9 +379,10 @@ export interface AdminUserRecord {
   notes?: string;
 }
 
-export const PRIMARY_SUPERADMIN_EMAIL = 'sachin.itig@gmail.com';
+export const PRIMARY_SUPERADMIN_EMAIL = 'sachinagrawal16@gmail.com';
 
 export const INITIAL_ADMIN_EMAILS = [
+  'sachinagrawal16@gmail.com',
   'sachin.itig@gmail.com',
   '2026vivekkushwah@gmail.com',
   'vivekkushwah@gmail.com',
@@ -1039,6 +1043,96 @@ export async function deleteAiQueryRecord(queryId: string): Promise<void> {
     }
   } catch (e) {
     // ignore
+  }
+}
+
+// Full Migration / Synchronization from Previous Database
+import previousDatabaseExport from './data/previousDatabaseExport.json';
+
+export async function migrateAndRestoreLegacyDatabaseData(): Promise<{ success: boolean; message: string; details: any }> {
+  try {
+    const results: any = {};
+
+    // 1. Sync Page Content & Custom Texts
+    if (previousDatabaseExport.settings?.pageContent) {
+      const pageTextRef = doc(db, 'settings', 'pageContent');
+      await setDoc(pageTextRef, {
+        ...previousDatabaseExport.settings.pageContent,
+        migratedAt: new Date().toISOString(),
+      }, { merge: true });
+      try {
+        localStorage.setItem('maths_hub_page_text_v1', JSON.stringify(previousDatabaseExport.settings.pageContent));
+        window.dispatchEvent(new CustomEvent('page-text-changed', { detail: previousDatabaseExport.settings.pageContent }));
+      } catch (e) {}
+      results.pageContent = 'Synchronized';
+    }
+
+    // 2. Sync Branding & Assets (Logo, Icons, Badges)
+    if (previousDatabaseExport.settings?.branding) {
+      const brandingRef = doc(db, 'settings', 'branding');
+      await setDoc(brandingRef, {
+        ...previousDatabaseExport.settings.branding,
+        migratedAt: new Date().toISOString(),
+      }, { merge: true });
+      try {
+        localStorage.setItem('maths_hub_branding_config', JSON.stringify(previousDatabaseExport.settings.branding));
+        window.dispatchEvent(new CustomEvent('branding-changed', { detail: previousDatabaseExport.settings.branding }));
+      } catch (e) {}
+      results.branding = 'Synchronized';
+    }
+
+    // 3. Sync Theme & Design Layout
+    if (previousDatabaseExport.settings?.theme) {
+      const themeRef = doc(db, 'settings', 'theme');
+      await setDoc(themeRef, {
+        ...previousDatabaseExport.settings.theme,
+        migratedAt: new Date().toISOString(),
+      }, { merge: true });
+      try {
+        localStorage.setItem('maths_hub_theme_config', JSON.stringify(previousDatabaseExport.settings.theme));
+        window.dispatchEvent(new CustomEvent('theme-changed', { detail: previousDatabaseExport.settings.theme }));
+      } catch (e) {}
+      results.theme = 'Synchronized';
+    }
+
+    // 4. Sync Payment Gateway Config
+    if (previousDatabaseExport.settings?.paymentGateway) {
+      const gwRef = doc(db, 'settings', 'paymentGateway');
+      await setDoc(gwRef, {
+        ...previousDatabaseExport.settings.paymentGateway,
+        migratedAt: new Date().toISOString(),
+      }, { merge: true });
+      try {
+        localStorage.setItem('maths_hub_gateway_config', JSON.stringify(previousDatabaseExport.settings.paymentGateway));
+      } catch (e) {}
+      results.paymentGateway = 'Synchronized';
+    }
+
+    // 5. Sync Notifications
+    if (Array.isArray(previousDatabaseExport.notifications) && previousDatabaseExport.notifications.length > 0) {
+      for (const notif of previousDatabaseExport.notifications) {
+        const notifRef = doc(db, 'notifications', notif.id);
+        await setDoc(notifRef, notif, { merge: true });
+      }
+      try {
+        localStorage.setItem('maths_portal_notifications', JSON.stringify(previousDatabaseExport.notifications));
+        window.dispatchEvent(new CustomEvent('notifications-changed', { detail: previousDatabaseExport.notifications }));
+      } catch (e) {}
+      results.notifications = `${previousDatabaseExport.notifications.length} notifications migrated`;
+    }
+
+    return {
+      success: true,
+      message: 'All custom text, branding, theme, and gateway settings from the previous database have been successfully imported and saved into your new Firestore database!',
+      details: results,
+    };
+  } catch (err: any) {
+    console.error('Migration error:', err);
+    return {
+      success: false,
+      message: err?.message || 'Failed to migrate data to Firestore database',
+      details: null,
+    };
   }
 }
 

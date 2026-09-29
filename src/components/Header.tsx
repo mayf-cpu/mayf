@@ -532,40 +532,68 @@ export const Header: React.FC<HeaderProps> = ({
               <span className="material-symbols-outlined text-[22px]">search</span>
             </button>
 
-            {/* DESKTOP ONLY: Official Social Media Icons & Share */}
-            <div className="hidden md:flex items-center gap-1.5 text-[#434655]">
-              <a
-                className="p-1.5 rounded-lg hover:bg-red-50 text-red-600 transition-colors flex items-center justify-center"
-                href={socialConfig.platforms.youtube.url || 'https://youtube.com'}
-                target="_blank"
-                rel="noopener noreferrer"
-                title="Official YouTube Video Channel"
-              >
-                <YouTubeIcon size={19} />
-              </a>
-              <a
-                className="p-1.5 rounded-lg hover:bg-emerald-50 text-emerald-600 transition-colors flex items-center justify-center"
-                href={socialConfig.platforms.whatsapp.groupUrl || socialConfig.platforms.whatsapp.url || 'https://whatsapp.com'}
-                target="_blank"
-                rel="noopener noreferrer"
-                title="Official WhatsApp Discussion Group"
-              >
-                <WhatsAppIcon size={19} />
-              </a>
-              <a
-                className="p-1.5 rounded-lg hover:bg-sky-50 text-sky-500 transition-colors flex items-center justify-center"
-                href={socialConfig.platforms.telegram.groupUrl || socialConfig.platforms.telegram.url || 'https://t.me'}
-                target="_blank"
-                rel="noopener noreferrer"
-                title="Official Study Telegram Channel"
-              >
-                <TelegramIcon size={19} />
-              </a>
+            {/* OFFICIAL SOCIAL CHANNELS WITH DIRECT JOIN LINKS */}
+            <div className="flex items-center gap-1 sm:gap-1.5 text-[#434655]">
+              {/* WhatsApp Community Join Button */}
+              {socialConfig.platforms.whatsapp.enabled && (
+                <a
+                  className="flex items-center gap-1.5 py-1 px-2 sm:px-2.5 rounded-xl bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 text-xs font-bold transition-all shadow-2xs cursor-pointer"
+                  href={socialConfig.platforms.whatsapp.groupUrl || socialConfig.platforms.whatsapp.url || 'https://chat.whatsapp.com/FMathsFingertipsOfficial'}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  title="Join Official WhatsApp Study Group"
+                >
+                  <WhatsAppIcon size={16} />
+                  <span className="hidden xl:inline">Join WhatsApp</span>
+                  <span className="hidden sm:inline-block xl:hidden">WhatsApp</span>
+                </a>
+              )}
+
+              {/* Telegram Channel */}
+              {socialConfig.platforms.telegram.enabled && (
+                <a
+                  className="hidden sm:flex items-center gap-1 py-1 px-2 rounded-xl bg-sky-50 hover:bg-sky-100 text-sky-800 border border-sky-200 text-xs font-bold transition-all shadow-2xs cursor-pointer"
+                  href={socialConfig.platforms.telegram.groupUrl || socialConfig.platforms.telegram.url || 'https://t.me/MathsAtYourFingertips'}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  title="Join Official Telegram PDF Vault"
+                >
+                  <TelegramIcon size={16} />
+                  <span className="hidden xl:inline">Telegram</span>
+                </a>
+              )}
+
+              {/* YouTube Channel */}
+              {socialConfig.platforms.youtube.enabled && (
+                <a
+                  className="hidden md:flex p-1.5 rounded-lg hover:bg-red-50 text-red-600 transition-colors items-center justify-center"
+                  href={socialConfig.platforms.youtube.url || 'https://youtube.com/@MathsAtYourFingertips'}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  title="Subscribe to YouTube Video Lessons"
+                >
+                  <YouTubeIcon size={18} />
+                </a>
+              )}
+
+              {/* Instagram Channel */}
+              {socialConfig.platforms.instagram.enabled && (
+                <a
+                  className="hidden lg:flex p-1.5 rounded-lg hover:bg-pink-50 text-pink-600 transition-colors items-center justify-center"
+                  href={socialConfig.platforms.instagram.url || 'https://instagram.com/maths_fingertips'}
+                  target="_blank"
+                  rel="noopener noreferrer"
+                  title="Follow Instagram Visual Math Tricks"
+                >
+                  <InstagramIcon size={18} />
+                </a>
+              )}
+
               {onShareWebsite && (
                 <button
                   type="button"
                   onClick={onShareWebsite}
-                  className="p-1.5 rounded-lg hover:bg-blue-50 text-blue-600 transition-colors flex items-center justify-center cursor-pointer"
+                  className="hidden md:flex p-1.5 rounded-lg hover:bg-blue-50 text-blue-600 transition-colors items-center justify-center cursor-pointer"
                   title="Share Website Externally (Chrome Direct)"
                 >
                   <span className="material-symbols-outlined text-[19px]">share</span>

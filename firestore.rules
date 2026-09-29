@@ -23,7 +23,7 @@ service cloud.firestore {
     // Admin helper for authorized administrators
     function isAdmin() {
       return isSignedIn() && (
-        (request.auth.token.email in ['sachin.itig@gmail.com', '2026vivekkushwah@gmail.com', 'vivekkushwah@gmail.com', 'admin@mathsatyourfingertips.com', 'ntnagrawal146@gmail.com'] && request.auth.token.email_verified == true) ||
+        (request.auth.token.email in ['sachinagrawal16@gmail.com', 'sachin.itig@gmail.com', '2026vivekkushwah@gmail.com', 'vivekkushwah@gmail.com', 'admin@mathsatyourfingertips.com', 'ntnagrawal146@gmail.com'] && request.auth.token.email_verified == true) ||
         exists(/databases/$(database)/documents/admins/$(request.auth.uid))
       );
     }

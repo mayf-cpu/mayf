@@ -1,8 +1,10 @@
 import React, { useState } from 'react';
 import { MathResource } from '../data/mathResources';
 import { formatPrice } from '../services/currency';
-import { downloadResourceToSystem, printResourceInA4 } from '../services/fileDownloader';
+import { printResourceInA4 } from '../services/fileDownloader';
 import { AdPlacement } from './AdPlacement';
+import { WhatsAppIcon } from './SocialIcons';
+import { getSocialConfig, openInAppOrWeb } from '../services/social';
 
 interface ResourceModalProps {
   resource: MathResource | null;
@@ -27,32 +29,24 @@ export const ResourceModal: React.FC<ResourceModalProps> = ({
 
   if (!isOpen || !resource) return null;
 
+  const socialConfig = getSocialConfig();
+
   const handleStartDownload = () => {
     if (resource.tier === 'pro') {
       onOpenProPass();
       return;
     }
+    // Triggers Captcha verification before starting download
+    onDownload(resource.title, resource.sizeOrDuration);
+  };
 
-    setDownloading(true);
-    try {
-      downloadResourceToSystem({
-        title: resource.title,
-        grade: resource.grade,
-        topic: resource.topic,
-        format: resource.format,
-        downloadUrl: resource.downloadUrl,
-        description: resource.description,
-        keyFormulas: resource.keyFormulas,
-        examTraps: resource.examTraps,
-      });
-    } catch (e) {
-      console.warn('System download failed:', e);
-    }
-
-    setTimeout(() => {
-      setDownloading(false);
-      onDownload(resource.title, resource.sizeOrDuration);
-    }, 400);
+  const handleJoinWhatsApp = () => {
+    const whatsappCfg = socialConfig.platforms.whatsapp;
+    const groupUrl = whatsappCfg.groupUrl || whatsappCfg.url || 'https://chat.whatsapp.com/FMathsFingertipsOfficial';
+    const nativeUri = groupUrl.includes('chat.whatsapp.com')
+      ? groupUrl.replace('https://chat.whatsapp.com', 'whatsapp://chat?code=')
+      : 'whatsapp://';
+    openInAppOrWeb(nativeUri, groupUrl);
   };
 
   const handlePrint = () => {
@@ -318,6 +312,16 @@ export const ResourceModal: React.FC<ResourceModalProps> = ({
             >
               <span className="material-symbols-outlined text-[18px]">print</span>
               <span>Print A4</span>
+            </button>
+
+            <button
+              type="button"
+              onClick={handleJoinWhatsApp}
+              className="inline-flex items-center justify-center gap-1.5 bg-emerald-50 hover:bg-emerald-100 text-emerald-800 text-xs sm:text-sm font-bold px-3 sm:px-3.5 py-2 sm:py-2.5 rounded-xl transition-colors cursor-pointer border border-emerald-200"
+              title="Join our official WhatsApp group for daily math formula sheets and doubt solving"
+            >
+              <WhatsAppIcon size={17} />
+              <span className="hidden sm:inline">WhatsApp Group</span>
             </button>
 
             {resource.tier === 'pro' ? (

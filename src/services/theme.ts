@@ -31,10 +31,10 @@ export interface ThemeConfig {
 }
 
 export const DEFAULT_THEME_CONFIG: ThemeConfig = {
-  preset: 'classic-blue',
-  primaryColor: '#004ac6',
-  secondaryColor: '#434655',
-  accentColor: '#006242',
+  preset: 'cosmic-violet',
+  primaryColor: '#7c3aed',
+  secondaryColor: '#4c1d95',
+  accentColor: '#ec4899',
   backgroundTone: 'light',
   layoutGrid: '3-col',
   cardStyle: 'elevated',

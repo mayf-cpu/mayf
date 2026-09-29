@@ -42,9 +42,6 @@ export const SocialMediaJoinBlock: React.FC<SocialMediaJoinBlockProps> = ({
   const [isCollapsed, setIsCollapsed] = useState<boolean>(false);
   const [clickedChannels, setClickedChannels] = useState<Record<string, boolean>>({});
 
-  // If user is not logged in, this block is not displayed as per requirements
-  if (!currentUser) return null;
-
   const platforms = socialConfig.platforms;
   const whatsappCfg = platforms.whatsapp;
   const instagramCfg = platforms.instagram;
@@ -102,7 +99,7 @@ export const SocialMediaJoinBlock: React.FC<SocialMediaJoinBlockProps> = ({
     localStorage.setItem(STORAGE_DISMISSED_KEY, 'true');
   };
 
-  const studentName = currentUser.displayName?.split(' ')[0] || userProfile?.displayName?.split(' ')[0] || 'Student';
+  const studentName = currentUser?.displayName?.split(' ')[0] || userProfile?.displayName?.split(' ')[0] || 'Math Scholar';
 
   // If dismissed or marked as joined, show a minimal expandable ribbon
   if (isDismissed || hasJoinedLocally) {

@@ -27,12 +27,14 @@ import { DownloadsDrawer, DownloadedItem } from './components/DownloadsDrawer';
 import { ShareModal } from './components/ShareModal';
 import { OlympiadEnrollModal } from './components/OlympiadEnrollModal';
 import { InAppBrowserBanner } from './components/InAppBrowserBanner';
-import { YouTubeIcon, FacebookIcon, WhatsAppIcon, TelegramIcon } from './components/SocialIcons';
+import { YouTubeIcon, FacebookIcon, WhatsAppIcon, TelegramIcon, InstagramIcon } from './components/SocialIcons';
 import { downloadResourceToSystem, printResourceInA4 } from './services/fileDownloader';
 import { attemptAutoLaunchExternalBrowser } from './services/externalBrowser';
 import { AdminControlPanelPage } from './components/AdminControlPanelPage';
 import { StudentMobileRegisterModal } from './components/StudentMobileRegisterModal';
 import { SocialMediaJoinBlock } from './components/SocialMediaJoinBlock';
+import { DownloadCaptchaModal } from './components/DownloadCaptchaModal';
+import { SocialFloatingJoinBar } from './components/SocialFloatingJoinBar';
 import { FormulaDeckPage } from './components/FormulaDeckPage';
 import { FormulaDeckSandbox } from './components/FormulaDeckSandbox';
 import { AiTeacherModal } from './components/AiTeacherModal';
@@ -221,6 +223,14 @@ export default function App() {
 
   // Toast feedback
   const [toastMessage, setToastMessage] = useState<string | null>(null);
+
+  // Captcha security verification before download
+  const [pendingDownloadItem, setPendingDownloadItem] = useState<{
+    title: string;
+    size?: string;
+    resource?: MathResource;
+  } | null>(null);
+  const [isCaptchaModalOpen, setIsCaptchaModalOpen] = useState(false);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -800,7 +810,20 @@ export default function App() {
     });
   }, [allCatalogResources, searchQuery, selectedClass, priceTier, selectedFormat, selectedTopic, selectedStream]);
 
+  // Gated download with Captcha verification
   const handleDownload = (title: string, size?: string, resource?: MathResource) => {
+    const targetResource = resource || allCatalogResources.find((r) => r.title === title || r.id === title);
+    setPendingDownloadItem({
+      title,
+      size: size || targetResource?.sizeOrDuration || '2.1 MB',
+      resource: targetResource,
+    });
+    setIsCaptchaModalOpen(true);
+  };
+
+  const executeVerifiedDownload = () => {
+    if (!pendingDownloadItem) return;
+    const { title, size, resource } = pendingDownloadItem;
     const targetResource = resource || allCatalogResources.find((r) => r.title === title || r.id === title);
 
     try {
@@ -826,7 +849,8 @@ export default function App() {
     };
     recordResourceDownloadEvent(title, false);
     setDownloads((prev) => [newItem, ...prev.filter((p) => p.title !== title)]);
-    showToast(`✓ Downloading "${title}" to your system!`);
+    showToast(`✓ Verification passed! Downloading "${title}" to your system.`);
+    setPendingDownloadItem(null);
   };
 
   const toggleBookmark = (id: string, e: React.MouseEvent) => {
@@ -1526,16 +1550,14 @@ export default function App() {
           </div>
         </section>
 
-        {/* Social Media Community Channels Join Block (Displayed once user is logged in) */}
-        {currentUser && (
-          <SocialMediaJoinBlock
-            currentUser={currentUser}
-            userProfile={userProfile}
-            socialConfig={socialConfig}
-            onToast={showToast}
-            pageText={pageText}
-          />
-        )}
+        {/* Social Media Community Channels Join Block (Displayed for all learners & visitors) */}
+        <SocialMediaJoinBlock
+          currentUser={currentUser}
+          userProfile={userProfile}
+          socialConfig={socialConfig}
+          onToast={showToast}
+          pageText={pageText}
+        />
 
         {/* Multi-Criteria Filter & Search Console */}
         <section className="max-w-7xl mx-auto w-full px-3 sm:px-6 lg:px-8 pt-2 pb-2" id="resource-catalog">
@@ -2459,55 +2481,63 @@ export default function App() {
                 {pageText.footer.aboutText || 'Demystifying school mathematics for Class 5 to Class 10. Step-by-step NCERT solutions, animated concept summaries, and rapid revision sheets created by expert educators.'}
               </p>
               <div className="flex items-center gap-2 flex-wrap">
-                {socialConfig.platforms.youtube.enabled && (
-                  <button
-                    onClick={() => openYouTubeDirectApp(socialConfig.platforms.youtube.url)}
-                    className="w-8 h-8 rounded-full bg-[#e7eeff] hover:bg-red-50 flex items-center justify-center text-[#434655] hover:text-red-600 transition-colors cursor-pointer"
-                    title="Open YouTube App"
-                    type="button"
-                  >
-                    <span className="material-symbols-outlined text-[17px]">smart_display</span>
-                  </button>
-                )}
                 {socialConfig.platforms.whatsapp.enabled && (
-                  <button
-                    onClick={() => shareToWhatsAppDirectApp('Join Maths at Your Fingertips community!', window.location.origin)}
-                    className="w-8 h-8 rounded-full bg-[#e7eeff] hover:bg-emerald-50 flex items-center justify-center text-[#434655] hover:text-emerald-600 transition-colors cursor-pointer"
-                    title="Open WhatsApp App"
-                    type="button"
+                  <a
+                    href={socialConfig.platforms.whatsapp.groupUrl || socialConfig.platforms.whatsapp.url || 'https://chat.whatsapp.com/FMathsFingertipsOfficial'}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="h-8 px-2.5 rounded-full bg-emerald-50 hover:bg-emerald-100 text-emerald-800 border border-emerald-200 flex items-center gap-1.5 text-xs font-bold transition-colors cursor-pointer"
+                    title="Join WhatsApp Community"
                   >
-                    <span className="material-symbols-outlined text-[17px]">chat</span>
-                  </button>
+                    <WhatsAppIcon size={16} />
+                    <span>WhatsApp</span>
+                  </a>
                 )}
                 {socialConfig.platforms.telegram.enabled && (
-                  <button
-                    onClick={() => shareToTelegramDirectApp('Check out Maths at Your Fingertips!', window.location.origin)}
-                    className="w-8 h-8 rounded-full bg-[#e7eeff] hover:bg-blue-50 flex items-center justify-center text-[#434655] hover:text-blue-600 transition-colors cursor-pointer"
-                    title="Open Telegram App"
-                    type="button"
+                  <a
+                    href={socialConfig.platforms.telegram.groupUrl || socialConfig.platforms.telegram.url || 'https://t.me/MathsAtYourFingertips'}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="h-8 px-2.5 rounded-full bg-sky-50 hover:bg-sky-100 text-sky-800 border border-sky-200 flex items-center gap-1.5 text-xs font-bold transition-colors cursor-pointer"
+                    title="Join Telegram Channel"
                   >
-                    <span className="material-symbols-outlined text-[17px]">send</span>
-                  </button>
+                    <TelegramIcon size={16} />
+                    <span>Telegram</span>
+                  </a>
+                )}
+                {socialConfig.platforms.youtube.enabled && (
+                  <a
+                    href={socialConfig.platforms.youtube.url || 'https://youtube.com/@MathsAtYourFingertips'}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="h-8 px-2.5 rounded-full bg-red-50 hover:bg-red-100 text-red-800 border border-red-200 flex items-center gap-1.5 text-xs font-bold transition-colors cursor-pointer"
+                    title="Subscribe to YouTube Channel"
+                  >
+                    <YouTubeIcon size={16} />
+                    <span>YouTube</span>
+                  </a>
                 )}
                 {socialConfig.platforms.instagram.enabled && (
-                  <button
-                    onClick={() => openInstagramDirectApp(socialConfig.platforms.instagram.handleOrNumber)}
-                    className="w-8 h-8 rounded-full bg-[#e7eeff] hover:bg-pink-50 flex items-center justify-center text-[#434655] hover:text-pink-600 transition-colors cursor-pointer"
-                    title="Open Instagram App"
-                    type="button"
+                  <a
+                    href={socialConfig.platforms.instagram.url || 'https://instagram.com/maths_fingertips'}
+                    target="_blank"
+                    rel="noopener noreferrer"
+                    className="h-8 px-2.5 rounded-full bg-pink-50 hover:bg-pink-100 text-pink-800 border border-pink-200 flex items-center gap-1.5 text-xs font-bold transition-colors cursor-pointer"
+                    title="Follow Instagram Page"
                   >
-                    <span className="material-symbols-outlined text-[17px]">photo_camera</span>
-                  </button>
+                    <InstagramIcon size={16} />
+                    <span>Instagram</span>
+                  </a>
                 )}
                 <a
-                  className="w-8 h-8 rounded-full bg-[#e7eeff] flex items-center justify-center text-[#434655] hover:text-[#004ac6] transition-colors"
+                  className="w-8 h-8 rounded-full bg-[#e7eeff] hover:bg-blue-100 flex items-center justify-center text-[#434655] hover:text-[#004ac6] transition-colors"
                   href={`tel:${socialConfig.platforms.whatsapp.handleOrNumber || '+91800123456'}`}
                   title="Direct Phone Line"
                 >
                   <span className="material-symbols-outlined text-[17px]">call</span>
                 </a>
                 <a
-                  className="w-8 h-8 rounded-full bg-[#e7eeff] flex items-center justify-center text-[#434655] hover:text-[#004ac6] transition-colors"
+                  className="w-8 h-8 rounded-full bg-[#e7eeff] hover:bg-blue-100 flex items-center justify-center text-[#434655] hover:text-[#004ac6] transition-colors"
                   href="mailto:help@mathsatyourfingertips.com"
                   title="Email Helpdesk"
                 >
@@ -2816,6 +2846,25 @@ export default function App() {
           setShowDomainModal(false);
           handleGoogleSignIn();
         }}
+      />
+
+      {/* Security Captcha Modal Before File Downloads */}
+      <DownloadCaptchaModal
+        isOpen={isCaptchaModalOpen}
+        onClose={() => {
+          setIsCaptchaModalOpen(false);
+          setPendingDownloadItem(null);
+        }}
+        onVerified={executeVerifiedDownload}
+        itemTitle={pendingDownloadItem?.title || 'Maths Revision Notes'}
+        itemSize={pendingDownloadItem?.size || '2.4 MB'}
+        resource={pendingDownloadItem?.resource}
+      />
+
+      {/* Floating Channels Quick-Join Bar (WhatsApp, Telegram, YouTube, Instagram) */}
+      <SocialFloatingJoinBar
+        socialConfig={socialConfig}
+        onToast={showToast}
       />
     </div>
   );

@@ -110,16 +110,16 @@ export const UnauthorizedDomainModal: React.FC<UnauthorizedDomainModalProps> = (
           </div>
 
           <button
-            onClick={() => onQuickSignIn('2026vivekkushwah@gmail.com', 'Vivek Kushwah (Admin)')}
+            onClick={() => onQuickSignIn('sachinagrawal16@gmail.com', 'Sachin Agrawal (Admin)')}
             className="w-full flex items-center justify-between p-3 bg-gradient-to-r from-amber-50 to-orange-50 hover:from-amber-100 hover:to-orange-100 border border-amber-200 text-amber-950 rounded-2xl text-xs font-bold transition-all cursor-pointer shadow-2xs group"
           >
             <div className="flex items-center gap-2.5">
               <span className="w-8 h-8 rounded-xl bg-amber-500 text-slate-950 font-bold flex items-center justify-center text-xs">
-                VK
+                SA
               </span>
               <div className="text-left">
-                <div className="font-extrabold text-slate-900">Sign in as Vivek Kushwah</div>
-                <div className="text-[10px] text-amber-800">2026vivekkushwah@gmail.com • Admin Privileges</div>
+                <div className="font-extrabold text-slate-900">Sign in as Sachin Agrawal</div>
+                <div className="text-[10px] text-amber-800">sachinagrawal16@gmail.com • Superadmin Privileges</div>
               </div>
             </div>
             <span className="material-symbols-outlined text-[18px] text-amber-700 group-hover:translate-x-0.5 transition-transform">
