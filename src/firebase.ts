@@ -117,6 +117,7 @@ export interface UserProfile {
   whatsappAlerts?: boolean;
   mobileRegisteredAt?: string;
   hasJoinedSocial?: boolean;
+  role?: 'admin' | 'superadmin' | 'faculty' | 'student';
   isPro: boolean;
   proPlan?: string;
   bookmarks?: string[];
@@ -365,18 +366,119 @@ export async function saveRazorpayOrder(orderData: {
 
 // Admin Support & Credentials
 export { firebaseConfig };
-export const ADMIN_EMAILS = [
+
+export interface AdminUserRecord {
+  email: string;
+  role: 'superadmin' | 'admin' | 'faculty';
+  assignedBy: string;
+  assignedAt: string;
+  displayName?: string;
+  notes?: string;
+}
+
+export const PRIMARY_SUPERADMIN_EMAIL = 'sachin.itig@gmail.com';
+
+export const INITIAL_ADMIN_EMAILS = [
   'sachin.itig@gmail.com',
   '2026vivekkushwah@gmail.com',
   'vivekkushwah@gmail.com',
   'admin@mathsatyourfingertips.com',
   'ntnagrawal146@gmail.com',
 ];
+
+export const ADMIN_EMAILS = INITIAL_ADMIN_EMAILS;
 export const MASTER_ADMIN_PASSCODE = 'MATHS2025';
 
-export function isUserAdmin(user: User | null): boolean {
+const ADMINS_LOCAL_KEY = 'maths_portal_assigned_admin_roles_v2';
+
+export function getCachedAssignedAdmins(): AdminUserRecord[] {
+  try {
+    const raw = localStorage.getItem(ADMINS_LOCAL_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        return parsed;
+      }
+    }
+  } catch (e) {
+    // ignore
+  }
+
+  // Return default bootstrap admins
+  return [
+    {
+      email: PRIMARY_SUPERADMIN_EMAIL,
+      role: 'superadmin',
+      assignedBy: 'System Bootstrap',
+      assignedAt: '2025-01-01T00:00:00.000Z',
+      displayName: 'Primary System Administrator',
+      notes: 'Superadministrator with full permanent privileges',
+    },
+    ...INITIAL_ADMIN_EMAILS.filter((e) => e !== PRIMARY_SUPERADMIN_EMAIL).map((email) => ({
+      email,
+      role: 'admin' as const,
+      assignedBy: 'System Provisioning',
+      assignedAt: '2025-01-01T00:00:00.000Z',
+      displayName: email.split('@')[0],
+      notes: 'Verified Educator / Faculty Admin',
+    })),
+  ];
+}
+
+export function saveCachedAssignedAdmins(admins: AdminUserRecord[]): void {
+  try {
+    localStorage.setItem(ADMINS_LOCAL_KEY, JSON.stringify(admins));
+    window.dispatchEvent(new CustomEvent('admins-updated', { detail: admins }));
+  } catch (e) {
+    // ignore
+  }
+}
+
+export async function loadAssignedAdminsFromFirestore(): Promise<AdminUserRecord[]> {
+  try {
+    const docRef = doc(db, 'settings', 'admins');
+    const snap = await getDoc(docRef);
+    if (snap.exists()) {
+      const data = snap.data();
+      if (Array.isArray(data.items) && data.items.length > 0) {
+        saveCachedAssignedAdmins(data.items);
+        return data.items;
+      }
+    }
+  } catch (e) {
+    console.warn('Could not load assigned admins from Firestore:', e);
+  }
+  return getCachedAssignedAdmins();
+}
+
+export async function saveAssignedAdminsToFirestore(admins: AdminUserRecord[]): Promise<void> {
+  saveCachedAssignedAdmins(admins);
+  try {
+    const docRef = doc(db, 'settings', 'admins');
+    await setDoc(
+      docRef,
+      {
+        items: admins,
+        updatedAt: new Date().toISOString(),
+      },
+      { merge: true }
+    );
+  } catch (err) {
+    handleFirestoreError(err, OperationType.WRITE, 'settings/admins');
+  }
+}
+
+export function isUserAdmin(user: User | null, profile?: UserProfile | null): boolean {
   if (!user || !user.email) return false;
-  return ADMIN_EMAILS.includes(user.email.toLowerCase().trim());
+  const cleanEmail = user.email.toLowerCase().trim();
+  if (cleanEmail === PRIMARY_SUPERADMIN_EMAIL.toLowerCase().trim()) return true;
+
+  if (profile && (profile.role === 'admin' || profile.role === 'superadmin')) {
+    return true;
+  }
+
+  const currentAdmins = getCachedAssignedAdmins();
+  return currentAdmins.some((a) => a.email.toLowerCase().trim() === cleanEmail);
 }
 
 export interface OrderRecord {

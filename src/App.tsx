@@ -65,6 +65,7 @@ import {
 import {
   getSeoSettingsLocally,
   applySeoToDocument,
+  applyAdminNoIndexToDocument,
 } from './services/seo';
 import {
   recordResourceDownloadEvent,
@@ -96,14 +97,15 @@ export default function App() {
   // Page view routing: 'store' for student portal, 'admin' for dedicated Control Panel, 'dashboard' for User Dashboard, 'formula-deck' for dedicated interactive sandbox
   const [currentView, setCurrentView] = useState<'store' | 'admin' | 'dashboard' | 'formula-deck'>(() => {
     if (typeof window !== 'undefined') {
+      const p = window.location.pathname.toLowerCase();
       const h = window.location.hash.toLowerCase();
-      if (h.includes('portal-vault') || h.includes('staff-access') || h.includes('faculty-desk') || h.includes('admin')) {
+      if (p.startsWith('/admin') || h.includes('portal-vault') || h.includes('staff-access') || h.includes('faculty-desk') || h.includes('admin')) {
         return 'admin';
       }
-      if (h.includes('dashboard')) {
+      if (p.startsWith('/dashboard') || h.includes('dashboard')) {
         return 'dashboard';
       }
-      if (h.includes('formula')) {
+      if (p.startsWith('/formula-deck') || h.includes('formula')) {
         return 'formula-deck';
       }
     }
@@ -145,7 +147,7 @@ export default function App() {
       }
     };
     document.addEventListener('mousedown', handleOutsideClick);
-    document.addEventListener('touchstart', handleOutsideClick);
+    document.addEventListener('touchstart', handleOutsideClick, { passive: true });
     return () => {
       document.removeEventListener('mousedown', handleOutsideClick);
       document.removeEventListener('touchstart', handleOutsideClick);
@@ -482,20 +484,22 @@ export default function App() {
       console.warn('URL param parse notice:', e);
     }
 
-    // Hash-based page view routing
-    const handleHashChange = () => {
+    // URL and Hash based page view routing (supports direct /admin or #admin)
+    const handleRouteChange = () => {
+      const p = window.location.pathname.toLowerCase();
       const h = window.location.hash.toLowerCase();
-      if (h.includes('portal-vault') || h.includes('staff-access') || h.includes('faculty-desk') || h.includes('admin')) {
+      if (p.startsWith('/admin') || h.includes('portal-vault') || h.includes('staff-access') || h.includes('faculty-desk') || h.includes('admin')) {
         setCurrentView('admin');
-      } else if (h.includes('dashboard')) {
+      } else if (p.startsWith('/dashboard') || h.includes('dashboard')) {
         setCurrentView('dashboard');
-      } else if (h.includes('formula')) {
+      } else if (p.startsWith('/formula-deck') || h.includes('formula')) {
         setCurrentView('formula-deck');
       } else {
         setCurrentView('store');
       }
     };
-    window.addEventListener('hashchange', handleHashChange);
+    window.addEventListener('hashchange', handleRouteChange);
+    window.addEventListener('popstate', handleRouteChange);
 
     return () => {
       window.removeEventListener('branding-changed', handleBrandingChange);
@@ -508,9 +512,19 @@ export default function App() {
       window.removeEventListener('tier-overrides-changed', handleResourcesChanged);
       window.removeEventListener('admin-master-reset', handleMasterReset);
       window.removeEventListener('currency-changed', handleCurrencyChange);
-      window.removeEventListener('hashchange', handleHashChange);
+      window.removeEventListener('hashchange', handleRouteChange);
+      window.removeEventListener('popstate', handleRouteChange);
     };
   }, []);
+
+  // Strict SEO Isolation: Prevent search engine spiders from indexing or scraping admin panel
+  useEffect(() => {
+    if (currentView === 'admin') {
+      applyAdminNoIndexToDocument();
+    } else {
+      applySeoToDocument(getSeoSettingsLocally());
+    }
+  }, [currentView]);
 
   // AI Teacher Assistant State
   const [isAiTeacherOpen, setIsAiTeacherOpen] = useState(false);
@@ -525,7 +539,7 @@ export default function App() {
 
   const handleOpenAdminPanel = () => {
     setCurrentView('admin');
-    window.location.hash = '#portal-vault-8842';
+    window.location.hash = '#admin';
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
@@ -543,6 +557,9 @@ export default function App() {
 
   const handleNavigateHome = () => {
     setCurrentView('store');
+    if (window.location.pathname.toLowerCase().startsWith('/admin')) {
+      window.history.pushState(null, '', '/');
+    }
     window.location.hash = '';
     window.scrollTo({ top: 0, behavior: 'smooth' });
   };
@@ -843,7 +860,9 @@ export default function App() {
       <div className="w-full min-h-screen bg-slate-950 font-['Plus_Jakarta_Sans',sans-serif]">
         <AdminControlPanelPage
           currentUser={currentUser}
+          userProfile={userProfile}
           onGoogleSignIn={handleGoogleSignIn}
+          onSignOut={handleSignOut}
           onToast={showToast}
           onNavigateHome={handleNavigateHome}
         />
@@ -954,7 +973,7 @@ export default function App() {
   }
 
   return (
-    <div className="w-full max-w-full overflow-x-hidden bg-[#f9f9ff] font-['Plus_Jakarta_Sans',sans-serif] text-[#111c2d] antialiased min-h-screen flex flex-col selection:bg-blue-100 selection:text-blue-900">
+    <div className="w-full max-w-full bg-[#f9f9ff] font-['Plus_Jakarta_Sans',sans-serif] text-[#111c2d] antialiased min-h-screen flex flex-col selection:bg-blue-100 selection:text-blue-900">
       {/* Social Media In-App Browser Warning & Chrome Intent Launcher */}
       <InAppBrowserBanner />
 
@@ -979,7 +998,6 @@ export default function App() {
         onOpenFormulaDeck={handleNavigateToFormulaDeck}
         onOpenAiTeacher={() => handleOpenAiTeacher()}
         onOpenProPass={() => setIsProPassModalOpen(true)}
-        onOpenAdminPanel={handleOpenAdminPanel}
         onOpenDashboard={handleOpenDashboard}
         onOpenMobileRegister={() => setShowMobileRegisterModal(true)}
         onShareWebsite={() => openShare(branding.siteTitle, window.location.origin)}
@@ -1013,7 +1031,7 @@ export default function App() {
         }}
       />
 
-      <main className="w-full max-w-full overflow-x-hidden pt-24 sm:pt-28 bg-[#f9f9ff] min-h-screen flex-1">
+      <main className="w-full max-w-full pt-24 sm:pt-28 bg-[#f9f9ff] min-h-screen flex-1">
         {/* Top Advertisement / Olympiad Banner */}
         {pageText.announcement.enabled && (
           <section className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 pt-3 pb-2 w-full">
@@ -2421,16 +2439,18 @@ export default function App() {
         <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 w-full">
           <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-6 sm:gap-8 pb-8 sm:pb-10">
             <div className="col-span-2">
-              <div className="flex items-center gap-2 mb-2 sm:mb-3">
-                {branding.iconUrl && (
-                  <img
-                    src={branding.iconUrl}
-                    alt={branding.siteTitle || 'Logo'}
-                    className="w-6 h-6 object-contain rounded-md"
-                  />
-                )}
+              <div className="flex items-center gap-3 mb-2 sm:mb-3">
+                <img
+                  src={
+                    branding.logoUrl ||
+                    branding.iconUrl ||
+                    'https://lh3.googleusercontent.com/aida/AEtjO1UjgWp59CcYsKXuqwB2FYHcehNEDlMGhbND9VEHl154aFff2EPvt39mUwZ6qXVc-edHZxj5IPmP7JbzGPqzLaCgdQX4S4GUMQBtC4KxFgHHUCu_55VykewYAvz0ReMRXT-l8SNrEHvxLcCxtTX0zVGZ6bSEQvSxd3WcuoKgXa3gTPPWl-czWwPLaYldf3jK6W4CDevlmvi08ew8Ag-k6FiBm7lx3ROJP5G9hsY15VySSpP-r5sf3fqLFLs'
+                  }
+                  alt={branding.siteTitle || 'Logo'}
+                  className="h-9 sm:h-11 w-auto object-contain drop-shadow-xs"
+                />
                 {branding.siteTitle && (
-                  <span className="text-lg sm:text-[20px] font-bold text-[#004ac6]">
+                  <span className="text-xl sm:text-[22px] font-black text-[#004ac6]">
                     {branding.siteTitle}
                   </span>
                 )}
@@ -2624,18 +2644,6 @@ export default function App() {
                     Terms of Learning
                   </a>
                 </li>
-                {/* Admin button ONLY rendered if verified admin */}
-                {isUserAdmin(currentUser) && (
-                  <li>
-                    <button
-                      onClick={handleOpenAdminPanel}
-                      className="hover:text-amber-700 text-left cursor-pointer transition-colors flex items-center gap-1.5 font-semibold text-amber-700 pt-1"
-                    >
-                      <span>Teacher Control Panel</span>
-                      <span className="material-symbols-outlined text-[14px]">lock</span>
-                    </button>
-                  </li>
-                )}
               </ul>
             </div>
           </div>
@@ -2651,15 +2659,6 @@ export default function App() {
                 >
                   <span className="material-symbols-outlined text-[13px]">account_circle</span>
                   <span>My Student Dashboard</span>
-                </button>
-              )}
-              {isUserAdmin(currentUser) && (
-                <button
-                  onClick={handleOpenAdminPanel}
-                  className="text-amber-700 hover:underline cursor-pointer flex items-center gap-1"
-                >
-                  <span className="material-symbols-outlined text-[13px]">admin_panel_settings</span>
-                  <span>Admin Control Center</span>
                 </button>
               )}
             </div>

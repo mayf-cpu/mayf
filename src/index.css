@@ -5,26 +5,28 @@
     box-sizing: border-box;
   }
 
-  html, body {
+  html {
     margin: 0;
     padding: 0;
     width: 100%;
-    max-width: 100%;
-    overflow-x: hidden;
-    font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+    scroll-behavior: smooth;
+    -webkit-text-size-adjust: 100%;
   }
-  
+
   body {
-    overscroll-behavior-y: none;
+    margin: 0;
+    padding: 0;
+    width: 100%;
+    min-height: 100%;
     background-color: #f9f9ff;
     color: #111c2d;
     min-width: 320px;
+    font-family: 'Plus Jakarta Sans', system-ui, -apple-system, sans-serif;
+    -webkit-overflow-scrolling: touch;
   }
 
   #root {
     width: 100%;
-    max-width: 100%;
-    overflow-x: hidden;
     min-height: 100vh;
   }
 }

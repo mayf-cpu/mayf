@@ -33,7 +33,6 @@ interface HeaderProps {
   onGoogleSignIn: () => void;
   onSignOut: () => void;
   authLoading: boolean;
-  onOpenAdminPanel: () => void;
   onOpenDashboard?: () => void;
   onOpenMobileRegister?: () => void;
   onOpenAiTeacher?: () => void;
@@ -61,7 +60,6 @@ export const Header: React.FC<HeaderProps> = ({
   onGoogleSignIn,
   onSignOut,
   authLoading,
-  onOpenAdminPanel,
   onOpenDashboard,
   onOpenMobileRegister,
   onOpenAiTeacher,
@@ -101,7 +99,7 @@ export const Header: React.FC<HeaderProps> = ({
     };
 
     document.addEventListener('mousedown', handleOutsideClick);
-    document.addEventListener('touchstart', handleOutsideClick);
+    document.addEventListener('touchstart', handleOutsideClick, { passive: true });
     return () => {
       document.removeEventListener('mousedown', handleOutsideClick);
       document.removeEventListener('touchstart', handleOutsideClick);
@@ -327,12 +325,12 @@ export const Header: React.FC<HeaderProps> = ({
                 onSelectNav('explore-notes');
                 window.scrollTo({ top: 0, behavior: 'smooth' });
               }}
-              className="flex items-center gap-2 sm:gap-3 text-left cursor-pointer group min-w-0"
+              className="flex items-center gap-2.5 sm:gap-3.5 text-left cursor-pointer group min-w-0 py-1"
               title="Return to Home"
             >
               <img
                 alt={branding?.siteTitle || 'Brand logo'}
-                className="h-7 sm:h-8 w-auto object-contain transition-transform group-hover:scale-105 shrink-0"
+                className="h-9 sm:h-11 md:h-12 w-auto object-contain transition-transform group-hover:scale-105 shrink-0 drop-shadow-xs"
                 src={
                   branding?.logoUrl ||
                   'https://lh3.googleusercontent.com/aida/AEtjO1UjgWp59CcYsKXuqwB2FYHcehNEDlMGhbND9VEHl154aFff2EPvt39mUwZ6qXVc-edHZxj5IPmP7JbzGPqzLaCgdQX4S4GUMQBtC4KxFgHHUCu_55VykewYAvz0ReMRXT-l8SNrEHvxLcCxtTX0zVGZ6bSEQvSxd3WcuoKgXa3gTPPWl-czWwPLaYldf3jK6W4CDevlmvi08ew8Ag-k6FiBm7lx3ROJP5G9hsY15VySSpP-r5sf3fqLFLs'
@@ -342,14 +340,14 @@ export const Header: React.FC<HeaderProps> = ({
                 <div className="flex flex-col min-w-0">
                   {hasSiteTitle && (
                     <span
-                      className="text-sm sm:text-base lg:text-[19px] font-extrabold leading-tight tracking-tight truncate max-w-[150px] sm:max-w-[210px] md:max-w-none transition-colors"
+                      className="text-base sm:text-lg lg:text-[21px] font-black leading-tight tracking-tight truncate max-w-[190px] sm:max-w-[280px] md:max-w-none transition-colors"
                       style={{ color: themeConfig?.primaryColor || '#004ac6' }}
                     >
                       {branding!.siteTitle}
                     </span>
                   )}
                   {hasTagline && (
-                    <span className="hidden sm:block text-[10px] font-bold text-[#434655] uppercase tracking-wider truncate">
+                    <span className="hidden sm:block text-[10px] sm:text-[11px] font-bold text-[#434655] uppercase tracking-wider truncate">
                       {branding!.tagline}
                     </span>
                   )}
@@ -756,24 +754,6 @@ export const Header: React.FC<HeaderProps> = ({
                           </button>
                         )}
 
-                        {isAdmin && (
-                          <button
-                            onClick={() => {
-                              setShowProfileMenu(false);
-                              onOpenAdminPanel();
-                            }}
-                            className="w-full text-left py-1.5 px-2 text-xs font-bold text-slate-800 hover:bg-slate-100 rounded-lg flex items-center justify-between cursor-pointer transition-colors"
-                          >
-                            <div className="flex items-center gap-2">
-                              <span className="material-symbols-outlined text-[16px] text-amber-500">admin_panel_settings</span>
-                              <span>Admin &amp; Gateway</span>
-                            </div>
-                            <span className="text-[10px] bg-amber-100 text-amber-800 font-bold px-1.5 py-0.2 rounded">
-                              Admin Only
-                            </span>
-                          </button>
-                        )}
-
                         <button
                           onClick={() => {
                             setShowProfileMenu(false);
@@ -962,17 +942,17 @@ export const Header: React.FC<HeaderProps> = ({
           <div className="relative w-full max-w-sm sm:max-w-md bg-white h-full shadow-2xl z-10 flex flex-col overflow-y-auto font-['Plus_Jakarta_Sans',sans-serif]">
             {/* Drawer Header */}
             <div className="p-4 sm:p-5 border-b border-gray-100 flex items-center justify-between gap-3 bg-gradient-to-r from-blue-50/60 to-indigo-50/60 shrink-0">
-              <div className="flex items-center gap-2.5 min-w-0">
+              <div className="flex items-center gap-3 min-w-0">
                 <img
                   alt={branding?.siteTitle || 'Logo'}
-                  className="h-6 w-auto object-contain"
+                  className="h-8 sm:h-9 w-auto object-contain drop-shadow-xs"
                   src={
                     branding?.logoUrl ||
                     'https://lh3.googleusercontent.com/aida/AEtjO1UjgWp59CcYsKXuqwB2FYHcehNEDlMGhbND9VEHl154aFff2EPvt39mUwZ6qXVc-edHZxj5IPmP7JbzGPqzLaCgdQX4S4GUMQBtC4KxFgHHUCu_55VykewYAvz0ReMRXT-l8SNrEHvxLcCxtTX0zVGZ6bSEQvSxd3WcuoKgXa3gTPPWl-czWwPLaYldf3jK6W4CDevlmvi08ew8Ag-k6FiBm7lx3ROJP5G9hsY15VySSpP-r5sf3fqLFLs'
                   }
                 />
                 {hasSiteTitle && (
-                  <span className="font-extrabold text-sm text-[#004ac6] truncate">
+                  <span className="font-black text-base text-[#004ac6] truncate">
                     {branding?.siteTitle}
                   </span>
                 )}
@@ -1231,26 +1211,7 @@ export const Header: React.FC<HeaderProps> = ({
                 </div>
               </div>
 
-              {/* 6. ADMIN CONTROL CENTER (If Admin) */}
-              {isAdmin && (
-                <div className="pt-2 border-t border-gray-100">
-                  <button
-                    onClick={() => {
-                      setSidebarOpen(false);
-                      onOpenAdminPanel();
-                    }}
-                    className="w-full flex items-center justify-between p-3 rounded-xl bg-slate-900 text-amber-300 text-xs font-bold shadow-xs hover:bg-slate-800 transition-colors cursor-pointer border border-amber-500/40"
-                  >
-                    <div className="flex items-center gap-2">
-                      <span className="material-symbols-outlined text-[18px] text-amber-400">admin_panel_settings</span>
-                      <span>Admin Control Center</span>
-                    </div>
-                    <span className="w-2 h-2 rounded-full bg-emerald-400 animate-pulse"></span>
-                  </button>
-                </div>
-              )}
-
-              {/* 7. SOCIAL MEDIA COMMUNITIES & SHARE (Especially Crucial for Mobile) */}
+              {/* 6. SOCIAL MEDIA COMMUNITIES & SHARE (Especially Crucial for Mobile) */}
               <div className="pt-2 border-t border-gray-100">
                 <div className="text-[11px] font-bold text-gray-400 uppercase tracking-wider px-2 mb-2 flex items-center justify-between">
                   <span>Study Communities</span>

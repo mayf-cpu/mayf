@@ -58,6 +58,12 @@ export function applySeoToDocument(seo: SeoSettings): void {
     kwMeta.setAttribute('content', seo.keywords);
   }
 
+  // Robots indexing directive
+  const robotsDirective = seo.enableRobotsIndex !== false ? 'index, follow' : 'noindex, nofollow';
+  setMetaTag('robots', robotsDirective, 'name');
+  setMetaTag('googlebot', robotsDirective, 'name');
+  setMetaTag('bingbot', robotsDirective, 'name');
+
   // OpenGraph Tags
   setMetaTag('og:title', seo.ogTitle || seo.metaTitle);
   setMetaTag('og:description', seo.ogDescription || seo.metaDescription);
@@ -109,6 +115,33 @@ export function applySeoToDocument(seo: SeoSettings): void {
     ]
   };
   scriptLd.textContent = JSON.stringify(structuredData);
+}
+
+/**
+ * Strictly prevents any search engine, crawler, or scraper from indexing,
+ * caching, archiving, or displaying snippets of the Admin management page.
+ */
+export function applyAdminNoIndexToDocument(): void {
+  if (typeof document === 'undefined') return;
+
+  document.title = 'Administrative Management Console';
+
+  // Strictly enforce noindex on all bots
+  setMetaTag('robots', 'noindex, nofollow, noarchive, nosnippet, noimageindex', 'name');
+  setMetaTag('googlebot', 'noindex, nofollow, noarchive, nosnippet', 'name');
+  setMetaTag('bingbot', 'noindex, nofollow, noarchive, nosnippet', 'name');
+
+  // Strip canonical link so search engines do not link to admin
+  const canonical = document.querySelector('link[rel="canonical"]');
+  if (canonical) {
+    canonical.remove();
+  }
+
+  // Remove structured data while in admin console
+  const jsonld = document.getElementById('schema-jsonld');
+  if (jsonld) {
+    jsonld.remove();
+  }
 }
 
 function setMetaTag(property: string, content: string, attrName: 'property' | 'name' = 'property'): void {

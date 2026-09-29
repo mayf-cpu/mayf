@@ -1,0 +1,41 @@
+User-agent: *
+Disallow: /admin
+Disallow: /admin/
+Disallow: /admin*
+Disallow: /*?*admin*
+Disallow: /api/admin
+Disallow: /api/admin/
+Disallow: /portal-vault*
+Disallow: /staff-access*
+Disallow: /faculty-desk*
+Disallow: /#admin*
+Disallow: /#*admin*
+
+User-agent: Googlebot
+Disallow: /admin
+Disallow: /admin/
+Disallow: /admin*
+Disallow: /*?*admin*
+
+User-agent: Googlebot-Image
+Disallow: /admin*
+
+User-agent: Bingbot
+Disallow: /admin
+Disallow: /admin/
+Disallow: /admin*
+Disallow: /*?*admin*
+
+User-agent: Slurp
+Disallow: /admin*
+
+User-agent: DuckDuckBot
+Disallow: /admin*
+
+User-agent: Baiduspider
+Disallow: /admin*
+
+User-agent: YandexBot
+Disallow: /admin*
+
+Sitemap: https://mathsatyourfingertips.com/sitemap.xml

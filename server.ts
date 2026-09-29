@@ -15,6 +15,60 @@ const PORT = Number(process.env.PORT) || 3000;
 app.use(express.json({ limit: '20mb' }));
 app.use(express.urlencoded({ extended: true, limit: '20mb' }));
 
+// Anti-SEO / Anti-Scraping Header Guard: Disallows indexing for any admin URLs
+app.use((req, res, next) => {
+  const url = req.originalUrl.toLowerCase();
+  if (url.includes('/admin') || url.includes('/portal-vault') || url.includes('/api/admin')) {
+    res.setHeader('X-Robots-Tag', 'noindex, nofollow, noarchive, nosnippet');
+  }
+  next();
+});
+
+// Serve robots.txt directly
+app.get('/robots.txt', (req, res) => {
+  res.setHeader('Content-Type', 'text/plain');
+  res.setHeader('Cache-Control', 'public, max-age=86400');
+  res.sendFile(path.resolve(__dirname, 'public', 'robots.txt'));
+});
+
+// Clean sitemap.xml strictly excluding any admin URLs
+app.get('/sitemap.xml', (req, res) => {
+  res.setHeader('Content-Type', 'application/xml');
+  const host = req.get('host') || 'mathsatyourfingertips.com';
+  const proto = req.protocol || 'https';
+  const baseUrl = `${proto}://${host}`;
+  const sitemapXml = `<?xml version="1.0" encoding="UTF-8"?>
+<urlset xmlns="http://www.sitemaps.org/schemas/sitemap/0.9">
+  <url>
+    <loc>${baseUrl}/</loc>
+    <changefreq>daily</changefreq>
+    <priority>1.0</priority>
+  </url>
+  <url>
+    <loc>${baseUrl}/#formula-deck</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.9</priority>
+  </url>
+  <url>
+    <loc>${baseUrl}/#explore-notes</loc>
+    <changefreq>daily</changefreq>
+    <priority>0.8</priority>
+  </url>
+  <url>
+    <loc>${baseUrl}/#video-lessons</loc>
+    <changefreq>weekly</changefreq>
+    <priority>0.8</priority>
+  </url>
+</urlset>`;
+  res.send(sitemapXml);
+});
+
+// Direct admin URL route: redirects to /#admin with X-Robots-Tag noindex header
+app.get(['/admin', '/admin/*'], (req, res) => {
+  res.setHeader('X-Robots-Tag', 'noindex, nofollow, noarchive, nosnippet');
+  res.redirect(302, '/#admin');
+});
+
 // Initialize Google GenAI client (User-Agent header required by skill)
 const ai = new GoogleGenAI({
   apiKey: process.env.GEMINI_API_KEY || '',

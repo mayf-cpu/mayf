@@ -662,44 +662,6 @@ export const UserDashboardPage: React.FC<UserDashboardPageProps> = ({
                     </div>
                   </div>
                 </div>
-
-                {/* Secret Admin Vault Entry (Visible ONLY for Sachins account / Admins) */}
-                {isAdmin && (
-                  <div className="bg-slate-900 text-slate-100 rounded-3xl p-5 border border-blue-500/30 space-y-3 shadow-md animate-fadeIn">
-                    <div className="flex items-center gap-2 text-blue-400">
-                      <span className="material-symbols-outlined text-[20px]">admin_panel_settings</span>
-                      <span className="text-xs font-black uppercase tracking-wider">Teacher Control Room</span>
-                    </div>
-                    <p className="text-[11px] text-slate-400 leading-relaxed">
-                      You have verified administrative privileges. Access the portal control room via the unique non-identifiable URL below:
-                    </p>
-                    <div className="p-2 bg-slate-950 rounded-xl font-mono text-[10px] text-blue-300 break-all border border-slate-800 select-all">
-                      {window.location.origin}/#portal-vault-8842
-                    </div>
-                    <div className="flex gap-2">
-                      <button
-                        type="button"
-                        onClick={() => {
-                          window.location.hash = '#portal-vault-8842';
-                        }}
-                        className="flex-1 bg-blue-600 hover:bg-blue-500 text-white font-bold text-xs py-2 px-3 rounded-xl cursor-pointer text-center"
-                      >
-                        Enter Control Room →
-                      </button>
-                      <button
-                        type="button"
-                        onClick={() => {
-                          navigator.clipboard?.writeText(`${window.location.origin}/#portal-vault-8842`);
-                          onToast('Copied secret admin URL to clipboard!');
-                        }}
-                        className="bg-slate-800 hover:bg-slate-700 text-slate-200 text-xs px-2.5 py-2 rounded-xl cursor-pointer"
-                        title="Copy Secret Admin URL"
-                      >
-                        <span className="material-symbols-outlined text-[16px]">content_copy</span>
-                      </button>
-                    </div>
-                  </div>
-                )}
               </div>
             </div>
           </form>
