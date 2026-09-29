@@ -634,10 +634,10 @@ export const Header: React.FC<HeaderProps> = ({
               <button
                 onClick={onOpenAiTeacher}
                 className="hidden md:inline-flex items-center gap-1.5 text-xs font-extrabold px-3 py-1.5 rounded-xl cursor-pointer transition-all shrink-0 shadow-xs border bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-500 hover:to-amber-600 text-slate-950 border-amber-300"
-                title="Ask Math Teacher AI (Step-by-Step Solver)"
+                title="Ask Teacher (Classroom Board Solver)"
               >
-                <span className="material-symbols-outlined text-[17px]">psychology</span>
-                <span>AI Teacher</span>
+                <span className="material-symbols-outlined text-[17px]">co_present</span>
+                <span>Ask Teacher</span>
                 <span className="w-1.5 h-1.5 rounded-full bg-emerald-600 animate-pulse"></span>
               </button>
             )}
@@ -1058,15 +1058,15 @@ export const Header: React.FC<HeaderProps> = ({
                 >
                   <div className="flex items-center gap-3">
                     <div className="w-10 h-10 rounded-xl bg-slate-950 text-amber-400 flex items-center justify-center font-bold shrink-0">
-                      <span className="material-symbols-outlined text-[22px]">psychology</span>
+                      <span className="material-symbols-outlined text-[22px]">co_present</span>
                     </div>
                     <div>
                       <div className="text-xs font-black uppercase tracking-tight flex items-center gap-1.5">
-                        <span>Prof. Raman • AI Teacher</span>
+                        <span>Ask Teacher</span>
                         <span className="w-2 h-2 rounded-full bg-emerald-600 animate-pulse"></span>
                       </div>
                       <div className="text-[11px] text-slate-900 font-semibold opacity-90">
-                        Ask any math question via text or photo
+                        Classroom Board Solver • Ask via text or photo
                       </div>
                     </div>
                   </div>

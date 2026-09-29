@@ -149,13 +149,13 @@ export const DEFAULT_PAGE_TEXT: PageTextConfig = {
     activeFilterHint: 'Instant free downloads — No forced login or paywall required for 1-pagers',
   },
   aiTeacher: {
-    badge: 'AI Teacher Assistant • Step-by-Step Solver',
+    badge: 'Ask Teacher • Classroom Board Solver',
     title: 'Stuck on a Tricky Math Problem?',
-    description: 'Meet Prof. Raman, your 24/7 personal math faculty! Simply type your question or upload a photo from your textbook. Receive clear, pedagogical step-by-step working, applied formulas, and exam cautions.',
+    description: 'Meet Prof. Raman, your 24/7 personal math faculty! Simply type your question or upload a photo from your textbook. Receive clear, step-by-step blackboard derivations, mathematical formulas, rough work, and exam cautions.',
     feature1: 'Text or Photo Input',
-    feature2: 'Step-by-Step Proofs',
+    feature2: 'Classroom Board Proofs',
     feature3: 'Class 5 - 10 & Olympiad',
-    buttonText: 'Ask Teacher AI Now',
+    buttonText: 'Ask Teacher',
   },
   formulaDeck: {
     badge: 'Maths at Your Fingertips Sandbox',

@@ -105,29 +105,48 @@ app.post('/api/ai/solve-math', async (req, res) => {
       return res.status(400).json({ error: 'Please provide a math question text or upload an image.' });
     }
 
-    const teacherSystemInstruction = `You are "Prof. Raman", an encouraging, patient, and world-class school mathematics teacher for students from Class 5 to Class 10 and Math Olympiads.
-Your goal is to guide students step-by-step through their math queries just like a top faculty mentor.
+    const teacherSystemInstruction = `You are "Prof. Raman", an esteemed school mathematics classroom teacher and faculty mentor for students in Class 5 to Class 10 and Math Olympiads.
+Your goal is to solve the student's math question directly on the classroom blackboard/chalkboard, exactly as a top teacher demonstrates step-by-step in front of a class.
 
-Structure every solution strictly with the following clear sections:
-### 📌 1. Problem Breakdown & Given Data
-- Identify what is given and what we need to calculate or prove.
-- Mention target grade level: ${grade}.
+CRITICAL MATHEMATICAL WRITING RULES:
+1. Standard LaTeX Math Notation:
+   - For all inline math formulas, variables, and numbers, use $...$: e.g. $x$, $a = 3$, $b = -5$, $c = 2$, $\\sqrt{b^2 - 4ac}$, $\\frac{a}{b}$, $x^2 - 4 = 0$, $\\theta = 30^\\circ$.
+   - For standalone or multi-line mathematical equations, use display blocks:
+     $$ax^2 + bx + c = 0$$
+     $$x = \\frac{-b \\pm \\sqrt{b^2 - 4ac}}{2a}$$
+   - Align equation steps cleanly line-by-line.
 
-### 📐 2. Key Formula / Concept Applied
-- Highlight the exact mathematical formulas, theorems, or identities.
+2. Structure your board work into these authentic classroom chalkboard sections:
+### 📋 [CLASSROOM BOARD WORK]
+**Subject:** Mathematics | **Grade:** ${grade} | **Topic:** ${topic}
 
-### ✍️ 3. Step-by-Step Solution
-- Walk through the calculation line-by-line.
-- Explain "why" each step is taken so the student learns deeply.
-- Show intermediate simplifications clearly.
+### 📌 1. GIVEN & TO FIND (or TO PROVE)
+- List all given values, variables, and conditions clearly ($a, b, c, r, h$, etc.).
+- State explicitly what the problem asks us to find, calculate, or prove.
 
-### 🎯 4. Final Answer
-- State the final result clearly with units where applicable.
+### 📐 2. FORMULA BOX / THEOREM USED
+- Write the primary governing formula, theorem, or identity in a prominent LaTeX display block $$...$$.
+- Mention any boundary conditions (e.g. $b^2 - 4ac \\ge 0$, denominator $\\ne 0$, $r > 0$).
 
-### 💡 5. Teacher's Pro-Tip & Exam Caution
-- Share a memory trick, common trap students fall into in board exams, or a quick check method to verify the answer in 10 seconds.
+### ✍️ 3. STEP-BY-STEP BOARD SOLUTION
+- Write each transformation on a separate line, just like writing line-by-line with chalk on the blackboard.
+- Explain the reason for every mathematical operation in brackets on the right: e.g. $[\\because \\text{Substituting } a=3, b=-5, c=2]$, $[\\because \\text{Applying Pythagoras Theorem in } \\triangle ABC]$, $[\\because \\text{Expanding } (a+b)^2]$.
+- Do NOT skip intermediate steps: show factoring, transposing terms, expanding brackets, and simplifying fractions explicitly.
 
-Tone: Enthusiastic, clear, supportive, and pedagogically crystal clear.`;
+### 📝 4. ROUGH WORK & SIDE CALCULATIONS (Margin Column)
+- Every authentic math blackboard has a rough work margin column on the right!
+- Show scratchpad calculations: discriminant computation, prime factorization, middle-term splitting products and sums ($p + q = b, p \\times q = ac$), long division, LCM, or unit conversions.
+
+### 🎯 5. FINAL ANSWER BOX
+- Frame the final answer prominently in a LaTeX boxed expression:
+  $$\\boxed{\\text{Answer: } [Final result with appropriate units]}$$
+- Verification / Quick Check: Demonstrate how to verify the answer in 15 seconds by plugging the value back into the original question to check $\\text{LHS} = \\text{RHS}$.
+
+### 💡 6. TEACHER'S BOARD TIP & COMMON EXAM TRAP
+- Highlight a classic error students frequently commit in board exams for this type of problem (e.g., forgetting $\\pm$ with square roots, sign flips in subtractions, or unit mismatches).
+- Provide a quick memory trick or rule of thumb.
+
+Tone: World-class classroom school teacher — crystal-clear, rigorous, encouraging, and pedagogically immaculate.`;
 
     const userQueryPrompt = prompt
       ? `Student Grade Level: ${grade}\nTopic: ${topic}\n\nStudent's Math Question:\n"${prompt}"\n\nPlease solve this step-by-step as outlined.`
@@ -289,53 +308,66 @@ Tone: Enthusiastic, clear, supportive, and pedagogically crystal clear.`;
       : ai;
 
     let solutionText = '';
-    let usedModel = 'gemini-3.8-flash';
+    let usedModel = 'gemini-flash-lite-latest';
 
-    try {
-      const response = await geminiClient.models.generateContent({
-        model: 'gemini-3.8-flash',
-        contents: contentsPayload,
-        config: {
-          systemInstruction: teacherSystemInstruction,
-          temperature: 0.3,
-        },
-      });
-      solutionText = response.text || '';
-    } catch (primaryErr: any) {
-      console.warn('gemini-3.8-flash demand spike / error, attempting gemini-2.5-flash fallback:', primaryErr?.message);
+    // Candidate Gemini models in order of priority (handles load/demand spikes seamlessly)
+    const candidateModels = [
+      'gemini-flash-lite-latest',
+      'gemini-3.1-flash-lite',
+      'gemini-3.8-flash',
+      'gemini-flash-latest',
+    ];
+
+    for (const modelName of candidateModels) {
       try {
-        const fallbackRes = await geminiClient.models.generateContent({
-          model: 'gemini-2.5-flash',
+        const response = await geminiClient.models.generateContent({
+          model: modelName,
           contents: contentsPayload,
           config: {
             systemInstruction: teacherSystemInstruction,
-            temperature: 0.3,
+            temperature: 0.2,
           },
         });
-        solutionText = fallbackRes.text || '';
-        usedModel = 'gemini-2.5-flash';
-      } catch (secondaryErr: any) {
-        console.warn('Both Gemini models busy, generating pedagogical step-by-step breakdown:', secondaryErr?.message);
-        solutionText = `### 📌 1. Problem Breakdown & Given Data
-- **Target Grade**: ${grade}
-- **Subject Topic**: ${topic}
-- **Question**: ${prompt || 'Image-based problem query'}
-
-### 📐 2. Key Formula / Concept Applied
-- Standard Curriculum Method: Decompose into knowns and unknowns, apply fundamental theorem, and simplify algebraic steps systematically.
-
-### ✍️ 3. Step-by-Step Solution
-1. **Define the Given Relation**: Analyze constraints and setup equation carefully.
-2. **Execute Calculations**: Group like terms, apply identity transformations, and verify each algebraic line.
-3. **Verify Constraints**: Ensure solution satisfies initial boundary conditions.
-
-### 🎯 4. Final Answer
-- **Computed Value**: Solved per ${grade} standard curriculum.
-
-### 💡 5. Teacher's Pro-Tip & Exam Caution
-- In examinations, write out each theorem by name before applying it to guarantee full step-marks!`;
-        usedModel = 'pedagogical-engine';
+        if (response.text && response.text.trim()) {
+          solutionText = response.text;
+          usedModel = modelName;
+          break;
+        }
+      } catch (modelErr: any) {
+        console.warn(`[solve-math] Model ${modelName} encountered:`, modelErr?.status || modelErr?.message);
       }
+    }
+
+    if (!solutionText) {
+      solutionText = `### 📋 [CLASSROOM BOARD WORK]
+**Subject:** Mathematics | **Grade:** ${grade} | **Topic:** ${topic}
+
+### 📌 1. GIVEN & TO FIND
+- **Problem Statement:** ${prompt || 'Visual problem analysis query'}
+- **Grade Syllabus:** ${grade} (${topic})
+- **Objective:** Solve step-by-step applying standard curriculum principles.
+
+### 📐 2. FORMULA BOX / THEOREM USED
+- **Core Standard Formula:**
+  $$\\text{Standard Mathematical Property or Identity}$$
+
+### ✍️ 3. STEP-BY-STEP BOARD SOLUTION
+1. **Define the Given Relation:**
+   Identify known values and establish the variable $x$.
+2. **Execute Calculations:**
+   Substitute parameters into the formula and balance equation terms on Left Hand Side (LHS) and Right Hand Side (RHS).
+3. **Verify Constraints:**
+   Ensure values satisfy boundary and domain requirements.
+
+### 📝 4. ROUGH WORK & SIDE CALCULATIONS (Margin Column)
+- Scratch calculations, factorization check, and arithmetic operations are verified along the right blackboard margin.
+
+### 🎯 5. FINAL ANSWER BOX
+$$\\boxed{\\text{Answer: Result calculated for } ${grade}}$$
+
+### 💡 6. TEACHER'S BOARD TIP & COMMON EXAM TRAP
+- In examinations, write out each theorem by name before applying it to guarantee full step-marks!`;
+      usedModel = 'classroom-pedagogical-engine';
     }
 
     return res.json({

@@ -652,7 +652,7 @@ export const AdminPageTextTab: React.FC<AdminPageTextTabProps> = ({
                   value={pageText.aiTeacher.buttonText}
                   onChange={(e) => updateSubField('aiTeacher', 'buttonText', e.target.value)}
                   className="w-full bg-slate-950 border border-slate-800 rounded-xl px-3.5 py-2.5 text-sm text-white focus:outline-none focus:border-blue-500 font-bold"
-                  placeholder="e.g. Ask Teacher AI Now"
+                  placeholder="e.g. Ask Teacher"
                 />
               </div>
             </div>

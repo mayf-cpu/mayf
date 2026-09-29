@@ -6,6 +6,7 @@ import {
   fetchStudentAiQueries,
   AiQueryRecord,
 } from '../firebase';
+import { ClassroomBoardRenderer } from './ClassroomBoardRenderer';
 
 interface AiTeacherModalProps {
   isOpen: boolean;
@@ -117,7 +118,7 @@ export const AiTeacherModal: React.FC<AiTeacherModalProps> = ({
   // Submit Query to Server AI endpoint
   const handleAskTeacher = async () => {
     if (!currentUser) {
-      onToast('Please sign in before asking Teacher AI.');
+      onToast('Please sign in before asking Teacher.');
       return;
     }
 
@@ -170,7 +171,7 @@ export const AiTeacherModal: React.FC<AiTeacherModalProps> = ({
         hasImage: Boolean(imagePreview),
         imagePreview: imagePreview ? imagePreview.substring(0, 500) + '...' : undefined,
         solution,
-        modelUsed: data.model || 'gemini-3.8-flash',
+        modelUsed: data.model || 'gemini-flash-lite-latest',
         createdAt: new Date().toISOString(),
       };
 
@@ -179,13 +180,13 @@ export const AiTeacherModal: React.FC<AiTeacherModalProps> = ({
       // Update student history list
       setRecentQueries((prev) => [queryRecord, ...prev]);
 
-      onToast('Solution prepared by Teacher AI!');
+      onToast('Classroom board solution prepared by Teacher!');
       setTimeout(() => {
         solutionEndRef.current?.scrollIntoView({ behavior: 'smooth' });
       }, 200);
     } catch (err: any) {
       console.error('Error getting AI solution:', err);
-      onToast(err?.message || 'Error communicating with AI Teacher. Please try again.');
+      onToast(err?.message || 'Error communicating with Teacher. Please try again.');
     } finally {
       setIsLoading(false);
     }
@@ -195,7 +196,7 @@ export const AiTeacherModal: React.FC<AiTeacherModalProps> = ({
     if (!currentSolution) return;
     navigator.clipboard?.writeText(currentSolution);
     setCopiedSolution(true);
-    onToast('Complete step-by-step solution copied to clipboard!');
+    onToast('Complete blackboard solution copied to clipboard!');
     setTimeout(() => setCopiedSolution(false), 2500);
   };
 
@@ -217,19 +218,19 @@ export const AiTeacherModal: React.FC<AiTeacherModalProps> = ({
         <div className="bg-gradient-to-r from-[#003b9e] via-[#004ac6] to-[#1e58d8] text-white px-4 sm:px-6 py-3.5 flex items-center justify-between gap-3 shrink-0">
           <div className="flex items-center gap-3">
             <div className="w-10 h-10 rounded-2xl bg-amber-400 text-slate-950 flex items-center justify-center shadow-md font-extrabold text-xl shrink-0">
-              <span className="material-symbols-outlined text-[24px]">psychology</span>
+              <span className="material-symbols-outlined text-[24px]">co_present</span>
             </div>
             <div>
               <div className="flex items-center gap-2">
                 <h2 className="text-sm sm:text-base font-extrabold tracking-tight">
-                  Prof. Raman • AI Math Teacher
+                  Ask Teacher
                 </h2>
                 <span className="bg-emerald-400 text-slate-950 text-[10px] font-extrabold px-2 py-0.5 rounded-full uppercase tracking-wider">
-                  Live Step-by-Step
+                  Classroom Board Solver
                 </span>
               </div>
               <p className="text-[11px] text-blue-100">
-                School Mathematics Mentor for Classes 5 - 10 & Olympiads
+                Live Blackboard & Chalk derivations with formulas for Classes 5 - 10 & Olympiad
               </p>
             </div>
           </div>
@@ -270,7 +271,7 @@ export const AiTeacherModal: React.FC<AiTeacherModalProps> = ({
                 Student Login Required
               </h3>
               <p className="text-xs sm:text-sm text-slate-600 mb-6 leading-relaxed">
-                To ask math problems to Teacher AI (via text or photos), view detailed step-by-step derivations, and maintain your learning log in your student notebook, please sign in with Google.
+                To ask math problems to Teacher (via text or photos), view detailed blackboard derivations, and maintain your learning log in your student notebook, please sign in with Google.
               </p>
 
               <button
@@ -310,7 +311,7 @@ export const AiTeacherModal: React.FC<AiTeacherModalProps> = ({
                   onClick={() => setShowHistory(false)}
                   className="text-xs font-bold text-blue-600 hover:underline cursor-pointer"
                 >
-                  ← Back to Teacher Chat
+                  ← Back to Teacher Board
                 </button>
               </div>
 
@@ -463,12 +464,12 @@ export const AiTeacherModal: React.FC<AiTeacherModalProps> = ({
                     {isLoading ? (
                       <>
                         <span className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin"></span>
-                        <span>Prof. Raman is solving...</span>
+                        <span>Writing on Blackboard...</span>
                       </>
                     ) : (
                       <>
-                        <span className="material-symbols-outlined text-[18px]">send</span>
-                        <span>Solve Step-by-Step</span>
+                        <span className="material-symbols-outlined text-[18px]">co_present</span>
+                        <span>Solve on Classroom Board</span>
                       </>
                     )}
                   </button>
@@ -491,79 +492,49 @@ export const AiTeacherModal: React.FC<AiTeacherModalProps> = ({
 
               {/* Solution Display Area */}
               {isLoading && (
-                <div className="bg-white rounded-2xl p-8 border border-blue-100 text-center shadow-xs">
-                  <div className="w-12 h-12 rounded-full bg-blue-50 text-blue-600 flex items-center justify-center mx-auto mb-3 animate-bounce">
-                    <span className="material-symbols-outlined text-[28px]">psychology</span>
+                <div className="bg-[#0b2217] rounded-2xl p-8 border-4 border-[#5c3a21] text-center shadow-xl text-emerald-100 relative overflow-hidden">
+                  <div className="w-14 h-14 rounded-2xl bg-amber-400 text-slate-950 flex items-center justify-center mx-auto mb-3 animate-bounce shadow-md">
+                    <span className="material-symbols-outlined text-[32px]">co_present</span>
                   </div>
-                  <h4 className="text-sm font-bold text-slate-800 mb-1">
-                    Analyzing Equation & Formulating Step-by-Step Proof...
+                  <h4 className="text-sm sm:text-base font-extrabold text-amber-300 mb-1 tracking-wide">
+                    Prof. Raman is Solving on the Classroom Blackboard...
                   </h4>
-                  <p className="text-xs text-slate-500">
-                    Applying CBSE/ICSE curriculum conventions and formatting pedagogical reasoning.
+                  <p className="text-xs text-emerald-200/80 max-w-md mx-auto">
+                    Writing given parameters, identifying formula theorems, formulating step-by-step proofs, and organizing margin scratchpad calculations.
                   </p>
                 </div>
               )}
 
               {currentSolution && (
-                <div className="bg-white rounded-2xl p-5 sm:p-6 border border-emerald-200 shadow-md">
-                  <div className="flex items-center justify-between gap-2 mb-4 pb-3 border-b border-slate-100">
+                <div className="flex flex-col gap-3">
+                  <div className="flex items-center justify-between gap-2 px-1">
                     <div className="flex items-center gap-2">
-                      <span className="w-3 h-3 rounded-full bg-emerald-500"></span>
-                      <h4 className="text-sm sm:text-base font-extrabold text-slate-900">
-                        Teacher's Masterclass Solution
-                      </h4>
+                      <span className="w-2.5 h-2.5 rounded-full bg-emerald-500 animate-ping"></span>
+                      <span className="text-xs font-bold text-slate-600">
+                        Board Solution Generated
+                      </span>
                     </div>
 
-                    <div className="flex items-center gap-2">
-                      <button
-                        onClick={copySolutionToClipboard}
-                        className="inline-flex items-center gap-1 text-xs font-bold text-slate-700 hover:text-blue-600 bg-slate-100 hover:bg-blue-50 px-3 py-1.5 rounded-xl transition-colors cursor-pointer"
-                      >
-                        <span className="material-symbols-outlined text-[15px]">
-                          {copiedSolution ? 'check' : 'content_copy'}
-                        </span>
-                        <span>{copiedSolution ? 'Copied' : 'Copy Solution'}</span>
-                      </button>
-
-                      <button
-                        onClick={() => {
-                          setQueryText('');
-                          removeAttachedImage();
-                          setCurrentSolution(null);
-                        }}
-                        className="text-xs font-bold text-slate-500 hover:text-slate-800 px-2 py-1 cursor-pointer"
-                      >
-                        Ask Another Problem
-                      </button>
-                    </div>
+                    <button
+                      onClick={() => {
+                        setQueryText('');
+                        removeAttachedImage();
+                        setCurrentSolution(null);
+                      }}
+                      className="inline-flex items-center gap-1 text-xs font-bold text-blue-700 hover:text-blue-900 bg-blue-50 hover:bg-blue-100 px-3 py-1.5 rounded-xl transition-colors cursor-pointer"
+                    >
+                      <span className="material-symbols-outlined text-[15px]">add</span>
+                      <span>Ask Another Problem</span>
+                    </button>
                   </div>
 
-                  {/* Solution Text Content */}
-                  <div className="prose prose-sm max-w-none text-slate-800 leading-relaxed space-y-3 font-['Plus_Jakarta_Sans',sans-serif]">
-                    {currentSolution.split('\n\n').map((block, idx) => {
-                      if (block.startsWith('###')) {
-                        return (
-                          <h5 key={idx} className="text-xs sm:text-sm font-extrabold text-[#004ac6] bg-blue-50/70 p-2.5 rounded-xl border border-blue-100 mt-4 first:mt-0">
-                            {block.replace(/^###\s*/, '')}
-                          </h5>
-                        );
-                      }
-                      if (block.startsWith('- ')) {
-                        return (
-                          <ul key={idx} className="list-disc list-inside space-y-1 pl-2 text-xs sm:text-[13px] text-slate-700">
-                            {block.split('\n').map((line, lidx) => (
-                              <li key={lidx}>{line.replace(/^-\s*/, '')}</li>
-                            ))}
-                          </ul>
-                        );
-                      }
-                      return (
-                        <p key={idx} className="text-xs sm:text-[13px] text-slate-700 whitespace-pre-wrap">
-                          {block}
-                        </p>
-                      );
-                    })}
-                  </div>
+                  <ClassroomBoardRenderer
+                    solutionText={currentSolution}
+                    grade={grade}
+                    topic={topic}
+                    onCopy={() => onToast('Classroom board solution copied to clipboard!')}
+                    onPrint={() => window.print()}
+                  />
 
                   <div ref={solutionEndRef} />
                 </div>

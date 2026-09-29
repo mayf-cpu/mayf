@@ -2130,8 +2130,8 @@ export default function App() {
                 onClick={() => handleOpenAiTeacher()}
                 className="w-full sm:w-auto inline-flex items-center justify-center gap-2 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-500 hover:to-amber-600 text-slate-950 font-extrabold text-sm px-6 py-3.5 rounded-2xl shadow-lg transition-all cursor-pointer transform hover:scale-102"
               >
-                <span className="material-symbols-outlined text-[20px]">chat</span>
-                <span>{pageText.aiTeacher.buttonText || 'Ask Teacher AI Now'}</span>
+                <span className="material-symbols-outlined text-[20px]">co_present</span>
+                <span>{pageText.aiTeacher.buttonText || 'Ask Teacher'}</span>
               </button>
             </div>
           </div>
@@ -2778,19 +2778,19 @@ export default function App() {
         onToast={showToast}
       />
 
-      {/* Floating Ask Math Teacher AI Action Button */}
+      {/* Floating Ask Teacher Action Button */}
       <div className="fixed bottom-6 right-6 z-40">
         <button
           onClick={() => handleOpenAiTeacher()}
           className="group flex items-center gap-2.5 bg-gradient-to-r from-amber-400 via-amber-500 to-amber-600 hover:from-amber-500 hover:to-amber-700 text-slate-950 font-extrabold text-xs sm:text-sm px-4 py-3 rounded-2xl shadow-xl hover:shadow-2xl transition-all duration-300 transform hover:-translate-y-1 cursor-pointer border border-amber-300"
-          title="Ask Prof. Raman (AI Math Teacher)"
+          title="Ask Teacher (Classroom Board Solver)"
         >
           <div className="w-8 h-8 rounded-xl bg-slate-950 text-amber-400 flex items-center justify-center shadow-xs">
-            <span className="material-symbols-outlined text-[20px]">psychology</span>
+            <span className="material-symbols-outlined text-[20px]">co_present</span>
           </div>
           <div className="flex flex-col text-left">
-            <span className="leading-tight">Ask Math Teacher AI</span>
-            <span className="text-[10px] text-slate-900 font-semibold opacity-85">Step-by-step solver</span>
+            <span className="leading-tight">Ask Teacher</span>
+            <span className="text-[10px] text-slate-900 font-semibold opacity-85">Classroom Board Solver</span>
           </div>
           <span className="w-2.5 h-2.5 rounded-full bg-emerald-600 animate-ping ml-0.5"></span>
         </button>

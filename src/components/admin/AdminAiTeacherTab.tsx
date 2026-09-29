@@ -4,6 +4,7 @@ import {
   fetchAllAiQueries,
   deleteAiQueryRecord,
 } from '../../firebase';
+import { ClassroomBoardRenderer } from '../ClassroomBoardRenderer';
 
 interface AdminAiTeacherTabProps {
   onToast: (msg: string) => void;
@@ -319,14 +320,16 @@ export const AdminAiTeacherTab: React.FC<AdminAiTeacherTabProps> = ({ onToast })
                 </div>
               </div>
 
-              <div className="bg-slate-950 p-4 rounded-2xl border border-slate-800">
-                <div className="text-xs font-bold text-emerald-400 mb-2 flex items-center gap-1.5">
-                  <span className="material-symbols-outlined text-[16px]">psychology</span>
-                  <span>AI Teacher Step-by-Step Response ({selectedRecord.modelUsed || 'Gemini 3.8 Flash'})</span>
+              <div className="bg-slate-950 p-2 sm:p-4 rounded-2xl border border-slate-800">
+                <div className="text-xs font-bold text-emerald-400 mb-2 flex items-center gap-1.5 px-2">
+                  <span className="material-symbols-outlined text-[16px]">co_present</span>
+                  <span>Teacher Classroom Board Response ({selectedRecord.modelUsed || 'Gemini'})</span>
                 </div>
-                <div className="prose prose-invert prose-sm max-w-none text-slate-300 leading-relaxed space-y-2 whitespace-pre-wrap font-sans text-xs sm:text-sm">
-                  {selectedRecord.solution}
-                </div>
+                <ClassroomBoardRenderer
+                  solutionText={selectedRecord.solution}
+                  grade={selectedRecord.grade}
+                  topic={selectedRecord.topic}
+                />
               </div>
             </div>
 
