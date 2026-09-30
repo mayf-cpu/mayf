@@ -101,6 +101,7 @@ import { AdminAiTeacherTab } from './admin/AdminAiTeacherTab';
 import { AdminAdsTab } from './admin/AdminAdsTab';
 import { AdminPageTextTab } from './admin/AdminPageTextTab';
 import { AdminPageBlocksTab } from './admin/AdminPageBlocksTab';
+import { AdminCustomDomainTab } from './admin/AdminCustomDomainTab';
 import {
   PageTextConfig,
   getPageTextConfig,
@@ -153,6 +154,7 @@ export const AdminControlPanelPage: React.FC<AdminControlPanelPageProps> = ({
     | 'seo'
     | 'page-text'
     | 'orders'
+    | 'subdomain'
   >('analytics');
 
   // Page text & blocks state
@@ -781,6 +783,7 @@ export const AdminControlPanelPage: React.FC<AdminControlPanelPageProps> = ({
             { id: 'blocks', label: 'Homepage Blocks', icon: 'view_column' },
             { id: 'page-text', label: 'Page Text & Copy', icon: 'edit_note' },
             { id: 'seo', label: 'SEO & Meta', icon: 'travel_explore' },
+            { id: 'subdomain', label: 'Domain & Migration', icon: 'domain' },
             { id: 'orders', label: `Orders (${orders.length})`, icon: 'receipt_long' },
           ].map((tab) => (
             <button
@@ -1361,6 +1364,11 @@ export const AdminControlPanelPage: React.FC<AdminControlPanelPageProps> = ({
               )}
             </div>
           </div>
+        )}
+
+        {/* TAB: DOMAIN & SUBDOMAIN MIGRATION */}
+        {activeTab === 'subdomain' && (
+          <AdminCustomDomainTab onToast={onToast} />
         )}
       </main>
 
