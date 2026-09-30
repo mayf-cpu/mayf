@@ -1,6 +1,7 @@
 import express from 'express';
 import dotenv from 'dotenv';
 import path from 'path';
+import fs from 'fs';
 import { fileURLToPath } from 'url';
 import { GoogleGenAI } from '@google/genai';
 
@@ -78,6 +79,15 @@ app.get(['/admin', '/admin/*'], (req, res) => {
 app.get(['/teacher', '/teacher/*'], (req, res) => {
   const query = req.url.includes('?') ? req.url.substring(req.url.indexOf('?')) : '';
   res.redirect(301, `/ask-teacher${query}`);
+});
+
+// Direct route for standalone downloadable content pages (/resource/:id)
+app.get(['/resource/:id', '/resource/*'], (req, res, next) => {
+  const indexPath = path.resolve(__dirname, 'dist', 'index.html');
+  if (fs.existsSync(indexPath)) {
+    return res.sendFile(indexPath);
+  }
+  next();
 });
 
 // Initialize Google GenAI client (User-Agent header required by skill)

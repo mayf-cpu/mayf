@@ -100,6 +100,7 @@ import { AdminSocialTab } from './admin/AdminSocialTab';
 import { AdminAiTeacherTab } from './admin/AdminAiTeacherTab';
 import { AdminAdsTab } from './admin/AdminAdsTab';
 import { AdminPageTextTab } from './admin/AdminPageTextTab';
+import { AdminPageBlocksTab } from './admin/AdminPageBlocksTab';
 import {
   PageTextConfig,
   getPageTextConfig,
@@ -148,6 +149,7 @@ export const AdminControlPanelPage: React.FC<AdminControlPanelPageProps> = ({
     | 'gateway'
     | 'branding'
     | 'ads'
+    | 'blocks'
     | 'seo'
     | 'page-text'
     | 'orders'
@@ -776,7 +778,8 @@ export const AdminControlPanelPage: React.FC<AdminControlPanelPageProps> = ({
             { id: 'gateway', label: 'Payment Gateway', icon: 'credit_card' },
             { id: 'branding', label: 'Branding & Logo', icon: 'palette' },
             { id: 'ads', label: 'AdSense & Ads', icon: 'ads_click' },
-            { id: 'page-text', label: 'Page Text & Blocks', icon: 'edit_note' },
+            { id: 'blocks', label: 'Homepage Blocks', icon: 'view_column' },
+            { id: 'page-text', label: 'Page Text & Copy', icon: 'edit_note' },
             { id: 'seo', label: 'SEO & Meta', icon: 'travel_explore' },
             { id: 'orders', label: `Orders (${orders.length})`, icon: 'receipt_long' },
           ].map((tab) => (
@@ -1246,6 +1249,13 @@ export const AdminControlPanelPage: React.FC<AdminControlPanelPageProps> = ({
               setAdsConfig={setAdsConfig}
               onToast={onToast}
             />
+          </div>
+        )}
+
+        {/* TAB: HOMEPAGE BLOCKS & ORDERING */}
+        {activeTab === 'blocks' && (
+          <div className="max-w-7xl mx-auto">
+            <AdminPageBlocksTab onToast={onToast} />
           </div>
         )}
 

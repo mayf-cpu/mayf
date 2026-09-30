@@ -42,6 +42,14 @@ import { FormulaDeckPage } from './components/FormulaDeckPage';
 import { FormulaDeckSandbox } from './components/FormulaDeckSandbox';
 import { AiTeacherModal } from './components/AiTeacherModal';
 import { AskTeacherPage } from './components/AskTeacherPage';
+import { ResourceStandalonePage } from './components/ResourceStandalonePage';
+import { generateDocumentCoverThumbnail } from './services/thumbnailGenerator';
+import {
+  HomePageBlock,
+  getLocalPageBlocks,
+  loadPageBlocksFromFirestore,
+  DEFAULT_PAGE_BLOCKS,
+} from './services/pageBlocks';
 import { getAskTeacherShareUrl } from './services/externalBrowser';
 import {
   BrandingConfig,
@@ -102,14 +110,17 @@ import { AdPlacement } from './components/AdPlacement';
 import { loadAdsConfigFromFirestore, saveAdsConfigLocally } from './services/ads';
 
 export default function App() {
-  // Page view routing: 'store' for student portal, 'admin' for dedicated Control Panel, 'dashboard' for User Dashboard, 'formula-deck' for dedicated interactive sandbox, 'ask-teacher' for dedicated Ask Teacher solver page
-  const [currentView, setCurrentView] = useState<'store' | 'admin' | 'dashboard' | 'formula-deck' | 'ask-teacher'>(() => {
+  // Page view routing: 'store' for student portal, 'admin' for dedicated Control Panel, 'dashboard' for User Dashboard, 'formula-deck' for dedicated interactive sandbox, 'ask-teacher' for dedicated Ask Teacher solver page, 'resource' for dedicated standalone downloadable content page
+  const [currentView, setCurrentView] = useState<'store' | 'admin' | 'dashboard' | 'formula-deck' | 'ask-teacher' | 'resource'>(() => {
     if (typeof window !== 'undefined') {
       const p = window.location.pathname.toLowerCase();
       const h = window.location.hash.toLowerCase();
       const s = window.location.search.toLowerCase();
       if (p.startsWith('/admin') || h.includes('portal-vault') || h.includes('staff-access') || h.includes('faculty-desk') || h.includes('admin')) {
         return 'admin';
+      }
+      if (p.startsWith('/resource/') || s.includes('resource=') || h.startsWith('#resource-')) {
+        return 'resource';
       }
       if (p.startsWith('/dashboard') || h.includes('dashboard')) {
         return 'dashboard';
@@ -123,6 +134,24 @@ export default function App() {
     }
     return 'store';
   });
+
+  const [standaloneResourceId, setStandaloneResourceId] = useState<string | null>(() => {
+    if (typeof window !== 'undefined') {
+      const p = window.location.pathname;
+      if (p.toLowerCase().startsWith('/resource/')) {
+        return p.substring('/resource/'.length).split('?')[0].split('#')[0];
+      }
+      const params = new URLSearchParams(window.location.search);
+      const rParam = params.get('resource');
+      if (rParam) return rParam;
+      const h = window.location.hash;
+      if (h.startsWith('#resource-')) return h.substring('#resource-'.length);
+    }
+    return null;
+  });
+
+  // Dynamic Homepage Blocks Ordering state (Study Together • Grow Faster placed after content blocks by default)
+  const [pageBlocks, setPageBlocks] = useState<HomePageBlock[]>(getLocalPageBlocks);
 
   const [currentCurrency, setCurrentCurrency] = useState<CurrencyInfo>(getUserCurrency);
 
@@ -540,6 +569,21 @@ export default function App() {
       const s = window.location.search.toLowerCase();
       if (p.startsWith('/admin') || h.includes('portal-vault') || h.includes('staff-access') || h.includes('faculty-desk') || h.includes('admin')) {
         setCurrentView('admin');
+      } else if (p.startsWith('/resource/')) {
+        const id = window.location.pathname.substring('/resource/'.length).split('?')[0].split('#')[0];
+        setStandaloneResourceId(id);
+        setCurrentView('resource');
+      } else if (s.includes('resource=')) {
+        const params = new URLSearchParams(window.location.search);
+        const id = params.get('resource');
+        if (id) {
+          setStandaloneResourceId(id);
+          setCurrentView('resource');
+        }
+      } else if (h.startsWith('#resource-')) {
+        const id = window.location.hash.substring('#resource-'.length);
+        setStandaloneResourceId(id);
+        setCurrentView('resource');
       } else if (p.startsWith('/dashboard') || h.includes('dashboard')) {
         setCurrentView('dashboard');
       } else if (p.startsWith('/formula-deck') || h.includes('formula')) {
@@ -552,6 +596,22 @@ export default function App() {
     };
     window.addEventListener('hashchange', handleRouteChange);
     window.addEventListener('popstate', handleRouteChange);
+
+    // Sync homepage blocks from Firestore
+    loadPageBlocksFromFirestore().then((cloudBlocks) => {
+      if (cloudBlocks && cloudBlocks.length > 0) {
+        setPageBlocks(cloudBlocks);
+      }
+    });
+
+    const handleBlocksChanged = (e: any) => {
+      if (e.detail && Array.isArray(e.detail)) {
+        setPageBlocks(e.detail);
+      } else {
+        setPageBlocks(getLocalPageBlocks());
+      }
+    };
+    window.addEventListener('page-blocks-changed', handleBlocksChanged);
 
     return () => {
       window.removeEventListener('branding-changed', handleBrandingChange);
@@ -566,6 +626,7 @@ export default function App() {
       window.removeEventListener('currency-changed', handleCurrencyChange);
       window.removeEventListener('hashchange', handleRouteChange);
       window.removeEventListener('popstate', handleRouteChange);
+      window.removeEventListener('page-blocks-changed', handleBlocksChanged);
     };
   }, []);
 
@@ -632,9 +693,10 @@ export default function App() {
 
   const handleNavigateHome = () => {
     setCurrentView('store');
+    setStandaloneResourceId(null);
     if (typeof window !== 'undefined') {
       const p = window.location.pathname.toLowerCase();
-      if (p.startsWith('/admin') || p.startsWith('/ask-teacher') || p.startsWith('/teacher') || p.startsWith('/formula-deck') || p.startsWith('/dashboard')) {
+      if (p.startsWith('/admin') || p.startsWith('/ask-teacher') || p.startsWith('/teacher') || p.startsWith('/formula-deck') || p.startsWith('/dashboard') || p.startsWith('/resource/')) {
         window.history.pushState(null, '', '/');
       }
       window.location.hash = '';
@@ -997,7 +1059,8 @@ export default function App() {
     } else if (res.flashcardCount) {
       setIsFlashcardModalOpen(true);
     } else {
-      setSelectedResource(res);
+      // User requirement: Downloadable content pages must open in a different window and not in a popup window
+      window.open(`/resource/${res.id}`, '_blank');
     }
   };
 
@@ -1221,6 +1284,93 @@ export default function App() {
     );
   }
 
+  // Render Downloadable Content as a dedicated web page with unique URL (/resource/:id) in a new window/page (NOT a popup)
+  if (currentView === 'resource' && standaloneResourceId) {
+    const currentRes =
+      allCatalogResources.find((r) => r.id === standaloneResourceId) ||
+      allCatalogResources.find((r) => r.title.toLowerCase().replace(/[^a-z0-9]+/g, '-').includes(standaloneResourceId.toLowerCase())) ||
+      allCatalogResources[0];
+
+    return (
+      <div className="w-full min-h-screen bg-[#f9f9ff] font-['Plus_Jakarta_Sans',sans-serif]">
+        <ResourceStandalonePage
+          resource={currentRes}
+          onNavigateHome={handleNavigateHome}
+          currentUser={currentUser}
+          userProfile={userProfile}
+          onGoogleSignIn={handleGoogleSignIn}
+          onQuickDemoSignIn={handleQuickDemoSignIn}
+          onToast={showToast}
+          branding={branding}
+          allResources={allCatalogResources}
+          onRequireLogin={(title, grade) => {
+            setPendingDownloadItem({
+              title,
+              size: currentRes.sizeOrDuration || '2.1 MB',
+              resource: currentRes,
+            });
+            setIsLoginRequiredOpen(true);
+          }}
+          onRequireCaptcha={(res) => {
+            setPendingDownloadItem({
+              title: res.title,
+              size: res.sizeOrDuration || '2.1 MB',
+              resource: res,
+            });
+            setIsCaptchaModalOpen(true);
+          }}
+          onOpenResource={(r) => {
+            window.open(`/resource/${r.id}`, '_blank');
+          }}
+        />
+        <UnauthorizedDomainModal
+          isOpen={showDomainModal}
+          onClose={() => setShowDomainModal(false)}
+          onQuickSignIn={handleQuickDemoSignIn}
+          onRetryGoogleSignIn={() => {
+            setShowDomainModal(false);
+            handleGoogleSignIn();
+          }}
+        />
+        <LoginRequiredModal
+          isOpen={isLoginRequiredOpen}
+          onClose={() => {
+            setIsLoginRequiredOpen(false);
+            setPendingDownloadItem(null);
+          }}
+          onGoogleSignIn={handleGoogleSignIn}
+          onQuickDemoSignIn={handleQuickDemoSignIn}
+          pendingResourceTitle={pendingDownloadItem?.title}
+          pendingResourceGrade={pendingDownloadItem?.resource?.grade}
+        />
+        <DownloadCaptchaModal
+          isOpen={isCaptchaModalOpen}
+          onClose={() => {
+            setIsCaptchaModalOpen(false);
+            setPendingDownloadItem(null);
+          }}
+          onVerified={executeVerifiedDownload}
+          itemTitle={pendingDownloadItem?.title || currentRes.title}
+          itemSize={pendingDownloadItem?.size || currentRes.sizeOrDuration || '2.4 MB'}
+          resource={pendingDownloadItem?.resource || currentRes}
+        />
+        {toastMessage && (
+          <div className="fixed bottom-6 right-6 z-50 bg-[#111c2d] text-white px-5 py-3 rounded-2xl shadow-2xl flex items-center gap-2.5 text-xs font-bold animate-fadeIn border border-slate-700 max-w-[90vw]">
+            <span className="material-symbols-outlined text-[18px] text-emerald-400 shrink-0">check_circle</span>
+            <span className="truncate">{toastMessage}</span>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  const getBlockMeta = (id: string) => {
+    const found = pageBlocks.find((b) => b.id === id);
+    if (found) return found;
+    const def = DEFAULT_PAGE_BLOCKS.find((b) => b.id === id);
+    return def || { id, name: id, description: '', enabled: true, order: 99 };
+  };
+
   return (
     <div className="w-full max-w-full bg-[#f9f9ff] font-['Plus_Jakarta_Sans',sans-serif] text-[#111c2d] antialiased min-h-screen flex flex-col selection:bg-blue-100 selection:text-blue-900">
       {/* Social Media In-App Browser Warning & Chrome Intent Launcher */}
@@ -1282,7 +1432,7 @@ export default function App() {
         }}
       />
 
-      <main className="w-full max-w-full pt-24 sm:pt-28 bg-[#f9f9ff] min-h-screen flex-1">
+      <main className="w-full max-w-full pt-24 sm:pt-28 bg-[#f9f9ff] min-h-screen flex-1 flex flex-col">
         {/* Top Advertisement / Olympiad Banner */}
         {pageText.announcement.enabled && (
           <section className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 pt-3 pb-2 w-full">

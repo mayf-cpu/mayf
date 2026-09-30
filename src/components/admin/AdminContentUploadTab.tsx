@@ -13,6 +13,7 @@ import {
   saveTierOverrides,
 } from '../../services/resources';
 import { YouTubeIcon, FacebookIcon } from '../SocialIcons';
+import { generateContentThumbnail, generateDocumentCoverThumbnail } from '../../services/thumbnailGenerator';
 
 interface AdminContentUploadTabProps {
   customResources: CustomResourceRecord[];
@@ -202,23 +203,41 @@ export const AdminContentUploadTab: React.FC<AdminContentUploadTabProps> = ({
       if (parsed.length === 0) {
         onToast('No resources could be extracted. Please check the input.');
       } else {
-        const newItems: CustomResourceRecord[] = parsed.map((item, idx) => ({
-          id: `res-${Date.now()}-${idx}`,
-          title: item.title || `Math Resource ${idx + 1}`,
-          grade: item.grade || targetGrade,
-          topic: item.topic || topicOptions[0]?.name || 'General Mathematics',
-          format: item.format || 'Handcrafted Notes (PDF)',
-          tier: item.tier === 'pro' ? 'pro' : 'free',
-          downloadUrl: item.downloadUrl || undefined,
-          youtubeId: item.youtubeId || undefined,
-          description: item.description || undefined,
-          views: 0,
-          downloads: 0,
-          createdAt: new Date().toISOString(),
-        }));
+        const newItems: CustomResourceRecord[] = parsed.map((item, idx) => {
+          const itemTitle = item.title || `Math Resource ${idx + 1}`;
+          const itemGrade = item.grade || targetGrade;
+          const itemTopic = item.topic || topicOptions[0]?.name || 'General Mathematics';
+          const itemFormat = item.format || 'Handcrafted Notes (PDF)';
+          const itemTier = item.tier === 'pro' ? 'pro' : 'free';
+          const autoThumb = generateDocumentCoverThumbnail(itemTitle, {
+            title: itemTitle,
+            grade: itemGrade,
+            topic: itemTopic,
+            format: itemFormat,
+            tier: itemTier,
+          });
+
+          return {
+            id: `res-${Date.now()}-${idx}`,
+            title: itemTitle,
+            grade: itemGrade,
+            topic: itemTopic,
+            format: itemFormat,
+            tier: itemTier,
+            downloadUrl: item.downloadUrl || undefined,
+            imageUrl: autoThumb,
+            thumbnailUrl: autoThumb,
+            fileType: item.youtubeId ? 'video' : 'image',
+            youtubeId: item.youtubeId || undefined,
+            description: item.description || undefined,
+            views: 0,
+            downloads: 0,
+            createdAt: new Date().toISOString(),
+          };
+        });
 
         setStagedResources((prev) => [...newItems, ...prev]);
-        onToast(`🎉 AI successfully categorized ${newItems.length} items! Review them below before publishing.`);
+        onToast(`🎉 AI successfully categorized ${newItems.length} items with auto-generated thumbnails! Review them below before publishing.`);
       }
     } catch (err: any) {
       console.error('Error in AI content ingest:', err);
@@ -355,16 +374,26 @@ export const AdminContentUploadTab: React.FC<AdminContentUploadTabProps> = ({
 
       const existingRecord = isEditing ? getLocalCustomResources().find((r) => r.id === targetId) : null;
 
+      const effectiveTitle = title.trim();
+      const effectiveThumb = imageUrl.trim() || generateDocumentCoverThumbnail(effectiveTitle || 'Mathematics Study Kit', {
+        title: effectiveTitle || 'Mathematics Revision Notes',
+        grade,
+        topic,
+        format: effectiveFormat,
+        tier,
+      });
+
       const payload: CustomResourceRecord = {
         id: targetId,
-        title: title.trim(),
+        title: effectiveTitle,
         grade,
         topic,
         format: effectiveFormat,
         tier,
         downloadUrl: downloadUrl.trim() || undefined,
-        imageUrl: imageUrl.trim() || undefined,
-        fileType: (resolvedFb || resolvedYt || embedHtml.trim()) ? 'video' : imageUrl.trim() ? 'image' : 'file',
+        imageUrl: effectiveThumb,
+        thumbnailUrl: effectiveThumb,
+        fileType: (resolvedFb || resolvedYt || embedHtml.trim()) ? 'video' : effectiveThumb ? 'image' : 'file',
         youtubeId: resolvedYt,
         facebookVideoUrl: resolvedFb,
         videoPlatform: resolvedFb ? 'facebook' : resolvedYt ? 'youtube' : undefined,
@@ -1345,11 +1374,28 @@ Real Numbers 2-Minute Formula Sheet,Class 10,Real Numbers,Formula Sheet,free,htt
                         const file = e.target.files?.[0];
                         if (file) {
                           const reader = new FileReader();
-                          reader.onload = (ev) => {
+                          reader.onload = async (ev) => {
                             const res = ev.target?.result as string;
                             setDownloadUrl(res);
-                            if (!title) setTitle(file.name.replace(/\.[^/.]+$/, ''));
-                            onToast(`Attached file "${file.name}" (${(file.size / 1024).toFixed(0)} KB)`);
+                            const effectiveTitle = title.trim() || file.name.replace(/\.[^/.]+$/, '');
+                            if (!title) setTitle(effectiveTitle);
+
+                            // Auto-generate thumbnail from uploaded content file!
+                            try {
+                              const autoThumb = await generateContentThumbnail(file, {
+                                title: effectiveTitle,
+                                grade,
+                                topic,
+                                format,
+                                tier,
+                              });
+                              if (autoThumb) {
+                                setImageUrl(autoThumb);
+                              }
+                              onToast(`Attached file "${file.name}" & auto-generated content thumbnail!`);
+                            } catch {
+                              onToast(`Attached file "${file.name}" (${(file.size / 1024).toFixed(0)} KB)`);
+                            }
                           };
                           reader.readAsDataURL(file);
                         }
@@ -1359,19 +1405,43 @@ Real Numbers 2-Minute Formula Sheet,Class 10,Real Numbers,Formula Sheet,free,htt
                 </div>
               </div>
 
-              {/* 2. Image / Diagram Attachment */}
+              {/* 2. Image / Diagram Attachment & Auto-Generated Thumbnail */}
               <div className="space-y-1">
-                <label className="text-xs font-bold text-slate-700 block">
-                  🖼️ Image / Formula Snapshot / Mind Map (URL or Upload):
-                </label>
+                <div className="flex items-center justify-between">
+                  <label className="text-xs font-bold text-slate-700 block">
+                    🖼️ Content Thumbnail / Image (Auto-Generated from file):
+                  </label>
+                  <span className="text-[11px] font-bold text-emerald-600 bg-emerald-50 px-2 py-0.5 rounded border border-emerald-200">
+                    Auto-generated on file upload
+                  </span>
+                </div>
                 <div className="flex items-center gap-2">
                   <input
                     type="text"
                     value={imageUrl}
                     onChange={(e) => setImageUrl(e.target.value)}
-                    placeholder="https://images.unsplash.com/... or image URL"
+                    placeholder="https://... or auto-generated from uploaded file"
                     className="flex-1 px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs focus:ring-2 focus:ring-blue-500 focus:outline-none font-mono text-slate-800"
                   />
+                  <button
+                    type="button"
+                    onClick={() => {
+                      const autoThumb = generateDocumentCoverThumbnail(title || 'Mathematics Study Kit', {
+                        title: title || 'Mathematics Revision Notes',
+                        grade,
+                        topic,
+                        format,
+                        tier,
+                      });
+                      setImageUrl(autoThumb);
+                      onToast('⚡ Auto-generated rich document thumbnail from content!');
+                    }}
+                    className="px-3 py-2 bg-amber-100 hover:bg-amber-200 text-amber-900 rounded-xl text-xs font-bold cursor-pointer transition-colors shrink-0 flex items-center gap-1"
+                    title="Auto-generate or refresh thumbnail based on title, grade, and topic"
+                  >
+                    <span className="material-symbols-outlined text-[16px]">auto_awesome</span>
+                    <span>Auto-Generate</span>
+                  </button>
                   <label className="px-3 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-xl text-xs font-bold cursor-pointer transition-colors shrink-0 flex items-center gap-1">
                     <span className="material-symbols-outlined text-[16px]">image</span>
                     <span>Upload Image</span>
@@ -1379,16 +1449,26 @@ Real Numbers 2-Minute Formula Sheet,Class 10,Real Numbers,Formula Sheet,free,htt
                       type="file"
                       accept="image/*"
                       className="hidden"
-                      onChange={(e) => {
+                      onChange={async (e) => {
                         const file = e.target.files?.[0];
                         if (file) {
-                          const reader = new FileReader();
-                          reader.onload = (ev) => {
-                            const res = ev.target?.result as string;
-                            setImageUrl(res);
-                            onToast(`Attached image "${file.name}"`);
-                          };
-                          reader.readAsDataURL(file);
+                          try {
+                            const thumb = await generateContentThumbnail(file, {
+                              title,
+                              grade,
+                              topic,
+                              format,
+                              tier,
+                            });
+                            setImageUrl(thumb);
+                            onToast(`Attached image & generated thumbnail: "${file.name}"`);
+                          } catch {
+                            const reader = new FileReader();
+                            reader.onload = (ev) => {
+                              setImageUrl(ev.target?.result as string);
+                            };
+                            reader.readAsDataURL(file);
+                          }
                         }
                       }}
                     />
