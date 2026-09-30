@@ -13,6 +13,8 @@ interface ResourceModalProps {
   onDownload: (title: string, size: string) => void;
   onOpenProPass: () => void;
   onShare?: (title: string, resource: MathResource) => void;
+  currentUser?: any;
+  onRequireLogin?: (title: string, grade?: string) => void;
 }
 
 export const ResourceModal: React.FC<ResourceModalProps> = ({
@@ -22,6 +24,8 @@ export const ResourceModal: React.FC<ResourceModalProps> = ({
   onDownload,
   onOpenProPass,
   onShare,
+  currentUser,
+  onRequireLogin,
 }) => {
   const [downloading, setDownloading] = useState(false);
   const [activeTab, setActiveTab] = useState<'sheet' | 'traps' | 'solutions'>('sheet');
@@ -36,7 +40,11 @@ export const ResourceModal: React.FC<ResourceModalProps> = ({
       onOpenProPass();
       return;
     }
-    // Triggers Captcha verification before starting download
+    if (!currentUser && onRequireLogin) {
+      onRequireLogin(resource.title, resource.grade);
+      return;
+    }
+    // Triggers download (which will also check login in App)
     onDownload(resource.title, resource.sizeOrDuration);
   };
 
@@ -50,6 +58,14 @@ export const ResourceModal: React.FC<ResourceModalProps> = ({
   };
 
   const handlePrint = () => {
+    if (!currentUser) {
+      if (onRequireLogin) {
+        onRequireLogin(resource.title, resource.grade);
+      } else {
+        onDownload(resource.title, resource.sizeOrDuration);
+      }
+      return;
+    }
     printResourceInA4({
       title: resource.title,
       grade: resource.grade,
@@ -193,26 +209,107 @@ export const ResourceModal: React.FC<ResourceModalProps> = ({
 
             {activeTab === 'sheet' && (
               <div className="space-y-6">
-                {/* Key Formulas Section */}
-                <div>
-                  <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wider mb-3 flex items-center gap-1.5">
-                    <span className="material-symbols-outlined text-blue-600 text-[18px]">functions</span>
-                    Key Formulas & Algebraic Relations
-                  </h3>
-                  <div className="space-y-2.5">
-                    {resource.keyFormulas?.map((formula, idx) => (
-                      <div
-                        key={idx}
-                        className="bg-blue-50/60 border border-blue-100 rounded-xl p-3 flex items-center justify-between"
-                      >
-                        <span className="font-mono text-sm font-bold text-blue-950">{formula}</span>
-                        <span className="text-[11px] font-bold text-blue-600 bg-white px-2 py-0.5 rounded shadow-2xs">
-                          Ident. #{idx + 1}
-                        </span>
+                {/* Media Preview: Image, Video, or File */}
+                {(() => {
+                  const cleanYt = resource.youtubeId ? (resource.youtubeId.includes('v=') ? resource.youtubeId.split('v=')[1]?.split('&')[0] : resource.youtubeId.includes('youtu.be/') ? resource.youtubeId.split('youtu.be/')[1]?.split('?')[0] : resource.youtubeId) : null;
+                  const isImage = Boolean(resource.imageUrl || (resource.downloadUrl && /\.(png|jpe?g|webp|svg|gif)($|\?)/i.test(resource.downloadUrl)) || (resource.downloadUrl && resource.downloadUrl.startsWith('data:image/')));
+                  const imageSrc = resource.imageUrl || (isImage ? resource.downloadUrl : null);
+
+                  if (cleanYt) {
+                    return (
+                      <div className="rounded-2xl overflow-hidden aspect-video bg-black shadow-md border border-slate-200">
+                        <iframe
+                          src={`https://www.youtube.com/embed/${cleanYt}?autoplay=0&rel=0`}
+                          title={resource.title}
+                          className="w-full h-full border-0"
+                          allowFullScreen
+                        />
                       </div>
-                    ))}
+                    );
+                  }
+
+                  if (resource.facebookVideoUrl) {
+                    return (
+                      <div className="rounded-2xl overflow-hidden aspect-video bg-black shadow-md border border-slate-200">
+                        <iframe
+                          src={`https://www.facebook.com/plugins/video.php?href=${encodeURIComponent(resource.facebookVideoUrl)}&show_text=false`}
+                          title={resource.title}
+                          className="w-full h-full border-0"
+                          allowFullScreen
+                        />
+                      </div>
+                    );
+                  }
+
+                  if (isImage && imageSrc) {
+                    return (
+                      <div className="rounded-2xl overflow-hidden border border-slate-200 bg-slate-50 p-2 shadow-xs">
+                        <img
+                          src={imageSrc}
+                          alt={resource.title}
+                          className="w-full h-auto max-h-96 object-contain rounded-xl mx-auto"
+                        />
+                        <div className="pt-2 text-center text-xs text-slate-500 font-medium">
+                          Visual Diagram / Revision Sheet Preview
+                        </div>
+                      </div>
+                    );
+                  }
+
+                  if (resource.downloadUrl && (!resource.keyFormulas || resource.keyFormulas.length === 0)) {
+                    return (
+                      <div className="p-5 bg-blue-50/60 rounded-2xl border border-blue-100 flex flex-col sm:flex-row sm:items-center justify-between gap-4">
+                        <div className="flex items-center gap-3">
+                          <div className="w-12 h-12 rounded-xl bg-blue-600 text-white flex items-center justify-center shadow-xs shrink-0">
+                            <span className="material-symbols-outlined text-[26px]">description</span>
+                          </div>
+                          <div>
+                            <div className="font-bold text-slate-900 text-sm">
+                              {resource.title}
+                            </div>
+                            <div className="text-xs text-slate-500 font-mono mt-0.5">
+                              {resource.sizeOrDuration || 'Complete PDF Ready for Study'}
+                            </div>
+                          </div>
+                        </div>
+
+                        <button
+                          type="button"
+                          onClick={handleStartDownload}
+                          className="px-4 py-2.5 bg-blue-600 hover:bg-blue-700 text-white font-bold text-xs rounded-xl shadow-xs transition-colors flex items-center gap-1.5 shrink-0"
+                        >
+                          <span className="material-symbols-outlined text-[16px]">file_download</span>
+                          <span>Download &amp; Open Document</span>
+                        </button>
+                      </div>
+                    );
+                  }
+
+                  return null;
+                })()}
+
+                {/* Key Formulas Section (if present) */}
+                {resource.keyFormulas && resource.keyFormulas.length > 0 && (
+                  <div>
+                    <h3 className="text-sm font-bold text-gray-800 uppercase tracking-wider mb-3 flex items-center gap-1.5">
+                      <span className="material-symbols-outlined text-blue-600 text-[18px]">functions</span>
+                      Key Formulas &amp; Algebraic Relations
+                    </h3>
+                    <div className="space-y-2.5">
+                      {resource.keyFormulas.map((formula, idx) => (
+                        <div
+                          key={idx}
+                          className="bg-blue-50/60 border border-blue-100 rounded-xl p-3 flex items-center justify-between"
+                        >
+                          <span className="font-mono text-sm font-bold text-blue-950">{formula}</span>
+                          <span className="text-[11px] font-bold text-blue-600 bg-white px-2 py-0.5 rounded shadow-2xs">
+                            Ident. #{idx + 1}
+                          </span>
+                        </div>
+                      ))}
+                    </div>
                   </div>
-                </div>
+                )}
 
                 {/* Practical Notes & Proof Method */}
                 <div className="bg-amber-50/80 border border-amber-200 rounded-2xl p-4 space-y-2">

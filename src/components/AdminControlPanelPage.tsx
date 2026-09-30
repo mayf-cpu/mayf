@@ -89,6 +89,7 @@ import {
 import { AdminAnalyticsTab } from './admin/AdminAnalyticsTab';
 import { AdminRolesTab } from './admin/AdminRolesTab';
 import { AdminStudentsTab } from './admin/AdminStudentsTab';
+import { AdminDownloadsTab } from './admin/AdminDownloadsTab';
 import { AdminContentUploadTab } from './admin/AdminContentUploadTab';
 import { AdminPromosTab } from './admin/AdminPromosTab';
 import { AdminNotificationsTab } from './admin/AdminNotificationsTab';
@@ -105,7 +106,6 @@ import {
   savePageTextConfigLocally,
   DEFAULT_PAGE_TEXT,
 } from '../services/pageText';
-import { resetAllAdminFeaturesToDefaults } from '../services/adminReset';
 import {
   AdsGlobalConfig,
   getAdsConfig,
@@ -133,12 +133,11 @@ export const AdminControlPanelPage: React.FC<AdminControlPanelPageProps> = ({
   const [passcode, setPasscode] = useState('');
   const [isPasscodeUnlocked, setIsPasscodeUnlocked] = useState(false);
   const [assignedAdmins, setAssignedAdmins] = useState<AdminUserRecord[]>(getCachedAssignedAdmins);
-  const [showResetConfirmModal, setShowResetConfirmModal] = useState(false);
-  const [isResetting, setIsResetting] = useState(false);
   const [activeTab, setActiveTab] = useState<
     | 'analytics'
     | 'roles'
     | 'students'
+    | 'downloads'
     | 'ai-teacher'
     | 'content'
     | 'categories'
@@ -283,10 +282,16 @@ export const AdminControlPanelPage: React.FC<AdminControlPanelPageProps> = ({
         setNotifications(fetchedNotifications);
         saveLocalNotifications(fetchedNotifications);
       }
+      // Merge custom resources so local uploads and cloud uploads are always preserved
+      const localRes = getLocalCustomResources();
+      const resMap = new Map<string, CustomResourceRecord>();
+      localRes.forEach((r) => resMap.set(r.id, r));
       if (fetchedResources && fetchedResources.length > 0) {
-        setCustomResources(fetchedResources);
-        saveLocalCustomResources(fetchedResources);
+        fetchedResources.forEach((r) => resMap.set(r.id, r));
       }
+      const mergedRes = Array.from(resMap.values());
+      setCustomResources(mergedRes);
+      saveLocalCustomResources(mergedRes);
       if (fetchedSeo) {
         setSeoSettings(fetchedSeo);
         saveSeoSettingsLocally(fetchedSeo);
@@ -532,30 +537,6 @@ export const AdminControlPanelPage: React.FC<AdminControlPanelPageProps> = ({
     }
   };
 
-  const handleExecuteResetAll = async () => {
-    setIsResetting(true);
-    try {
-      await resetAllAdminFeaturesToDefaults();
-      // Reload local state in AdminControlPanelPage
-      setBrandingConfig(getBrandingConfig());
-      setCategories(getCategories());
-      setThemeConfig(getThemeConfig());
-      setSocialConfig(getSocialConfig());
-      setCoupons(getLocalCoupons());
-      setNotifications(getLocalNotifications());
-      setCustomResources(getLocalCustomResources());
-      setSeoSettings(getSeoSettingsLocally());
-      setPageText(getPageTextConfig());
-      setGatewayConfig(getRazorpayGatewayConfig());
-      setShowResetConfirmModal(false);
-      onToast('🎉 All Admin Features & Settings Reset to Defaults Successfully!');
-    } catch (e) {
-      onToast('Error during reset. Please try again.');
-    } finally {
-      setIsResetting(false);
-    }
-  };
-
   // If not authorized yet, show a clean, dedicated authentication screen
   if (!isAuthorized) {
     const isRegularLoggedInUser = Boolean(currentUser && !isGoogleAdmin);
@@ -755,16 +736,6 @@ export const AdminControlPanelPage: React.FC<AdminControlPanelPageProps> = ({
             </button>
 
             <button
-              onClick={() => setShowResetConfirmModal(true)}
-              className="flex items-center gap-1.5 px-3 py-1.5 bg-rose-900/60 hover:bg-rose-800 text-rose-200 hover:text-white rounded-lg text-xs font-bold cursor-pointer border border-rose-700/60 transition-colors shadow-xs"
-              title="Reset all admin features and settings to clean factory defaults"
-            >
-              <span className="material-symbols-outlined text-[16px]">restart_alt</span>
-              <span className="hidden sm:inline">Reset All Features</span>
-              <span className="sm:hidden">Reset</span>
-            </button>
-
-            <button
               onClick={onNavigateHome}
               className="hidden md:flex items-center gap-1 px-3 py-1.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-lg text-xs font-semibold cursor-pointer border border-slate-700 transition-colors"
             >
@@ -794,6 +765,7 @@ export const AdminControlPanelPage: React.FC<AdminControlPanelPageProps> = ({
             { id: 'analytics', label: 'Overview', icon: 'monitoring' },
             { id: 'roles', label: `Staff & Roles (${assignedAdmins.length})`, icon: 'admin_panel_settings' },
             { id: 'students', label: `Students (${users.length})`, icon: 'group' },
+            { id: 'downloads', label: 'Student Downloads', icon: 'cloud_download' },
             { id: 'ai-teacher', label: 'AI Teacher Activity', icon: 'psychology' },
             { id: 'content', label: `Upload Material (${customResources.length})`, icon: 'upload_file' },
             { id: 'categories', label: `Categories (${categories.length})`, icon: 'category' },
@@ -829,6 +801,9 @@ export const AdminControlPanelPage: React.FC<AdminControlPanelPageProps> = ({
         {/* TAB 1: ANALYTICS & REVENUE */}
         {activeTab === 'analytics' && (
           <AdminAnalyticsTab
+            users={users}
+            orders={orders}
+            customResources={customResources}
             onToast={onToast}
           />
         )}
@@ -849,6 +824,13 @@ export const AdminControlPanelPage: React.FC<AdminControlPanelPageProps> = ({
           <AdminStudentsTab
             users={users}
             onRefresh={loadData}
+            onToast={onToast}
+          />
+        )}
+
+        {/* TAB: STUDENT DOWNLOADS ACTIVITY AUDIT */}
+        {activeTab === 'downloads' && (
+          <AdminDownloadsTab
             onToast={onToast}
           />
         )}
@@ -1089,12 +1071,6 @@ export const AdminControlPanelPage: React.FC<AdminControlPanelPageProps> = ({
                   </p>
                 </div>
                 <div className="flex items-center gap-2">
-                  <button
-                    onClick={handleResetBranding}
-                    className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl transition-colors cursor-pointer"
-                  >
-                    Reset Defaults
-                  </button>
                   <button
                     onClick={handleSaveBranding}
                     disabled={isSavingBranding}
@@ -1392,62 +1368,6 @@ export const AdminControlPanelPage: React.FC<AdminControlPanelPageProps> = ({
           </button>
         </div>
       </footer>
-
-      {/* 5. RESET ALL FEATURES CONFIRMATION MODAL */}
-      {showResetConfirmModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fade-in">
-          <div className="w-full max-w-lg bg-slate-900 border border-rose-500/30 rounded-3xl p-6 sm:p-8 shadow-2xl text-slate-100 space-y-5">
-            <div className="flex items-center gap-3 pb-3 border-b border-slate-800">
-              <div className="w-12 h-12 rounded-2xl bg-rose-500/20 border border-rose-500/30 flex items-center justify-center text-rose-400 shrink-0">
-                <span className="material-symbols-outlined text-[28px]">restart_alt</span>
-              </div>
-              <div>
-                <h3 className="text-lg font-black text-white">Reset All Admin Features?</h3>
-                <p className="text-xs text-slate-400">Restore factory verified configurations across portal</p>
-              </div>
-            </div>
-
-            <div className="bg-slate-950/60 rounded-2xl p-4 border border-slate-800 space-y-2 text-xs text-slate-300">
-              <p className="font-semibold text-rose-300 flex items-center gap-1.5">
-                <span className="material-symbols-outlined text-[16px]">info</span>
-                This will reset the following features to clean defaults:
-              </p>
-              <ul className="list-disc pl-5 space-y-1 text-slate-400">
-                <li><strong>Categories &amp; Taxonomies:</strong> Class 5-10, topics, formats &amp; streams</li>
-                <li><strong>Design &amp; Theme:</strong> Sapphire Blue preset, light background, grid 3-col</li>
-                <li><strong>Branding:</strong> Official logos, favicons, site title &amp; announcement banner</li>
-                <li><strong>Discount Promos:</strong> Standard coupons (TOPPER50, EXAMBLITZ, PRO100)</li>
-                <li><strong>Push Broadcasts:</strong> Default exam alerts &amp; formula deck notices</li>
-                <li><strong>Social Community:</strong> Official YouTube, Telegram, WhatsApp &amp; Instagram channels</li>
-                <li><strong>Custom Content &amp; Overrides:</strong> Clears custom uploads &amp; tier overrides</li>
-              </ul>
-              <p className="text-slate-400 pt-1">
-                All changes will immediately reflect across every single part of the website!
-              </p>
-            </div>
-
-            <div className="flex items-center justify-end gap-3 pt-2">
-              <button
-                type="button"
-                onClick={() => setShowResetConfirmModal(false)}
-                disabled={isResetting}
-                className="px-4 py-2.5 bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white rounded-xl text-xs font-bold transition-colors cursor-pointer"
-              >
-                Cancel
-              </button>
-              <button
-                type="button"
-                onClick={handleExecuteResetAll}
-                disabled={isResetting}
-                className="px-5 py-2.5 bg-rose-600 hover:bg-rose-500 active:scale-95 text-white rounded-xl text-xs font-bold transition-all shadow-md flex items-center gap-2 cursor-pointer disabled:opacity-50"
-              >
-                <span className="material-symbols-outlined text-[16px]">restart_alt</span>
-                <span>{isResetting ? 'Resetting Portal...' : 'Confirm & Reset All Features'}</span>
-              </button>
-            </div>
-          </div>
-        </div>
-      )}
     </div>
   );
 };

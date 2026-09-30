@@ -4,7 +4,7 @@
 export function isInAppBrowser(): boolean {
   if (typeof navigator === 'undefined') return false;
   const ua = navigator.userAgent || navigator.vendor || (window as any).opera || '';
-  return /FBAN|FBAV|Instagram|Line|Twitter|Snapchat|MicroMessenger|musical_ly|BytedanceWebview|LinkedInApp|WhatsApp|Telegram|Messenger|FB_IAB|FB4A/i.test(ua);
+  return /FBAN|FBAV|Instagram|Line|Twitter|Snapchat|MicroMessenger|musical_ly|BytedanceWebview|LinkedInApp|WhatsApp|Telegram|Messenger|FB_IAB|FB4A|Threads|wv|WebView/i.test(ua) || (isAndroidDevice() && /Version\/[0-9.]+/i.test(ua));
 }
 
 export function isAndroidDevice(): boolean {
@@ -49,6 +49,14 @@ export function getExternalBrowserShareUrl(targetUrl?: string): string {
 }
 
 /**
+ * Generates the dedicated Ask Teacher standalone share URL that forces external browser launch.
+ */
+export function getAskTeacherShareUrl(origin?: string): string {
+  const baseOrigin = origin || (typeof window !== 'undefined' ? window.location.origin : '');
+  return `${baseOrigin}/ask-teacher?openExternal=true`;
+}
+
+/**
  * Trigger external browser launch if running inside an in-app browser or if requested via openExternal.
  */
 export function attemptAutoLaunchExternalBrowser(): void {
@@ -58,6 +66,14 @@ export function attemptAutoLaunchExternalBrowser(): void {
   const requestedExternal = urlParams.get('openExternal') === 'true';
 
   if ((isInAppBrowser() || requestedExternal) && isAndroidDevice()) {
+    // Only attempt once per session to prevent infinite reload loops
+    try {
+      if (sessionStorage.getItem('external_browser_attempted') === 'true') {
+        return;
+      }
+      sessionStorage.setItem('external_browser_attempted', 'true');
+    } catch (_) {}
+
     const cleanUrl = window.location.href.replace(/^https?:\/\//, '');
     const intentUrl = `intent://${cleanUrl}#Intent;scheme=https;package=com.android.chrome;end`;
     try {

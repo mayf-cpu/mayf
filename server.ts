@@ -45,6 +45,11 @@ app.get('/sitemap.xml', (req, res) => {
     <priority>1.0</priority>
   </url>
   <url>
+    <loc>${baseUrl}/ask-teacher</loc>
+    <changefreq>daily</changefreq>
+    <priority>0.95</priority>
+  </url>
+  <url>
     <loc>${baseUrl}/#formula-deck</loc>
     <changefreq>weekly</changefreq>
     <priority>0.9</priority>
@@ -67,6 +72,12 @@ app.get('/sitemap.xml', (req, res) => {
 app.get(['/admin', '/admin/*'], (req, res) => {
   res.setHeader('X-Robots-Tag', 'noindex, nofollow, noarchive, nosnippet');
   res.redirect(302, '/#admin');
+});
+
+// Direct alias for Ask Teacher: redirects /teacher to /ask-teacher preserving query params
+app.get(['/teacher', '/teacher/*'], (req, res) => {
+  const query = req.url.includes('?') ? req.url.substring(req.url.indexOf('?')) : '';
+  res.redirect(301, `/ask-teacher${query}`);
 });
 
 // Initialize Google GenAI client (User-Agent header required by skill)
@@ -111,14 +122,22 @@ Your goal is to solve the student's math question directly on the classroom blac
 CRITICAL MATHEMATICAL WRITING RULES:
 1. Standard LaTeX Math Notation:
    - For all inline math formulas, variables, and numbers, use $...$: e.g. $x$, $a = 3$, $b = -5$, $c = 2$, $\\sqrt{b^2 - 4ac}$, $\\frac{a}{b}$, $x^2 - 4 = 0$, $\\theta = 30^\\circ$.
-   - For standalone or multi-line mathematical equations, use display blocks:
+   - For standalone or multi-line mathematical equations, enclose the formula completely within display delimiters on a single line:
      $$ax^2 + bx + c = 0$$
      $$x = \\frac{-b \\pm \\sqrt{b^2 - 4ac}}{2a}$$
-   - Align equation steps cleanly line-by-line.
+   - Never put $$ on its own separate line without math. Never output stray or orphan dollar signs ($).
+   - Do NOT use markdown double asterisks (**) anywhere in your output. Never write **word** or **. Write clean plain text without any asterisks.
+   - Do NOT use \\boxed{...}, \\fbox{...}, or vertical bars (|) around the answer or formulas. Write the final answer as clean text inside display math: $$\\text{Answer: } ...$$
 
-2. Structure your board work into these authentic classroom chalkboard sections:
+2. Step-by-Step Layout and Justifications:
+   - Write each step, equation, or transformation on its OWN separate new line.
+   - Place mathematical justifications in brackets at the end of the concerned step: e.g. [\\because \\text{Solving operations inside brackets first (BODMAS)}], [\\because \\text{Substituting } a=3, b=-5], [\\because \\text{Applying Pythagoras Theorem in } \\triangle ABC].
+   - CRITICAL: NEVER write "Next Step" or another calculation on the same row after a justification $[\\because ...]$. Always start "Next Step" or subsequent transformations on a brand new line.
+   - Do NOT skip intermediate steps: show factoring, transposing terms, expanding brackets, and simplifying fractions explicitly.
+
+3. Structure your board work into these 5 clean sections:
 ### 📋 [CLASSROOM BOARD WORK]
-**Subject:** Mathematics | **Grade:** ${grade} | **Topic:** ${topic}
+Subject: Mathematics | Grade: ${grade} | Topic: ${topic}
 
 ### 📌 1. GIVEN & TO FIND (or TO PROVE)
 - List all given values, variables, and conditions clearly ($a, b, c, r, h$, etc.).
@@ -129,20 +148,15 @@ CRITICAL MATHEMATICAL WRITING RULES:
 - Mention any boundary conditions (e.g. $b^2 - 4ac \\ge 0$, denominator $\\ne 0$, $r > 0$).
 
 ### ✍️ 3. STEP-BY-STEP BOARD SOLUTION
-- Write each transformation on a separate line, just like writing line-by-line with chalk on the blackboard.
-- Explain the reason for every mathematical operation in brackets on the right: e.g. $[\\because \\text{Substituting } a=3, b=-5, c=2]$, $[\\because \\text{Applying Pythagoras Theorem in } \\triangle ABC]$, $[\\because \\text{Expanding } (a+b)^2]$.
-- Do NOT skip intermediate steps: show factoring, transposing terms, expanding brackets, and simplifying fractions explicitly.
+- Write each transformation on a separate line.
+- Explain the reason for every mathematical operation in brackets on the right: e.g. $[\\because \\text{Substituting } a=3]$.
+- Always begin the next step on a fresh new line.
 
-### 📝 4. ROUGH WORK & SIDE CALCULATIONS (Margin Column)
-- Every authentic math blackboard has a rough work margin column on the right!
-- Show scratchpad calculations: discriminant computation, prime factorization, middle-term splitting products and sums ($p + q = b, p \\times q = ac$), long division, LCM, or unit conversions.
+### 🎯 4. FINAL ANSWER BOX
+- Frame the final answer prominently in clean LaTeX display expression without \\boxed{} or vertical lines:
+  $$\\text{Answer: } [Final result with appropriate units]$$
 
-### 🎯 5. FINAL ANSWER BOX
-- Frame the final answer prominently in a LaTeX boxed expression:
-  $$\\boxed{\\text{Answer: } [Final result with appropriate units]}$$
-- Verification / Quick Check: Demonstrate how to verify the answer in 15 seconds by plugging the value back into the original question to check $\\text{LHS} = \\text{RHS}$.
-
-### 💡 6. TEACHER'S BOARD TIP & COMMON EXAM TRAP
+### 💡 5. TEACHER'S BOARD TIP & COMMON EXAM TRAP
 - Highlight a classic error students frequently commit in board exams for this type of problem (e.g., forgetting $\\pm$ with square roots, sign flips in subtractions, or unit mismatches).
 - Provide a quick memory trick or rule of thumb.
 
@@ -250,27 +264,30 @@ Tone: World-class classroom school teacher — crystal-clear, rigorous, encourag
     // 3. Google Gemini 3.8 Flash (Default & Primary Engine)
     if (!process.env.GEMINI_API_KEY && !customApiKey) {
       // Graceful pedagogical fallback when GEMINI_API_KEY is not yet populated
-      const fallbackResponse = `### 📌 1. Problem Breakdown & Given Data
-- **Student Grade**: ${grade}
-- **Topic**: ${topic}
-- **Query Received**: ${prompt || 'Image-based problem query'}
+      const fallbackResponse = `### 📋 [CLASSROOM BOARD WORK]
+Subject: Mathematics | Grade: ${grade} | Topic: ${topic}
 
-### 📐 2. Key Formula / Concept Applied
-- School Mathematics Core Method: Systemic decomposition, algebraic formulation, and step-by-step verification.
+### 📌 1. GIVEN & TO FIND
+- Problem Statement: ${prompt || 'Visual problem analysis query'}
+- Grade Syllabus: ${grade} (${topic})
+- Objective: Solve step-by-step applying standard curriculum principles.
 
-### ✍️ 3. Step-by-Step Solution
-1. **Analyze Constraints**: Let the required unknown be $x$. Establish relation from given conditions.
-2. **Apply Identity**: Substitute known values into the standard formula.
-3. **Simplify Algebraic Expressions**: Balance equations carefully on both sides.
-4. **Solve for Unknown**: Compute the exact numerical result.
+### 📐 2. FORMULA BOX / THEOREM USED
+- Core Standard Formula:
+  $$\\text{Standard Mathematical Property or Identity}$$
 
-*(Note: Live AI Model connection ready. Set your GEMINI_API_KEY in environment secrets to enable real-time dynamic Gemini 3.8 Flash multi-modal reasoning).*
+### ✍️ 3. STEP-BY-STEP BOARD SOLUTION
+1. Define the Given Relation: Identify known values and establish the variable $x$. [\\because \\text{Given Problem Constraints}]
+Next Step: Apply standard formula
+2. Execute Calculations: Substitute parameters and balance equation terms on Left Hand Side (LHS) and Right Hand Side (RHS). [\\because \\text{Balancing Equations}]
+Next Step: Simplify and evaluate
+3. Solve for Unknown: Compute the exact numerical result. [\\because \\text{Arithmetic Simplification}]
 
-### 🎯 4. Final Answer
-- **Calculated Result**: Successfully structured for ${grade} syllabus.
+### 🎯 4. FINAL ANSWER BOX
+$$\\text{Answer: Result calculated for } ${grade}$$
 
-### 💡 5. Teacher's Pro-Tip & Exam Caution
-- Always re-substitute your final answer back into the original question to verify that both Left Hand Side (LHS) and Right Hand Side (RHS) match!`;
+### 💡 5. TEACHER'S BOARD TIP & COMMON EXAM TRAP
+- In examinations, write out each theorem by name before applying it to guarantee full step-marks!`;
 
       return res.json({
         solution: fallbackResponse,
@@ -340,32 +357,28 @@ Tone: World-class classroom school teacher — crystal-clear, rigorous, encourag
 
     if (!solutionText) {
       solutionText = `### 📋 [CLASSROOM BOARD WORK]
-**Subject:** Mathematics | **Grade:** ${grade} | **Topic:** ${topic}
+Subject: Mathematics | Grade: ${grade} | Topic: ${topic}
 
 ### 📌 1. GIVEN & TO FIND
-- **Problem Statement:** ${prompt || 'Visual problem analysis query'}
-- **Grade Syllabus:** ${grade} (${topic})
-- **Objective:** Solve step-by-step applying standard curriculum principles.
+- Problem Statement: ${prompt || 'Visual problem analysis query'}
+- Grade Syllabus: ${grade} (${topic})
+- Objective: Solve step-by-step applying standard curriculum principles.
 
 ### 📐 2. FORMULA BOX / THEOREM USED
-- **Core Standard Formula:**
+- Core Standard Formula:
   $$\\text{Standard Mathematical Property or Identity}$$
 
 ### ✍️ 3. STEP-BY-STEP BOARD SOLUTION
-1. **Define the Given Relation:**
-   Identify known values and establish the variable $x$.
-2. **Execute Calculations:**
-   Substitute parameters into the formula and balance equation terms on Left Hand Side (LHS) and Right Hand Side (RHS).
-3. **Verify Constraints:**
-   Ensure values satisfy boundary and domain requirements.
+1. Define the Given Relation: Identify known values and establish the variable $x$. [\\because \\text{Problem Definition}]
+Next Step: Substitute into standard equation
+2. Execute Calculations: Substitute parameters into formula and balance equation terms. [\\because \\text{Algebraic Simplification}]
+Next Step: Evaluate solution
+3. Verify Constraints: Ensure values satisfy boundary and domain requirements. [\\because \\text{Mathematical Validity}]
 
-### 📝 4. ROUGH WORK & SIDE CALCULATIONS (Margin Column)
-- Scratch calculations, factorization check, and arithmetic operations are verified along the right blackboard margin.
+### 🎯 4. FINAL ANSWER BOX
+$$\\text{Answer: Result calculated for } ${grade}$$
 
-### 🎯 5. FINAL ANSWER BOX
-$$\\boxed{\\text{Answer: Result calculated for } ${grade}}$$
-
-### 💡 6. TEACHER'S BOARD TIP & COMMON EXAM TRAP
+### 💡 5. TEACHER'S BOARD TIP & COMMON EXAM TRAP
 - In examinations, write out each theorem by name before applying it to guarantee full step-marks!`;
       usedModel = 'classroom-pedagogical-engine';
     }

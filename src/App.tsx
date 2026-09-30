@@ -14,8 +14,11 @@ import {
   isUserAdmin,
   createDemoStudentSession,
   getLocalDemoSession,
+  recordStudentDownload,
+  fetchStudentProfileDownloads,
 } from './firebase';
 import { UnauthorizedDomainModal } from './components/UnauthorizedDomainModal';
+import { LoginRequiredModal } from './components/LoginRequiredModal';
 import { MATH_RESOURCES, MathResource } from './data/mathResources';
 import { Header } from './components/Header';
 import { InteractiveFormulaDeckModal } from './components/InteractiveFormulaDeckModal';
@@ -38,6 +41,8 @@ import { SocialFloatingJoinBar } from './components/SocialFloatingJoinBar';
 import { FormulaDeckPage } from './components/FormulaDeckPage';
 import { FormulaDeckSandbox } from './components/FormulaDeckSandbox';
 import { AiTeacherModal } from './components/AiTeacherModal';
+import { AskTeacherPage } from './components/AskTeacherPage';
+import { getAskTeacherShareUrl } from './services/externalBrowser';
 import {
   BrandingConfig,
   getBrandingConfig,
@@ -72,6 +77,7 @@ import {
 import {
   recordResourceDownloadEvent,
   recordPostViewEvent,
+  recordPageViewEvent,
 } from './services/analytics';
 import {
   loadBrandingSettingsFromFirestore,
@@ -96,11 +102,12 @@ import { AdPlacement } from './components/AdPlacement';
 import { loadAdsConfigFromFirestore, saveAdsConfigLocally } from './services/ads';
 
 export default function App() {
-  // Page view routing: 'store' for student portal, 'admin' for dedicated Control Panel, 'dashboard' for User Dashboard, 'formula-deck' for dedicated interactive sandbox
-  const [currentView, setCurrentView] = useState<'store' | 'admin' | 'dashboard' | 'formula-deck'>(() => {
+  // Page view routing: 'store' for student portal, 'admin' for dedicated Control Panel, 'dashboard' for User Dashboard, 'formula-deck' for dedicated interactive sandbox, 'ask-teacher' for dedicated Ask Teacher solver page
+  const [currentView, setCurrentView] = useState<'store' | 'admin' | 'dashboard' | 'formula-deck' | 'ask-teacher'>(() => {
     if (typeof window !== 'undefined') {
       const p = window.location.pathname.toLowerCase();
       const h = window.location.hash.toLowerCase();
+      const s = window.location.search.toLowerCase();
       if (p.startsWith('/admin') || h.includes('portal-vault') || h.includes('staff-access') || h.includes('faculty-desk') || h.includes('admin')) {
         return 'admin';
       }
@@ -109,6 +116,9 @@ export default function App() {
       }
       if (p.startsWith('/formula-deck') || h.includes('formula')) {
         return 'formula-deck';
+      }
+      if (p.startsWith('/ask-teacher') || p.startsWith('/teacher') || h.includes('ask-teacher') || h.includes('teacher') || s.includes('ask-teacher')) {
+        return 'ask-teacher';
       }
     }
     return 'store';
@@ -231,6 +241,35 @@ export default function App() {
     resource?: MathResource;
   } | null>(null);
   const [isCaptchaModalOpen, setIsCaptchaModalOpen] = useState(false);
+  const [isLoginRequiredOpen, setIsLoginRequiredOpen] = useState(false);
+
+  // Synchronize student profile downloads from Firestore & Local Storage
+  useEffect(() => {
+    if (currentUser?.uid) {
+      fetchStudentProfileDownloads(currentUser.uid).then((cloudDownloads) => {
+        if (cloudDownloads && cloudDownloads.length > 0) {
+          setDownloads(cloudDownloads);
+        }
+      });
+    }
+
+    const handleDownloadsSync = () => {
+      if (currentUser?.uid) {
+        fetchStudentProfileDownloads(currentUser.uid).then((cloudDownloads) => {
+          if (cloudDownloads && cloudDownloads.length > 0) {
+            setDownloads(cloudDownloads);
+          }
+        });
+      }
+    };
+
+    window.addEventListener('student-downloads-changed', handleDownloadsSync);
+    window.addEventListener('student-download-recorded', handleDownloadsSync);
+    return () => {
+      window.removeEventListener('student-downloads-changed', handleDownloadsSync);
+      window.removeEventListener('student-download-recorded', handleDownloadsSync);
+    };
+  }, [currentUser]);
 
   const showToast = (msg: string) => {
     setToastMessage(msg);
@@ -498,12 +537,15 @@ export default function App() {
     const handleRouteChange = () => {
       const p = window.location.pathname.toLowerCase();
       const h = window.location.hash.toLowerCase();
+      const s = window.location.search.toLowerCase();
       if (p.startsWith('/admin') || h.includes('portal-vault') || h.includes('staff-access') || h.includes('faculty-desk') || h.includes('admin')) {
         setCurrentView('admin');
       } else if (p.startsWith('/dashboard') || h.includes('dashboard')) {
         setCurrentView('dashboard');
       } else if (p.startsWith('/formula-deck') || h.includes('formula')) {
         setCurrentView('formula-deck');
+      } else if (p.startsWith('/ask-teacher') || p.startsWith('/teacher') || h.includes('ask-teacher') || h.includes('teacher') || s.includes('ask-teacher')) {
+        setCurrentView('ask-teacher');
       } else {
         setCurrentView('store');
       }
@@ -527,12 +569,23 @@ export default function App() {
     };
   }, []);
 
-  // Strict SEO Isolation: Prevent search engine spiders from indexing or scraping admin panel
+  // Strict SEO Isolation & Live Telemetry: Prevent search engine spiders from indexing admin and track real page views
   useEffect(() => {
     if (currentView === 'admin') {
       applyAdminNoIndexToDocument();
+      recordPageViewEvent('/admin', 'Admin Control Center');
     } else {
       applySeoToDocument(getSeoSettingsLocally());
+      if (currentView === 'dashboard') {
+        recordPageViewEvent('/dashboard', 'Student Profile & Downloads');
+      } else if (currentView === 'formula-deck') {
+        recordPageViewEvent('/formula-deck', 'Pocket Formula Deck & Printable Sheets');
+      } else if (currentView === 'ask-teacher') {
+        recordPageViewEvent('/ask-teacher', 'Ask Teacher Classroom Board Solver');
+        document.title = 'Ask Teacher - Step-by-Step Classroom Board Math Solver | Maths at Your Fingertips';
+      } else {
+        recordPageViewEvent('/', 'Home / Hero Banner');
+      }
     }
   }, [currentView]);
 
@@ -540,11 +593,23 @@ export default function App() {
   const [isAiTeacherOpen, setIsAiTeacherOpen] = useState(false);
   const [aiTeacherPresetQuery, setAiTeacherPresetQuery] = useState('');
 
-  const handleOpenAiTeacher = (query?: string) => {
+  const handleNavigateToAskTeacher = (query?: string) => {
     if (query) {
       setAiTeacherPresetQuery(query);
     }
-    setIsAiTeacherOpen(true);
+    setCurrentView('ask-teacher');
+    if (typeof window !== 'undefined') {
+      if (window.history && window.history.pushState) {
+        window.history.pushState(null, '', '/ask-teacher');
+      } else {
+        window.location.hash = '#ask-teacher';
+      }
+      window.scrollTo({ top: 0, behavior: 'smooth' });
+    }
+  };
+
+  const handleOpenAiTeacher = (query?: string) => {
+    handleNavigateToAskTeacher(query);
   };
 
   const handleOpenAdminPanel = () => {
@@ -567,11 +632,14 @@ export default function App() {
 
   const handleNavigateHome = () => {
     setCurrentView('store');
-    if (window.location.pathname.toLowerCase().startsWith('/admin')) {
-      window.history.pushState(null, '', '/');
+    if (typeof window !== 'undefined') {
+      const p = window.location.pathname.toLowerCase();
+      if (p.startsWith('/admin') || p.startsWith('/ask-teacher') || p.startsWith('/teacher') || p.startsWith('/formula-deck') || p.startsWith('/dashboard')) {
+        window.history.pushState(null, '', '/');
+      }
+      window.location.hash = '';
+      window.scrollTo({ top: 0, behavior: 'smooth' });
     }
-    window.location.hash = '';
-    window.scrollTo({ top: 0, behavior: 'smooth' });
   };
 
   const handleGoogleSignIn = async () => {
@@ -579,8 +647,15 @@ export default function App() {
       setAuthLoading(true);
       const user = await signInWithGoogle();
       showToast(`Welcome back, ${user.displayName || 'Learner'}!`);
-      // Open mobile number registration block with Indian country code (+91) default
-      setShowMobileRegisterModal(true);
+      // If a download was requested before login, resume it now!
+      if (pendingDownloadItem) {
+        setIsLoginRequiredOpen(false);
+        setIsCaptchaModalOpen(true);
+        showToast(`✓ Signed in! Continuing download for "${pendingDownloadItem.title}"...`);
+      } else {
+        // Open mobile number registration block with Indian country code (+91) default
+        setShowMobileRegisterModal(true);
+      }
     } catch (err: any) {
       if (err?.code === 'auth/unauthorized-domain') {
         setShowDomainModal(true);
@@ -606,12 +681,21 @@ export default function App() {
       createdAt: new Date().toISOString(),
     });
     setShowDomainModal(false);
+    setIsLoginRequiredOpen(false);
     showToast(`Signed in as ${mockUser.displayName}! All features active.`);
+
+    // If a download was requested before login, resume it now!
+    if (pendingDownloadItem) {
+      setIsCaptchaModalOpen(true);
+      showToast(`✓ Signed in! Continuing download for "${pendingDownloadItem.title}"...`);
+    }
   };
 
   const handleSignOut = async () => {
     try {
       await logOut();
+      setPendingDownloadItem(null);
+      setIsLoginRequiredOpen(false);
       showToast('Signed out successfully');
     } catch (err) {
       console.warn('Sign out error:', err);
@@ -810,26 +894,41 @@ export default function App() {
     });
   }, [allCatalogResources, searchQuery, selectedClass, priceTier, selectedFormat, selectedTopic, selectedStream]);
 
-  // Gated download with Captcha verification
+  // Gated download with Student Login requirement & Captcha verification
   const handleDownload = (title: string, size?: string, resource?: MathResource) => {
     const targetResource = resource || allCatalogResources.find((r) => r.title === title || r.id === title);
-    setPendingDownloadItem({
+    const itemToDownload = {
       title,
       size: size || targetResource?.sizeOrDuration || '2.1 MB',
       resource: targetResource,
-    });
+    };
+    setPendingDownloadItem(itemToDownload);
+
+    // CRITICAL REQUIREMENT: Before downloading anything from website, login is a must
+    if (!currentUser) {
+      setIsLoginRequiredOpen(true);
+      showToast('⚠️ Please sign in with your student account to download study notes.');
+      return;
+    }
+
     setIsCaptchaModalOpen(true);
   };
 
   const executeVerifiedDownload = () => {
     if (!pendingDownloadItem) return;
+    if (!currentUser) {
+      setIsLoginRequiredOpen(true);
+      showToast('⚠️ Please sign in with your student account to download study notes.');
+      return;
+    }
+
     const { title, size, resource } = pendingDownloadItem;
     const targetResource = resource || allCatalogResources.find((r) => r.title === title || r.id === title);
 
     try {
       downloadResourceToSystem({
         title: targetResource?.title || title,
-        grade: targetResource?.grade || 'Class 10',
+        grade: targetResource?.grade || selectedClass || 'Class 10',
         topic: targetResource?.topic || 'Mathematics',
         format: targetResource?.format || 'Formula Sheets (1-Pager)',
         downloadUrl: targetResource?.downloadUrl,
@@ -841,15 +940,36 @@ export default function App() {
       console.warn('System file download error:', e);
     }
 
+    const downloadId = `dl-${Date.now()}`;
     const newItem: DownloadedItem = {
-      id: `dl-${Date.now()}`,
+      id: downloadId,
       title,
       size: size || targetResource?.sizeOrDuration || '2.1 MB',
       downloadedAt: 'Just now',
     };
+
+    // Record student download activity in Firebase Firestore & profile
+    recordStudentDownload({
+      id: downloadId,
+      userId: currentUser.uid,
+      userEmail: currentUser.email || 'student@mathsatyourfingertips.com',
+      userName: currentUser.displayName || userProfile?.displayName || 'Enrolled Student',
+      userPhoto: currentUser.photoURL || userProfile?.photoURL,
+      resourceId: targetResource?.id || 'res-custom',
+      title: targetResource?.title || title,
+      grade: targetResource?.grade || selectedClass || 'Class 10',
+      topic: targetResource?.topic || 'Mathematics',
+      format: targetResource?.format || 'Formula Sheets (1-Pager)',
+      tier: targetResource?.tier === 'pro' ? 'pro' : 'free',
+      size: newItem.size,
+      downloadUrl: targetResource?.downloadUrl,
+      downloadedAt: new Date().toISOString(),
+      device: typeof navigator !== 'undefined' && navigator.userAgent.includes('Mobile') ? 'Mobile Device' : 'Desktop Browser',
+    }).catch((err) => console.warn('Record student download err:', err));
+
     recordResourceDownloadEvent(title, false);
     setDownloads((prev) => [newItem, ...prev.filter((p) => p.title !== title)]);
-    showToast(`✓ Verification passed! Downloading "${title}" to your system.`);
+    showToast(`✓ Verification passed! Downloading "${title}" (saved to your profile).`);
     setPendingDownloadItem(null);
   };
 
@@ -865,7 +985,12 @@ export default function App() {
   };
 
   const handleCardClick = (res: MathResource) => {
-    recordPostViewEvent(res.id);
+    recordPostViewEvent(res.id, {
+      title: res.title,
+      grade: res.grade,
+      topic: res.topic,
+      format: res.format,
+    });
     if (res.hasVideo) {
       setSelectedResource(res);
       setIsVideoModalOpen(true);
@@ -946,6 +1071,28 @@ export default function App() {
             handleGoogleSignIn();
           }}
         />
+        <LoginRequiredModal
+          isOpen={isLoginRequiredOpen}
+          onClose={() => {
+            setIsLoginRequiredOpen(false);
+            setPendingDownloadItem(null);
+          }}
+          onGoogleSignIn={handleGoogleSignIn}
+          onQuickDemoSignIn={handleQuickDemoSignIn}
+          pendingResourceTitle={pendingDownloadItem?.title}
+          pendingResourceGrade={pendingDownloadItem?.resource?.grade}
+        />
+        <DownloadCaptchaModal
+          isOpen={isCaptchaModalOpen}
+          onClose={() => {
+            setIsCaptchaModalOpen(false);
+            setPendingDownloadItem(null);
+          }}
+          onVerified={executeVerifiedDownload}
+          itemTitle={pendingDownloadItem?.title || 'Maths Revision Notes'}
+          itemSize={pendingDownloadItem?.size || '2.4 MB'}
+          resource={pendingDownloadItem?.resource}
+        />
         {toastMessage && (
           <div className="fixed bottom-6 right-6 z-50 bg-[#111c2d] text-white px-5 py-3 rounded-2xl shadow-2xl flex items-center gap-2.5 text-xs font-bold animate-fadeIn border border-slate-700 max-w-[90vw]">
             <span className="material-symbols-outlined text-[18px] text-emerald-400 shrink-0">check_circle</span>
@@ -986,6 +1133,84 @@ export default function App() {
             handleGoogleSignIn();
           }}
         />
+        <LoginRequiredModal
+          isOpen={isLoginRequiredOpen}
+          onClose={() => {
+            setIsLoginRequiredOpen(false);
+            setPendingDownloadItem(null);
+          }}
+          onGoogleSignIn={handleGoogleSignIn}
+          onQuickDemoSignIn={handleQuickDemoSignIn}
+          pendingResourceTitle={pendingDownloadItem?.title}
+          pendingResourceGrade={pendingDownloadItem?.resource?.grade}
+        />
+        <DownloadCaptchaModal
+          isOpen={isCaptchaModalOpen}
+          onClose={() => {
+            setIsCaptchaModalOpen(false);
+            setPendingDownloadItem(null);
+          }}
+          onVerified={executeVerifiedDownload}
+          itemTitle={pendingDownloadItem?.title || 'Maths Revision Notes'}
+          itemSize={pendingDownloadItem?.size || '2.4 MB'}
+          resource={pendingDownloadItem?.resource}
+        />
+        {toastMessage && (
+          <div className="fixed bottom-6 right-6 z-50 bg-[#111c2d] text-white px-5 py-3 rounded-2xl shadow-2xl flex items-center gap-2.5 text-xs font-bold animate-fadeIn border border-slate-700 max-w-[90vw]">
+            <span className="material-symbols-outlined text-[18px] text-emerald-400 shrink-0">check_circle</span>
+            <span className="truncate">{toastMessage}</span>
+          </div>
+        )}
+      </div>
+    );
+  }
+
+  // Render Ask Teacher as a separate dedicated page view with unique URL (/ask-teacher)
+  if (currentView === 'ask-teacher') {
+    return (
+      <div className="w-full min-h-screen bg-[#f9f9ff] font-['Plus_Jakarta_Sans',sans-serif]">
+        <AskTeacherPage
+          onNavigateHome={handleNavigateHome}
+          currentUser={currentUser}
+          userProfile={userProfile}
+          onGoogleSignIn={handleGoogleSignIn}
+          onQuickDemoSignIn={handleQuickDemoSignIn}
+          onToast={showToast}
+          branding={branding}
+          pageText={pageText}
+          initialQuery={aiTeacherPresetQuery}
+        />
+        <UnauthorizedDomainModal
+          isOpen={showDomainModal}
+          onClose={() => setShowDomainModal(false)}
+          onQuickSignIn={handleQuickDemoSignIn}
+          onRetryGoogleSignIn={() => {
+            setShowDomainModal(false);
+            handleGoogleSignIn();
+          }}
+        />
+        <LoginRequiredModal
+          isOpen={isLoginRequiredOpen}
+          onClose={() => {
+            setIsLoginRequiredOpen(false);
+            setPendingDownloadItem(null);
+          }}
+          onGoogleSignIn={handleGoogleSignIn}
+          onQuickDemoSignIn={handleQuickDemoSignIn}
+          pendingResourceTitle={pendingDownloadItem?.title}
+          pendingResourceGrade={pendingDownloadItem?.resource?.grade}
+        />
+        <DownloadCaptchaModal
+          isOpen={isCaptchaModalOpen}
+          onClose={() => {
+            setIsCaptchaModalOpen(false);
+            setPendingDownloadItem(null);
+          }}
+          onVerified={executeVerifiedDownload}
+          itemTitle={pendingDownloadItem?.title || 'Maths Revision Notes'}
+          itemSize={pendingDownloadItem?.size || '2.4 MB'}
+          resource={pendingDownloadItem?.resource}
+        />
         {toastMessage && (
           <div className="fixed bottom-6 right-6 z-50 bg-[#111c2d] text-white px-5 py-3 rounded-2xl shadow-2xl flex items-center gap-2.5 text-xs font-bold animate-fadeIn border border-slate-700 max-w-[90vw]">
             <span className="material-symbols-outlined text-[18px] text-emerald-400 shrink-0">check_circle</span>
@@ -1020,7 +1245,7 @@ export default function App() {
         onGoogleSignIn={handleGoogleSignIn}
         onOpenDownloads={() => setIsDownloadsOpen(true)}
         onOpenFormulaDeck={handleNavigateToFormulaDeck}
-        onOpenAiTeacher={() => handleOpenAiTeacher()}
+        onOpenAiTeacher={() => handleNavigateToAskTeacher()}
         onOpenProPass={() => setIsProPassModalOpen(true)}
         onOpenDashboard={handleOpenDashboard}
         onOpenMobileRegister={() => setShowMobileRegisterModal(true)}
@@ -1035,6 +1260,8 @@ export default function App() {
           setActiveNav(nav);
           if (nav === 'formula-deck') {
             handleNavigateToFormulaDeck();
+          } else if (nav === 'ask-teacher' || nav === 'teacher') {
+            handleNavigateToAskTeacher();
           } else {
             setCurrentView('store');
           }
@@ -1855,27 +2082,105 @@ export default function App() {
                       </span>
                     </div>
 
-                    {/* Optional Video Course Visual Preview */}
-                    {res.hasVideo && (
-                      <div
-                        onClick={() => handleCardClick(res)}
-                        className="relative rounded-xl overflow-hidden mb-3 aspect-video bg-[#e7eeff] flex items-center justify-center cursor-pointer group/vid"
-                      >
-                        <img
-                          alt="Geometric shapes preview"
-                          className="w-full h-full object-cover group-hover/vid:scale-105 transition-transform duration-300"
-                          src={res.thumbnailUrl}
-                        />
-                        <div className="absolute inset-0 bg-[#263143]/40 flex items-center justify-center">
-                          <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-full bg-[#fea619] text-[#2a1700] flex items-center justify-center shadow-lg transform group-hover/vid:scale-110 transition-transform">
-                            <span className="material-symbols-outlined text-[24px] sm:text-[28px]">play_arrow</span>
+                    {/* Automatic Preview for Video, Image, or File */}
+                    {(() => {
+                      const isVideo = Boolean(res.hasVideo || res.youtubeId || res.videoUrl || res.facebookVideoUrl || res.embedHtml);
+                      const cleanYt = res.youtubeId ? (res.youtubeId.includes('v=') ? res.youtubeId.split('v=')[1]?.split('&')[0] : res.youtubeId.includes('youtu.be/') ? res.youtubeId.split('youtu.be/')[1]?.split('?')[0] : res.youtubeId) : null;
+                      const videoThumb = res.thumbnailUrl || (cleanYt ? `https://img.youtube.com/vi/${cleanYt}/hqdefault.jpg` : null);
+                      const isImage = !isVideo && Boolean(res.imageUrl || (res.downloadUrl && /\.(png|jpe?g|webp|svg|gif)($|\?)/i.test(res.downloadUrl)) || (res.downloadUrl && res.downloadUrl.startsWith('data:image/')));
+                      const imageSrc = res.imageUrl || (isImage ? res.downloadUrl : null);
+                      const hasDocFile = !isVideo && !isImage && Boolean(res.downloadUrl);
+
+                      if (isVideo) {
+                        return (
+                          <div
+                            onClick={() => {
+                              setSelectedResource(res);
+                              setIsVideoModalOpen(true);
+                            }}
+                            className="relative rounded-xl overflow-hidden mb-3 aspect-video bg-slate-900 flex items-center justify-center cursor-pointer group/vid shadow-xs"
+                          >
+                            {videoThumb ? (
+                              <img
+                                alt={res.title}
+                                className="w-full h-full object-cover group-hover/vid:scale-105 transition-transform duration-300"
+                                src={videoThumb}
+                              />
+                            ) : (
+                              <div className="w-full h-full bg-gradient-to-br from-slate-900 to-blue-950 flex items-center justify-center">
+                                <span className="material-symbols-outlined text-[48px] text-blue-400/40">play_circle</span>
+                              </div>
+                            )}
+                            <div className="absolute inset-0 bg-slate-950/40 group-hover/vid:bg-slate-950/20 transition-colors flex items-center justify-center">
+                              <div className="w-11 h-11 sm:w-13 sm:h-13 rounded-full bg-[#fea619] text-[#2a1700] flex items-center justify-center shadow-xl transform group-hover/vid:scale-110 transition-transform">
+                                <span className="material-symbols-outlined text-[26px] sm:text-[30px] ml-0.5">play_arrow</span>
+                              </div>
+                            </div>
+                            <span className="absolute bottom-2 right-2 bg-slate-950/80 text-white text-[10px] sm:text-[11px] font-bold px-2 py-0.5 rounded">
+                              {res.videoDuration || 'Video Lesson'}
+                            </span>
+                            <span className="absolute top-2 left-2 bg-red-600 text-white text-[9px] font-extrabold px-1.5 py-0.5 rounded uppercase tracking-wider flex items-center gap-1">
+                              <span className="w-1.5 h-1.5 rounded-full bg-white animate-pulse"></span>
+                              <span>{res.videoPlatform === 'facebook' ? 'Facebook Video' : 'HD Video Lesson'}</span>
+                            </span>
                           </div>
-                        </div>
-                        <span className="absolute bottom-2 right-2 bg-[#263143]/80 text-[#ecf1ff] text-[10px] sm:text-[11px] font-bold px-2 py-0.5 rounded">
-                          {res.videoDuration}
-                        </span>
-                      </div>
-                    )}
+                        );
+                      }
+
+                      if (isImage && imageSrc) {
+                        return (
+                          <div
+                            onClick={() => handleCardClick(res)}
+                            className="relative rounded-xl overflow-hidden mb-3 aspect-video bg-slate-100 flex items-center justify-center cursor-pointer group/img border border-slate-200 shadow-xs"
+                          >
+                            <img
+                              alt={res.title}
+                              className="w-full h-full object-cover group-hover/img:scale-105 transition-transform duration-300"
+                              src={imageSrc}
+                            />
+                            <div className="absolute inset-0 bg-slate-950/10 group-hover/img:bg-slate-950/20 transition-colors flex items-center justify-center opacity-0 group-hover/img:opacity-100">
+                              <div className="px-3 py-1.5 rounded-xl bg-white/95 text-slate-900 font-bold text-xs shadow-lg flex items-center gap-1">
+                                <span className="material-symbols-outlined text-[16px] text-blue-600">zoom_in</span>
+                                <span>Preview Diagram</span>
+                              </div>
+                            </div>
+                            <span className="absolute bottom-2 left-2 bg-slate-900/80 text-white text-[10px] font-bold px-2 py-0.5 rounded">
+                              Visual Formula Sheet
+                            </span>
+                          </div>
+                        );
+                      }
+
+                      if (hasDocFile) {
+                        return (
+                          <div
+                            onClick={() => handleCardClick(res)}
+                            className="relative rounded-xl overflow-hidden mb-3 bg-gradient-to-br from-blue-50 to-indigo-50/60 border border-blue-100 p-3.5 flex items-center justify-between gap-3 cursor-pointer group/doc hover:border-blue-300 transition-all shadow-2xs"
+                          >
+                            <div className="flex items-center gap-2.5 min-w-0">
+                              <div className="w-10 h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center shadow-xs group-hover/doc:scale-105 transition-transform shrink-0">
+                                <span className="material-symbols-outlined text-[22px]">description</span>
+                              </div>
+                              <div className="min-w-0">
+                                <div className="text-[11px] font-extrabold text-blue-950 truncate">
+                                  Official Learning PDF
+                                </div>
+                                <div className="text-[10px] text-slate-500 flex items-center gap-1">
+                                  <span>{res.sizeOrDuration || 'Standard Document'}</span>
+                                  <span>•</span>
+                                  <span className="text-emerald-700 font-bold">A4 Ready</span>
+                                </div>
+                              </div>
+                            </div>
+                            <span className="text-[10px] font-bold text-blue-700 bg-white px-2 py-1 rounded-lg border border-blue-200 group-hover/doc:bg-blue-600 group-hover/doc:text-white transition-colors shrink-0">
+                              View Preview
+                            </span>
+                          </div>
+                        );
+                      }
+
+                      return null;
+                    })()}
 
                     {/* Title & Topic Header */}
                     <span
@@ -2149,11 +2454,26 @@ export default function App() {
 
             <div className="flex flex-col sm:flex-row items-center gap-3 shrink-0 w-full sm:w-auto">
               <button
-                onClick={() => handleOpenAiTeacher()}
+                onClick={() => handleNavigateToAskTeacher()}
                 className="w-full sm:w-auto inline-flex items-center justify-center gap-2 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-500 hover:to-amber-600 text-slate-950 font-extrabold text-sm px-6 py-3.5 rounded-2xl shadow-lg transition-all cursor-pointer transform hover:scale-102"
+                title="Open Dedicated Ask Teacher Page (/ask-teacher)"
               >
                 <span className="material-symbols-outlined text-[20px]">co_present</span>
-                <span>{pageText.aiTeacher.buttonText || 'Ask Teacher'}</span>
+                <span>{pageText.aiTeacher.buttonText || 'Ask Teacher (Dedicated Page)'}</span>
+                <span className="material-symbols-outlined text-[18px]">open_in_new</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  const url = getAskTeacherShareUrl(window.location.origin);
+                  navigator.clipboard?.writeText(url);
+                  showToast('Direct Ask Teacher link copied (opens in Chrome/external browser)!');
+                }}
+                className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 bg-white/20 hover:bg-white/30 text-white font-bold text-xs sm:text-sm px-4 py-3.5 rounded-2xl border border-white/25 transition-all cursor-pointer"
+                title="Copy shareable link for social media (forces Chrome/external browser)"
+              >
+                <span className="material-symbols-outlined text-[18px]">share</span>
+                <span>Share Link</span>
               </button>
             </div>
           </div>
@@ -2708,6 +3028,15 @@ export default function App() {
       <ResourceModal
         isOpen={!!selectedResource}
         resource={selectedResource}
+        currentUser={currentUser}
+        onRequireLogin={(title, grade) => {
+          setPendingDownloadItem({
+            title,
+            size: selectedResource?.sizeOrDuration || '2.1 MB',
+            resource: selectedResource || undefined,
+          });
+          setIsLoginRequiredOpen(true);
+        }}
         onClose={() => setSelectedResource(null)}
         onShare={(title, r) => openShare(title, `${window.location.origin}${window.location.pathname}?resource=${r.id}`)}
         onDownload={(title, size) => {
@@ -2770,6 +3099,16 @@ export default function App() {
         }}
         onPrintItem={(title) => {
           const found = allCatalogResources.find((r) => r.title === title);
+          if (!currentUser) {
+            setPendingDownloadItem({
+              title,
+              size: found?.sizeOrDuration || '2.1 MB',
+              resource: found,
+            });
+            setIsLoginRequiredOpen(true);
+            showToast('⚠️ Please sign in to download or print study materials.');
+            return;
+          }
           printResourceInA4({
             title,
             grade: found?.grade,
@@ -2846,6 +3185,19 @@ export default function App() {
           setShowDomainModal(false);
           handleGoogleSignIn();
         }}
+      />
+
+      {/* Student Login Required Modal Before File Downloads */}
+      <LoginRequiredModal
+        isOpen={isLoginRequiredOpen}
+        onClose={() => {
+          setIsLoginRequiredOpen(false);
+          setPendingDownloadItem(null);
+        }}
+        onGoogleSignIn={handleGoogleSignIn}
+        onQuickDemoSignIn={handleQuickDemoSignIn}
+        pendingResourceTitle={pendingDownloadItem?.title}
+        pendingResourceGrade={pendingDownloadItem?.resource?.grade}
       />
 
       {/* Security Captcha Modal Before File Downloads */}

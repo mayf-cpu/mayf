@@ -19,6 +19,9 @@ export interface MathResource {
   hasVideo?: boolean;
   videoDuration?: string;
   thumbnailUrl?: string;
+  imageUrl?: string;
+  fileType?: 'file' | 'image' | 'video';
+  fileName?: string;
   youtubeId?: string;
   facebookVideoUrl?: string;
   videoUrl?: string;

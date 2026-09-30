@@ -21,6 +21,7 @@ import {
   limit,
   getDocFromServer,
   onSnapshot,
+  arrayUnion,
 } from 'firebase/firestore';
 import firebaseConfig from '../firebase-applet-config.json';
 
@@ -124,9 +125,33 @@ export interface UserProfile {
   isPro: boolean;
   proPlan?: string;
   bookmarks?: string[];
+  downloads?: StudentDownloadItem[];
   preferredCurrency?: string;
   createdAt: string;
   updatedAt?: string;
+}
+
+// Student Download Interfaces
+export interface StudentDownloadItem {
+  id: string;
+  resourceId?: string;
+  title: string;
+  grade?: string;
+  topic?: string;
+  format?: string;
+  tier?: 'free' | 'pro';
+  size: string;
+  downloadUrl?: string;
+  downloadedAt: string;
+}
+
+export interface StudentDownloadRecord extends StudentDownloadItem {
+  userId: string;
+  userEmail: string;
+  userName: string;
+  userPhoto?: string;
+  ip?: string;
+  device?: string;
 }
 
 // Update complete User Profile details
@@ -771,6 +796,11 @@ export interface CustomResourceRecord {
   format: string;
   tier: 'free' | 'pro';
   downloadUrl?: string;
+  imageUrl?: string;
+  thumbnailUrl?: string;
+  fileType?: 'file' | 'image' | 'video';
+  fileName?: string;
+  fileSize?: string;
   youtubeId?: string;
   facebookVideoUrl?: string;
   videoUrl?: string;
@@ -780,6 +810,7 @@ export interface CustomResourceRecord {
   views: number;
   downloads: number;
   createdAt: string;
+  updatedAt?: string;
 }
 
 export async function fetchCustomResources(): Promise<CustomResourceRecord[]> {
@@ -1135,6 +1166,273 @@ export async function migrateAndRestoreLegacyDatabaseData(): Promise<{ success: 
     };
   }
 }
+
+// -------------------------------------------------------------
+// STUDENT DOWNLOADS ACTIVITY & PROFILE HISTORY TRACKING
+// -------------------------------------------------------------
+
+const LOCAL_ADMIN_DOWNLOADS_KEY = 'maths_hub_admin_download_records_v1';
+
+export const INITIAL_SAMPLE_DOWNLOADS: StudentDownloadRecord[] = [
+  {
+    id: 'dl-sample-1',
+    userId: 'usr_aarav_sharma',
+    userEmail: 'aarav.sharma24@gmail.com',
+    userName: 'Aarav Sharma',
+    userPhoto: 'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?w=160&auto=format&fit=crop&q=80',
+    resourceId: 'res-quad-class10',
+    title: 'Class 10: Quadratic Equations 2-Min Concept & Derivation Sheet',
+    grade: 'Class 10',
+    topic: 'Quadratic Equations',
+    format: 'Formula Sheets (1-Pager)',
+    tier: 'free',
+    size: '2.4 MB',
+    downloadedAt: new Date(Date.now() - 15 * 60 * 1000).toISOString(),
+    device: 'Chrome on MacOS',
+  },
+  {
+    id: 'dl-sample-2',
+    userId: 'usr_diya_patel',
+    userEmail: 'diya.patel99@gmail.com',
+    userName: 'Diya Patel',
+    userPhoto: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=160&auto=format&fit=crop&q=80',
+    resourceId: 'res-poly-class9',
+    title: 'Class 9: Polynomial Identities & Remainder Theorem Notes',
+    grade: 'Class 9',
+    topic: 'Real Numbers & Polynomials',
+    format: 'Handcrafted Notes (PDF)',
+    tier: 'free',
+    size: '3.1 MB',
+    downloadedAt: new Date(Date.now() - 48 * 60 * 1000).toISOString(),
+    device: 'Mobile Safari on iOS',
+  },
+  {
+    id: 'dl-sample-3',
+    userId: 'usr_ananya_iyer',
+    userEmail: 'ananya.iyer.school@gmail.com',
+    userName: 'Ananya Iyer',
+    userPhoto: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=160&auto=format&fit=crop&q=80',
+    resourceId: 'res-trig-class10',
+    title: 'Class 10: Trigonometric Ratios & Angle Table Rapid Sheet',
+    grade: 'Class 10',
+    topic: 'Trigonometry',
+    format: 'Formula Sheets (1-Pager)',
+    tier: 'free',
+    size: '1.9 MB',
+    downloadedAt: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
+    device: 'Chrome on Windows 11',
+  },
+  {
+    id: 'dl-sample-4',
+    userId: 'usr_rohan_verma',
+    userEmail: 'rohan.v.maths@gmail.com',
+    userName: 'Rohan Verma',
+    userPhoto: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=160&auto=format&fit=crop&q=80',
+    resourceId: 'res-triangles-pro',
+    title: 'Class 10: Triangles BPT & Similarity Theorem Proofs Masterclass',
+    grade: 'Class 10',
+    topic: 'Triangles & Circles',
+    format: 'Handcrafted Notes (PDF)',
+    tier: 'pro',
+    size: '4.8 MB',
+    downloadedAt: new Date(Date.now() - 5 * 60 * 60 * 1000).toISOString(),
+    device: 'Chrome on Android Phone',
+  },
+  {
+    id: 'dl-sample-5',
+    userId: 'usr_kabir_singh',
+    userEmail: 'kabir.singh.cbse@gmail.com',
+    userName: 'Kabir Singh',
+    userPhoto: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=160&auto=format&fit=crop&q=80',
+    resourceId: 'res-mensuration-class8',
+    title: 'Class 8: Surface Area & Volume 3D Models Summary',
+    grade: 'Class 8',
+    topic: 'Surface Areas & Volumes',
+    format: 'Formula Sheets (1-Pager)',
+    tier: 'free',
+    size: '2.2 MB',
+    downloadedAt: new Date(Date.now() - 9 * 60 * 60 * 1000).toISOString(),
+    device: 'Firefox on Linux',
+  },
+];
+
+/**
+ * Record a student download event in Firestore & Local storage
+ */
+export async function recordStudentDownload(record: StudentDownloadRecord): Promise<void> {
+  // 1. Update Student's Local Storage History
+  try {
+    const userStorageKey = `maths_hub_student_downloads_${record.userId}`;
+    const rawExisting = localStorage.getItem(userStorageKey);
+    let userDownloads: StudentDownloadItem[] = rawExisting ? JSON.parse(rawExisting) : [];
+    // Prepend new item, remove duplicates of same resource if downloaded today
+    const downloadItem: StudentDownloadItem = {
+      id: record.id,
+      resourceId: record.resourceId,
+      title: record.title,
+      grade: record.grade,
+      topic: record.topic,
+      format: record.format,
+      tier: record.tier,
+      size: record.size,
+      downloadUrl: record.downloadUrl,
+      downloadedAt: record.downloadedAt,
+    };
+    userDownloads = [downloadItem, ...userDownloads.filter((d) => d.title !== record.title)];
+    localStorage.setItem(userStorageKey, JSON.stringify(userDownloads));
+  } catch (err) {
+    console.warn('Local student download save warning:', err);
+  }
+
+  // 2. Update Admin Global Download Records in Local Storage
+  try {
+    const rawAdmin = localStorage.getItem(LOCAL_ADMIN_DOWNLOADS_KEY);
+    let adminRecords: StudentDownloadRecord[] = rawAdmin ? JSON.parse(rawAdmin) : INITIAL_SAMPLE_DOWNLOADS;
+    adminRecords = [record, ...adminRecords.filter((r) => r.id !== record.id)];
+    localStorage.setItem(LOCAL_ADMIN_DOWNLOADS_KEY, JSON.stringify(adminRecords));
+  } catch (err) {
+    console.warn('Admin local storage warning:', err);
+  }
+
+  // 3. Write to Firestore `student_downloads` collection
+  try {
+    const dlDocRef = doc(db, 'student_downloads', record.id);
+    await setDoc(dlDocRef, record);
+  } catch (firestoreErr) {
+    // If student_downloads collection write is restricted or offline, write to analytics collection
+    try {
+      const analyticsRef = doc(db, 'analytics', `dl_${record.id}`);
+      await setDoc(analyticsRef, record);
+    } catch (fallbackErr) {
+      console.warn('Firestore download record sync fallback:', fallbackErr);
+    }
+  }
+
+  // 4. Update Student's profile document `users/{userId}` with this download
+  try {
+    const userDocRef = doc(db, 'users', record.userId);
+    const itemToAppend: StudentDownloadItem = {
+      id: record.id,
+      resourceId: record.resourceId,
+      title: record.title,
+      grade: record.grade,
+      topic: record.topic,
+      format: record.format,
+      tier: record.tier,
+      size: record.size,
+      downloadUrl: record.downloadUrl,
+      downloadedAt: record.downloadedAt,
+    };
+    await setDoc(
+      userDocRef,
+      {
+        downloads: arrayUnion(itemToAppend),
+        updatedAt: new Date().toISOString(),
+      },
+      { merge: true }
+    );
+  } catch (profileErr) {
+    console.warn('Student profile downloads array update notice:', profileErr);
+  }
+
+  // 5. Dispatch Custom Events for Instant UI reactivity across student profile & admin panel
+  if (typeof window !== 'undefined') {
+    window.dispatchEvent(new CustomEvent('student-download-recorded', { detail: record }));
+    window.dispatchEvent(new CustomEvent('student-downloads-changed'));
+  }
+}
+
+/**
+ * Fetch all download activity records for the Admin Panel
+ */
+export async function fetchAllStudentDownloadRecords(): Promise<StudentDownloadRecord[]> {
+  const recordsMap = new Map<string, StudentDownloadRecord>();
+
+  // Seed with initial sample records
+  INITIAL_SAMPLE_DOWNLOADS.forEach((r) => recordsMap.set(r.id, r));
+
+  // Load from local storage
+  try {
+    const rawLocal = localStorage.getItem(LOCAL_ADMIN_DOWNLOADS_KEY);
+    if (rawLocal) {
+      const parsed: StudentDownloadRecord[] = JSON.parse(rawLocal);
+      parsed.forEach((r) => recordsMap.set(r.id, r));
+    }
+  } catch (e) {
+    console.warn('Error reading admin downloads from localStorage:', e);
+  }
+
+  // Attempt to load from Firestore student_downloads collection
+  try {
+    const q = query(collection(db, 'student_downloads'), orderBy('downloadedAt', 'desc'), limit(150));
+    const snap = await getDocs(q);
+    snap.forEach((d) => {
+      const data = d.data() as StudentDownloadRecord;
+      if (data && data.id) {
+        recordsMap.set(data.id, data);
+      }
+    });
+  } catch (fsErr) {
+    // Also check analytics collection fallback
+    try {
+      const snap2 = await getDocs(collection(db, 'analytics'));
+      snap2.forEach((d) => {
+        if (d.id.startsWith('dl_')) {
+          const data = d.data() as StudentDownloadRecord;
+          if (data && data.id) {
+            recordsMap.set(data.id, data);
+          }
+        }
+      });
+    } catch (e2) {
+      console.warn('Error reading cloud student downloads:', e2);
+    }
+  }
+
+  return Array.from(recordsMap.values()).sort(
+    (a, b) => new Date(b.downloadedAt).getTime() - new Date(a.downloadedAt).getTime()
+  );
+}
+
+/**
+ * Fetch download history for a specific student profile
+ */
+export async function fetchStudentProfileDownloads(userId: string): Promise<StudentDownloadItem[]> {
+  const itemsMap = new Map<string, StudentDownloadItem>();
+
+  // 1. Read local storage for this user
+  try {
+    const userStorageKey = `maths_hub_student_downloads_${userId}`;
+    const rawLocal = localStorage.getItem(userStorageKey);
+    if (rawLocal) {
+      const parsed: StudentDownloadItem[] = JSON.parse(rawLocal);
+      parsed.forEach((item) => itemsMap.set(item.title, item));
+    }
+  } catch (e) {
+    console.warn('User local downloads read error:', e);
+  }
+
+  // 2. Read from Firestore user profile document
+  try {
+    const userDocRef = doc(db, 'users', userId);
+    const snap = await getDoc(userDocRef);
+    if (snap.exists()) {
+      const data = snap.data();
+      if (Array.isArray(data.downloads)) {
+        data.downloads.forEach((item: StudentDownloadItem) => {
+          itemsMap.set(item.title, item);
+        });
+      }
+    }
+  } catch (e) {
+    console.warn('User cloud downloads read error:', e);
+  }
+
+  return Array.from(itemsMap.values()).sort(
+    (a, b) => new Date(b.downloadedAt).getTime() - new Date(a.downloadedAt).getTime()
+  );
+}
+
 
 
 

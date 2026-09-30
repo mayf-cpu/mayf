@@ -19,10 +19,32 @@
         "isPro": { "type": "boolean" },
         "proPlan": { "type": "string" },
         "bookmarks": { "type": "array" },
+        "downloads": { "type": "array" },
         "createdAt": { "type": "string" },
         "updatedAt": { "type": "string" }
       },
       "required": ["userId", "email"]
+    },
+    "studentDownload": {
+      "title": "StudentDownload",
+      "description": "Log of study material downloads executed by enrolled students",
+      "type": "object",
+      "properties": {
+        "id": { "type": "string" },
+        "userId": { "type": "string" },
+        "userEmail": { "type": "string" },
+        "userName": { "type": "string" },
+        "userPhoto": { "type": "string" },
+        "resourceId": { "type": "string" },
+        "title": { "type": "string" },
+        "grade": { "type": "string" },
+        "topic": { "type": "string" },
+        "format": { "type": "string" },
+        "tier": { "type": "string" },
+        "size": { "type": "string" },
+        "downloadedAt": { "type": "string" }
+      },
+      "required": ["id", "userId", "userEmail", "title", "downloadedAt"]
     },
     "order": {
       "title": "Order",
@@ -165,6 +187,10 @@
     "/ai_queries/{queryId}": {
       "schema": "aiQuery",
       "description": "Student mathematics queries and AI Teacher step-by-step solutions"
+    },
+    "/student_downloads/{downloadId}": {
+      "schema": "studentDownload",
+      "description": "Student download activity records and logs"
     }
   }
 }

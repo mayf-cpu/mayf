@@ -127,3 +127,35 @@ html.scale-large {
   font-size: 18px;
 }
 
+/* KaTeX math formatting: Eliminate boxed/fbox vertical line and border artifacts completely */
+.katex .fbox,
+.katex .katex-stretchy.fbox,
+.katex [class*="fbox"] {
+  display: none !important;
+  border: none !important;
+  border-width: 0 !important;
+  outline: none !important;
+  width: 0 !important;
+  height: 0 !important;
+  opacity: 0 !important;
+  visibility: hidden !important;
+}
+
+.katex .boxpad {
+  padding: 0 !important;
+}
+
+.katex .katex-stretchy {
+  border: none !important;
+}
+
+/* Ensure no vertical line or bar overlays inside math blocks */
+.math-display-block .katex-display {
+  margin: 0 !important;
+}
+
+.math-display-block .katex .vlist-t2 .katex-stretchy {
+  display: none !important;
+}
+
+

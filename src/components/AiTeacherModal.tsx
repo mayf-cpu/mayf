@@ -200,14 +200,6 @@ export const AiTeacherModal: React.FC<AiTeacherModalProps> = ({
     setTimeout(() => setCopiedSolution(false), 2500);
   };
 
-  const samplePrompts = [
-    { label: 'Quadratic Roots', query: 'Find the roots of the quadratic equation 3x² - 5x + 2 = 0 using the quadratic formula with verification.' },
-    { label: 'Irrationality Proof', query: 'Prove by contradiction that √5 is an irrational number.' },
-    { label: 'Trig Identity', query: 'Prove the identity: (sin θ - 2sin³θ) / (2cos³θ - cos θ) = tan θ' },
-    { label: 'Surface Areas & Volumes', query: 'A solid metallic sphere of radius 6 cm is melted and recast into the shape of a cylinder of radius 10 cm. Find the height of the cylinder.' },
-    { label: 'AP Sum', query: 'Find the sum of all two-digit numbers which are divisible by 3.' },
-  ];
-
   return (
     <div
       onPaste={handlePaste}
@@ -351,49 +343,6 @@ export const AiTeacherModal: React.FC<AiTeacherModalProps> = ({
             <>
               {/* Question Input Card */}
               <div className="bg-white rounded-2xl p-4 sm:p-5 border border-blue-100 shadow-sm">
-                {/* Grade and Topic Selectors */}
-                <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-3">
-                  <div>
-                    <label className="text-[11px] font-bold text-slate-600 mb-1 block">
-                      Target Grade Syllabus
-                    </label>
-                    <select
-                      value={grade}
-                      onChange={(e) => setGrade(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 outline-none focus:border-blue-500"
-                    >
-                      <option value="Class 10">Class 10 (Board Exam Focus)</option>
-                      <option value="Class 9">Class 9 (Foundations)</option>
-                      <option value="Class 8">Class 8 (Middle School)</option>
-                      <option value="Class 7">Class 7 (Pre-Algebra)</option>
-                      <option value="Class 6">Class 6 (Basics)</option>
-                      <option value="Class 5">Class 5 (Primary Math)</option>
-                      <option value="Olympiad">Olympiad & Advanced IMO</option>
-                    </select>
-                  </div>
-
-                  <div>
-                    <label className="text-[11px] font-bold text-slate-600 mb-1 block">
-                      Math Subject Topic
-                    </label>
-                    <select
-                      value={topic}
-                      onChange={(e) => setTopic(e.target.value)}
-                      className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs font-bold text-slate-800 outline-none focus:border-blue-500"
-                    >
-                      <option value="General Mathematics">General School Math</option>
-                      <option value="Quadratic Equations">Quadratic Equations</option>
-                      <option value="Trigonometry">Trigonometry & Heights</option>
-                      <option value="Coordinate Geometry">Coordinate Geometry</option>
-                      <option value="Arithmetic Progressions">Arithmetic Progressions</option>
-                      <option value="Triangles & Circles">Triangles & Geometry</option>
-                      <option value="Surface Areas & Volumes">Surface Areas & Volumes</option>
-                      <option value="Statistics & Probability">Statistics & Probability</option>
-                      <option value="Real Numbers & Polynomials">Real Numbers & Polynomials</option>
-                    </select>
-                  </div>
-                </div>
-
                 {/* Question Textarea */}
                 <div className="relative mb-3">
                   <textarea
@@ -473,20 +422,6 @@ export const AiTeacherModal: React.FC<AiTeacherModalProps> = ({
                       </>
                     )}
                   </button>
-                </div>
-
-                {/* Quick Sample Prompts */}
-                <div className="mt-3 pt-3 border-t border-slate-100 flex items-center gap-1.5 overflow-x-auto no-scrollbar">
-                  <span className="text-[10px] font-bold text-slate-400 shrink-0">Try Sample:</span>
-                  {samplePrompts.map((s, idx) => (
-                    <button
-                      key={idx}
-                      onClick={() => setQueryText(s.query)}
-                      className="px-2.5 py-1 rounded-lg bg-slate-100 hover:bg-blue-50 hover:text-blue-700 text-[11px] font-semibold text-slate-600 transition-colors whitespace-nowrap shrink-0 cursor-pointer"
-                    >
-                      {s.label}
-                    </button>
-                  ))}
                 </div>
               </div>
 

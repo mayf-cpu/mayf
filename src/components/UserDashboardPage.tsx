@@ -3,6 +3,7 @@ import { User } from 'firebase/auth';
 import { UserProfile, OrderRecord, fetchUserOrders, updateUserProfile, isUserAdmin } from '../firebase';
 import { MathResource } from '../data/mathResources';
 import { formatPrice, getUserCurrency, setUserCurrency, SUPPORTED_CURRENCIES } from '../services/currency';
+import { printResourceInA4 } from '../services/fileDownloader';
 import { AdPlacement } from './AdPlacement';
 
 interface DownloadedItem {
@@ -676,7 +677,7 @@ export const UserDashboardPage: React.FC<UserDashboardPageProps> = ({
                 <p className="text-xs text-[#737686]">Instant re-downloadable documents saved for offline homework revision</p>
               </div>
               <span className="bg-emerald-50 text-emerald-800 text-xs font-bold px-3 py-1 rounded-xl self-start sm:self-auto border border-emerald-200">
-                {downloads.length} Files Ready
+                {downloads.length} Files Saved
               </span>
             </div>
 
@@ -699,38 +700,76 @@ export const UserDashboardPage: React.FC<UserDashboardPageProps> = ({
               </div>
             ) : (
               <div className="divide-y divide-gray-100">
-                {downloads.map((item) => (
-                  <div key={item.id} className="py-3.5 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-slate-50/60 p-2 rounded-xl transition-colors">
-                    <div className="flex items-center gap-3">
-                      <div className="w-10 h-10 rounded-xl bg-blue-50 text-[#004ac6] flex items-center justify-center shrink-0">
-                        <span className="material-symbols-outlined text-[20px]">description</span>
-                      </div>
-                      <div>
-                        <span className="text-xs sm:text-[14px] font-bold text-[#111c2d] block leading-snug">
-                          {item.title}
-                        </span>
-                        <div className="flex items-center gap-2 text-[11px] text-gray-500 mt-0.5">
-                          <span>PDF Document</span>
-                          <span>•</span>
-                          <span>{item.size}</span>
-                          <span>•</span>
-                          <span>Downloaded: {item.downloadedAt}</span>
+                {downloads.map((item) => {
+                  const matchedRes = allResources.find(
+                    (r) => r.title === item.title || r.id === item.title || r.id === (item as any).resourceId
+                  );
+                  const itemGrade = (item as any).grade || matchedRes?.grade || 'Class 10';
+                  const itemTopic = (item as any).topic || matchedRes?.topic || 'Mathematics';
+                  const itemFormat = (item as any).format || matchedRes?.format || 'Formula Sheet';
+
+                  return (
+                    <div
+                      key={item.id}
+                      className="py-4 flex flex-col sm:flex-row sm:items-center justify-between gap-3 hover:bg-slate-50/70 p-3 rounded-2xl transition-colors"
+                    >
+                      <div className="flex items-start gap-3">
+                        <div className="w-11 h-11 rounded-2xl bg-blue-50 text-[#004ac6] flex items-center justify-center shrink-0 border border-blue-100">
+                          <span className="material-symbols-outlined text-[22px]">description</span>
+                        </div>
+                        <div className="min-w-0">
+                          <span className="text-xs sm:text-[14px] font-bold text-[#111c2d] block leading-snug">
+                            {item.title}
+                          </span>
+                          <div className="flex flex-wrap items-center gap-1.5 sm:gap-2 text-[11px] text-gray-500 mt-1">
+                            <span className="bg-blue-100 text-blue-800 font-bold px-2 py-0.5 rounded text-[10px]">
+                              {itemGrade}
+                            </span>
+                            <span className="bg-emerald-50 text-emerald-700 font-semibold px-2 py-0.5 rounded text-[10px] border border-emerald-100">
+                              {itemTopic}
+                            </span>
+                            <span className="hidden sm:inline">•</span>
+                            <span className="font-mono text-slate-600">{item.size}</span>
+                            <span>•</span>
+                            <span>Downloaded: {item.downloadedAt}</span>
+                          </div>
                         </div>
                       </div>
-                    </div>
 
-                    <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto">
-                      <button
-                        type="button"
-                        onClick={() => onDownload(item.title, item.size)}
-                        className="inline-flex items-center gap-1.5 px-3 py-1.5 bg-[#004ac6] hover:bg-blue-700 text-white rounded-xl text-xs font-bold cursor-pointer transition-transform active:scale-95 shadow-xs"
-                      >
-                        <span className="material-symbols-outlined text-[16px]">file_download</span>
-                        <span>Re-Download</span>
-                      </button>
+                      <div className="flex items-center gap-2 shrink-0 self-end sm:self-auto">
+                        <button
+                          type="button"
+                          onClick={() => {
+                            printResourceInA4({
+                              title: matchedRes?.title || item.title,
+                              grade: itemGrade,
+                              topic: itemTopic,
+                              format: itemFormat,
+                              downloadUrl: matchedRes?.downloadUrl || (item as any).downloadUrl,
+                              description: matchedRes?.description,
+                              keyFormulas: matchedRes?.keyFormulas,
+                              examTraps: matchedRes?.examTraps,
+                            });
+                          }}
+                          className="inline-flex items-center gap-1 px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold cursor-pointer transition-colors border border-slate-200"
+                          title="Print directly or save as A4 PDF"
+                        >
+                          <span className="material-symbols-outlined text-[16px]">print</span>
+                          <span className="hidden sm:inline">Print A4</span>
+                        </button>
+
+                        <button
+                          type="button"
+                          onClick={() => onDownload(item.title, item.size)}
+                          className="inline-flex items-center gap-1.5 px-3.5 py-1.5 bg-[#004ac6] hover:bg-blue-700 text-white rounded-xl text-xs font-bold cursor-pointer transition-transform active:scale-95 shadow-xs"
+                        >
+                          <span className="material-symbols-outlined text-[16px]">file_download</span>
+                          <span>Re-Download</span>
+                        </button>
+                      </div>
                     </div>
-                  </div>
-                ))}
+                  );
+                })}
               </div>
             )}
           </div>

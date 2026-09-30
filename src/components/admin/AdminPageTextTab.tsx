@@ -158,16 +158,6 @@ export const AdminPageTextTab: React.FC<AdminPageTextTabProps> = ({
 
         <div className="flex items-center gap-2.5 self-end md:self-center shrink-0 flex-wrap">
           <button
-            onClick={handleResetAll}
-            type="button"
-            className="inline-flex items-center gap-1.5 px-3.5 py-2.5 rounded-xl bg-slate-800 hover:bg-slate-700 text-slate-300 hover:text-white text-xs font-bold border border-slate-700 transition-all cursor-pointer"
-            title="Reset all blocks to original template"
-          >
-            <span className="material-symbols-outlined text-[16px]">restart_alt</span>
-            <span>Reset All Defaults</span>
-          </button>
-
-          <button
             onClick={onSave}
             disabled={isSaving}
             type="button"

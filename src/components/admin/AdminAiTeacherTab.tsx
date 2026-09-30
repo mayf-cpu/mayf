@@ -5,6 +5,8 @@ import {
   deleteAiQueryRecord,
 } from '../../firebase';
 import { ClassroomBoardRenderer } from '../ClassroomBoardRenderer';
+import { getAskTeacherShareUrl } from '../../services/externalBrowser';
+import { ChromeIcon, WhatsAppIcon, TelegramIcon } from '../SocialIcons';
 
 interface AdminAiTeacherTabProps {
   onToast: (msg: string) => void;
@@ -120,6 +122,52 @@ export const AdminAiTeacherTab: React.FC<AdminAiTeacherTabProps> = ({ onToast })
 
   return (
     <div className="space-y-6">
+      {/* Dedicated Standalone URL & Social Media Share Card */}
+      <div className="bg-gradient-to-r from-blue-900/60 via-slate-900 to-indigo-950/60 border border-blue-500/30 rounded-2xl p-5 shadow-lg flex flex-col md:flex-row items-start md:items-center justify-between gap-4">
+        <div>
+          <div className="flex items-center gap-2 mb-1">
+            <span className="material-symbols-outlined text-amber-400 text-[20px]">share</span>
+            <h3 className="text-sm font-extrabold text-white">Dedicated Ask Teacher Standalone URL</h3>
+            <span className="bg-emerald-500/20 text-emerald-400 border border-emerald-500/30 text-[10px] font-extrabold px-2 py-0.5 rounded-full uppercase">
+              Auto-Opens in Chrome
+            </span>
+          </div>
+          <p className="text-xs text-slate-300 leading-relaxed max-w-2xl">
+            Share this dedicated link on your Instagram, Facebook, WhatsApp, or Telegram channels. It is engineered with deep-link intent protocols that automatically launch Google Chrome / external browser and bypass restricted social in-app webviews:
+          </p>
+          <div className="mt-2.5 inline-flex items-center gap-2 px-3 py-1.5 rounded-xl bg-slate-950/80 border border-slate-700 text-xs font-mono text-amber-300">
+            <span className="material-symbols-outlined text-[15px] text-blue-400">link</span>
+            <span>{typeof window !== 'undefined' ? `${window.location.origin}/ask-teacher?openExternal=true` : '/ask-teacher?openExternal=true'}</span>
+          </div>
+        </div>
+
+        <div className="flex items-center gap-2 flex-wrap shrink-0">
+          <button
+            onClick={() => {
+              const url = getAskTeacherShareUrl(window.location.origin);
+              navigator.clipboard?.writeText(url);
+              onToast('Dedicated Ask Teacher share link copied to clipboard!');
+            }}
+            className="inline-flex items-center gap-1.5 bg-amber-400 hover:bg-amber-500 text-slate-950 text-xs font-extrabold px-3.5 py-2 rounded-xl shadow-xs transition-transform active:scale-95 cursor-pointer"
+            title="Copy URL for social media"
+          >
+            <span className="material-symbols-outlined text-[16px]">content_copy</span>
+            <span>Copy Social Link</span>
+          </button>
+
+          <a
+            href="/ask-teacher"
+            target="_blank"
+            rel="noopener noreferrer"
+            className="inline-flex items-center gap-1.5 bg-blue-600 hover:bg-blue-700 text-white text-xs font-bold px-3 py-2 rounded-xl transition-all"
+            title="Preview standalone webpage"
+          >
+            <span>Open Page</span>
+            <span className="material-symbols-outlined text-[16px]">open_in_new</span>
+          </a>
+        </div>
+      </div>
+
       {/* Top Metric Cards */}
       <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4">
         <div className="bg-slate-900 border border-slate-800 rounded-2xl p-4">

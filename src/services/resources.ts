@@ -51,6 +51,36 @@ export function saveTierOverrides(overrides: Record<string, 'free' | 'pro'>): vo
 
 export function customRecordToMathResource(rec: CustomResourceRecord, tierOverride?: 'free' | 'pro'): MathResource {
   const effectiveTier = tierOverride || rec.tier || 'free';
+  const hasVid = !!rec.youtubeId || !!rec.facebookVideoUrl || !!rec.videoUrl || !!rec.embedHtml || rec.format === 'Video Lessons';
+  
+  // Clean YouTube ID extraction
+  let cleanYtId = rec.youtubeId;
+  if (cleanYtId) {
+    if (cleanYtId.includes('v=')) {
+      cleanYtId = cleanYtId.split('v=')[1]?.split('&')[0];
+    } else if (cleanYtId.includes('youtu.be/')) {
+      cleanYtId = cleanYtId.split('youtu.be/')[1]?.split('?')[0];
+    }
+  }
+
+  // Derive thumbnail or image preview
+  let autoThumb = rec.thumbnailUrl || rec.imageUrl;
+  if (!autoThumb && cleanYtId) {
+    autoThumb = `https://img.youtube.com/vi/${cleanYtId}/hqdefault.jpg`;
+  }
+
+  // Detect file type
+  let derivedFileType = rec.fileType;
+  if (!derivedFileType) {
+    if (hasVid) {
+      derivedFileType = 'video';
+    } else if (rec.imageUrl || (rec.downloadUrl && /\.(png|jpe?g|webp|svg|gif)($|\?)/i.test(rec.downloadUrl)) || (rec.downloadUrl && rec.downloadUrl.startsWith('data:image/'))) {
+      derivedFileType = 'image';
+    } else if (rec.downloadUrl) {
+      derivedFileType = 'file';
+    }
+  }
+
   return {
     id: rec.id,
     title: rec.title,
@@ -62,16 +92,21 @@ export function customRecordToMathResource(rec: CustomResourceRecord, tierOverri
     description: rec.description || `Comprehensive ${rec.format} covering ${rec.topic} for ${rec.grade}. Curated by Maths at Your Fingertips.`,
     rating: 5.0,
     downloadsCount: `${rec.downloads || 0} downloads`,
-    sizeOrDuration: rec.format === 'Video Lessons' ? '15 mins' : '2.1 MB • PDF',
+    sizeOrDuration: rec.fileSize || (hasVid ? '15 mins' : '2.1 MB • PDF'),
     pageCount: rec.format === 'Formula Sheets (1-Pager)' ? '1 Page' : '8 Pages',
     badgeLabel: effectiveTier === 'free' ? 'FREE DOWNLOAD' : 'PRO PASS ONLY',
-    hasVideo: !!rec.youtubeId || !!rec.facebookVideoUrl || !!rec.videoUrl || !!rec.embedHtml || rec.format === 'Video Lessons',
+    hasVideo: hasVid,
+    videoDuration: hasVid ? '15:20 HD' : undefined,
+    thumbnailUrl: autoThumb,
+    imageUrl: rec.imageUrl || (derivedFileType === 'image' ? rec.downloadUrl : undefined),
+    fileType: derivedFileType,
+    fileName: rec.fileName,
     tags: [rec.grade, rec.topic, rec.format],
     downloadUrl: rec.downloadUrl,
-    youtubeId: rec.youtubeId,
+    youtubeId: cleanYtId,
     facebookVideoUrl: rec.facebookVideoUrl,
     videoUrl: rec.videoUrl,
-    videoPlatform: rec.videoPlatform || (rec.facebookVideoUrl ? 'facebook' : rec.youtubeId ? 'youtube' : undefined),
+    videoPlatform: rec.videoPlatform || (rec.facebookVideoUrl ? 'facebook' : cleanYtId ? 'youtube' : undefined),
     embedHtml: rec.embedHtml,
     price: effectiveTier === 'pro' ? 199 : undefined,
     isBoardExam: rec.grade === 'Class 10',

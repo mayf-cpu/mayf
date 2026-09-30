@@ -96,13 +96,6 @@ export const AdminThemeTab: React.FC<AdminThemeTabProps> = ({
           </div>
           <div className="flex items-center gap-2.5 shrink-0 flex-wrap">
             <button
-              onClick={handleReset}
-              className="px-4 py-2.5 bg-white/10 hover:bg-white/20 active:scale-95 text-white font-bold text-xs sm:text-sm rounded-2xl flex items-center gap-1.5 transition-all cursor-pointer"
-            >
-              <span className="material-symbols-outlined text-[16px]">refresh</span>
-              Reset Defaults
-            </button>
-            <button
               onClick={handleSaveToCloud}
               disabled={isSaving}
               className="px-5 py-2.5 bg-blue-500 hover:bg-blue-600 active:scale-95 text-white font-bold text-xs sm:text-sm rounded-2xl flex items-center gap-2 shadow-lg shadow-blue-950/40 transition-all cursor-pointer disabled:opacity-50"

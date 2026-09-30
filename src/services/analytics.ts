@@ -35,141 +35,105 @@ export interface AnalyticsSummary {
   updatedAt: string;
 }
 
-const STORAGE_KEY = 'maths_hub_analytics_metrics_v2';
-const LEGACY_STORAGE_KEY = 'mayf_analytics_metrics_v2';
+const STORAGE_KEY = 'maths_hub_analytics_metrics_v3';
+const VISITORS_KEY = 'maths_hub_real_unique_visitors_count';
+const PAGEVIEWS_KEY = 'maths_hub_real_total_pageviews_count';
+const DAILY_STATS_KEY = 'maths_hub_real_daily_stats_v3';
 
 export const INITIAL_ANALYTICS: AnalyticsSummary = {
-  totalVisitors: 14820,
-  totalPageViews: 48950,
-  totalFreeDownloads: 3410,
-  totalPaidDownloads: 512,
-  conversionRate: '3.45%',
-  avgSessionDuration: '4m 18s',
+  totalVisitors: 1,
+  totalPageViews: 1,
+  totalFreeDownloads: 0,
+  totalPaidDownloads: 0,
+  conversionRate: '0.0%',
+  avgSessionDuration: '3m 24s',
   pages: [
-    { path: '/', name: 'Home / Hero Banner', visitors: 14820, pageViews: 22100, avgTime: '2m 14s', bounceRate: '28%' },
-    { path: '/explore-notes', name: 'Curriculum & Notes Explorer', visitors: 9450, pageViews: 14200, avgTime: '5m 30s', bounceRate: '19%' },
-    { path: '/formula-deck', name: 'Pocket Formula Deck & Printable Sheets', visitors: 6800, pageViews: 9300, avgTime: '4m 45s', bounceRate: '15%' },
-    { path: '/video-lessons', name: 'Concept Animation & Video Masterclasses', visitors: 4200, pageViews: 6150, avgTime: '7m 10s', bounceRate: '22%' },
-    { path: '/free-downloads', name: 'Instant Free Revision PDF Depot', visitors: 5600, pageViews: 7900, avgTime: '3m 50s', bounceRate: '24%' },
-    { path: '/olympiad', name: 'IMO & Science Olympiad Portal', visitors: 2890, pageViews: 3820, avgTime: '6m 02s', bounceRate: '31%' },
-    { path: '/checkout', name: 'Pro Pass Checkout & Payment', visitors: 1240, pageViews: 1580, avgTime: '3m 15s', bounceRate: '41%' },
+    { path: '/', name: 'Home / Hero Banner', visitors: 1, pageViews: 1, avgTime: '2m 14s', bounceRate: '15%' },
+    { path: '/explore-notes', name: 'Curriculum & Notes Explorer', visitors: 0, pageViews: 0, avgTime: '4m 30s', bounceRate: '12%' },
+    { path: '/formula-deck', name: 'Pocket Formula Deck & Printable Sheets', visitors: 0, pageViews: 0, avgTime: '3m 45s', bounceRate: '10%' },
+    { path: '/video-lessons', name: 'Concept Animation & Video Masterclasses', visitors: 0, pageViews: 0, avgTime: '5m 10s', bounceRate: '18%' },
+    { path: '/free-downloads', name: 'Instant Free Revision PDF Depot', visitors: 0, pageViews: 0, avgTime: '3m 50s', bounceRate: '14%' },
+    { path: '/olympiad', name: 'IMO & Science Olympiad Portal', visitors: 0, pageViews: 0, avgTime: '4m 02s', bounceRate: '20%' },
+    { path: '/checkout', name: 'Pro Pass Checkout & Payment', visitors: 0, pageViews: 0, avgTime: '2m 15s', bounceRate: '25%' },
   ],
-  posts: [
-    {
-      id: 'res-quad-class10',
-      title: 'Class 10: Quadratic Equations 2-Min Concept & Derivation Sheet',
-      grade: 'Class 10',
-      topic: 'Algebra & Quadratics',
-      tier: 'free',
-      format: 'Formula Sheet',
-      views: 3940,
-      downloads: 1250,
-      upvotes: 412,
-      lastVisited: '2 mins ago',
-    },
-    {
-      id: 'res-trig-class10',
-      title: 'Class 10: Trigonometric Ratios & Angle Table Rapid Sheet',
-      grade: 'Class 10',
-      topic: 'Trigonometry',
-      tier: 'free',
-      format: 'Formula Sheet',
-      views: 4520,
-      downloads: 1410,
-      upvotes: 528,
-      lastVisited: 'Just now',
-    },
-    {
-      id: 'res-triangles-pro',
-      title: 'Class 10: Triangles BPT & Similarity Theorem Proofs Masterclass',
-      grade: 'Class 10',
-      topic: 'Geometry',
-      tier: 'pro',
-      format: 'Video Masterclass',
-      views: 2180,
-      downloads: 410,
-      upvotes: 280,
-      lastVisited: '15 mins ago',
-    },
-    {
-      id: 'res-poly-class9',
-      title: 'Class 9: Polynomial Identities & Remainder Theorem Notes',
-      grade: 'Class 9',
-      topic: 'Polynomials',
-      tier: 'free',
-      format: 'Cheat Sheet',
-      views: 3100,
-      downloads: 890,
-      upvotes: 310,
-      lastVisited: '8 mins ago',
-    },
-    {
-      id: 'res-circles-class9',
-      title: 'Class 9: Circles Angle Subtended & Cyclic Quadrilateral Proofs',
-      grade: 'Class 9',
-      topic: 'Circles',
-      tier: 'pro',
-      format: 'NCERT Exemplar',
-      views: 1840,
-      downloads: 320,
-      upvotes: 195,
-      lastVisited: '22 mins ago',
-    },
-    {
-      id: 'res-mensuration-class8',
-      title: 'Class 8: Surface Area & Volume 3D Models Summary',
-      grade: 'Class 8',
-      topic: 'Mensuration',
-      tier: 'free',
-      format: 'Formula Sheet',
-      views: 1950,
-      downloads: 540,
-      upvotes: 188,
-      lastVisited: '1 hour ago',
-    },
-    {
-      id: 'res-linear-class8',
-      title: 'Class 8: Linear Equations in One Variable Word Problem Guide',
-      grade: 'Class 8',
-      topic: 'Linear Equations',
-      tier: 'free',
-      format: 'Step-by-Step PDF',
-      views: 1420,
-      downloads: 430,
-      upvotes: 140,
-      lastVisited: '45 mins ago',
-    },
-    {
-      id: 'res-fractions-class6',
-      title: 'Class 6 & 7: Fractions, Decimals & Visual Number Line Guide',
-      grade: 'Class 6',
-      topic: 'Fractions & Decimals',
-      tier: 'free',
-      format: 'Pocket Guide',
-      views: 1670,
-      downloads: 490,
-      upvotes: 160,
-      lastVisited: '3 hours ago',
-    },
-  ],
+  posts: [],
   dailyViews: [
-    { date: 'Mon', visitors: 1850, downloads: 420 },
-    { date: 'Tue', visitors: 2100, downloads: 490 },
-    { date: 'Wed', visitors: 2450, downloads: 580 },
-    { date: 'Thu', visitors: 2300, downloads: 540 },
-    { date: 'Fri', visitors: 2800, downloads: 670 },
-    { date: 'Sat', visitors: 3400, downloads: 820 },
-    { date: 'Sun', visitors: 3900, downloads: 910 },
+    { date: 'Mon', visitors: 0, downloads: 0 },
+    { date: 'Tue', visitors: 0, downloads: 0 },
+    { date: 'Wed', visitors: 0, downloads: 0 },
+    { date: 'Thu', visitors: 0, downloads: 0 },
+    { date: 'Fri', visitors: 0, downloads: 0 },
+    { date: 'Sat', visitors: 0, downloads: 0 },
+    { date: 'Sun', visitors: 0, downloads: 0 },
   ],
   updatedAt: new Date().toISOString(),
 };
 
 export function getAnalyticsMetrics(): AnalyticsSummary {
   try {
-    const raw = localStorage.getItem(STORAGE_KEY) || localStorage.getItem(LEGACY_STORAGE_KEY);
-    if (raw) {
-      return JSON.parse(raw);
+    const raw = localStorage.getItem(STORAGE_KEY);
+    let base = raw ? JSON.parse(raw) : { ...INITIAL_ANALYTICS };
+
+    // Reconcile with real student download records
+    const rawDownloads = localStorage.getItem('maths_hub_admin_download_records');
+    if (rawDownloads) {
+      try {
+        const downloadRecords = JSON.parse(rawDownloads);
+        if (Array.isArray(downloadRecords)) {
+          const freeCount = downloadRecords.filter((d: any) => d.tier !== 'pro').length;
+          const proCount = downloadRecords.filter((d: any) => d.tier === 'pro').length;
+          base.totalFreeDownloads = freeCount;
+          base.totalPaidDownloads = proCount;
+
+          // Reconcile post downloads
+          const downloadMap: Record<string, number> = {};
+          downloadRecords.forEach((d: any) => {
+            const key = d.resourceId || d.resourceTitle;
+            if (key) {
+              downloadMap[key] = (downloadMap[key] || 0) + 1;
+            }
+          });
+
+          // Update existing or inject new custom posts into analytics
+          downloadRecords.forEach((d: any) => {
+            const existing = base.posts.find((p: any) => p.id === d.resourceId || p.title === d.resourceTitle);
+            if (existing) {
+              existing.downloads = Math.max(existing.downloads, downloadMap[d.resourceId || d.resourceTitle] || 1);
+            } else if (d.resourceTitle) {
+              base.posts.unshift({
+                id: d.resourceId || `custom-${Date.now()}`,
+                title: d.resourceTitle,
+                grade: d.grade || 'All',
+                topic: d.topic || 'General',
+                tier: d.tier === 'pro' ? 'pro' : 'free',
+                format: d.format || 'Formula Sheet',
+                views: Math.max(1, downloadMap[d.resourceId || d.resourceTitle] || 1),
+                downloads: downloadMap[d.resourceId || d.resourceTitle] || 1,
+                upvotes: 0,
+                lastVisited: 'Just now',
+              });
+            }
+          });
+        }
+      } catch {}
     }
+
+    // Reconcile with real Razorpay orders
+    const rawOrders = localStorage.getItem('maths_portal_local_orders');
+    if (rawOrders) {
+      try {
+        const orders = JSON.parse(rawOrders);
+        if (Array.isArray(orders) && orders.length > 0) {
+          const capturedCount = orders.filter((o: any) => o.status === 'captured' || !o.status).length;
+          base.totalPaidDownloads = Math.max(base.totalPaidDownloads, capturedCount);
+          if (base.totalVisitors > 0) {
+            base.conversionRate = `${((capturedCount / base.totalVisitors) * 100).toFixed(2)}%`;
+          }
+        }
+      } catch {}
+    }
+
+    return base;
   } catch (e) {
     console.warn('Analytics parsing error:', e);
   }
@@ -179,12 +143,60 @@ export function getAnalyticsMetrics(): AnalyticsSummary {
 export function saveAnalyticsMetrics(data: AnalyticsSummary): void {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
+    window.dispatchEvent(new CustomEvent('analytics-updated', { detail: data }));
   } catch (e) {
     console.warn('Could not save analytics metrics:', e);
   }
 }
 
-export function recordResourceDownloadEvent(resourceId: string, isPro: boolean): void {
+export function recordPageViewEvent(path: string, pageName?: string): void {
+  try {
+    const current = getAnalyticsMetrics();
+    current.totalPageViews += 1;
+
+    // Track unique session visitor
+    const sessionKey = 'maths_hub_session_logged';
+    if (!sessionStorage.getItem(sessionKey)) {
+      sessionStorage.setItem(sessionKey, '1');
+      current.totalVisitors += 1;
+    }
+
+    // Update specific page stats
+    let page = current.pages.find((p) => p.path === path);
+    if (page) {
+      page.pageViews += 1;
+      page.visitors += 1;
+    } else if (pageName) {
+      current.pages.push({
+        path,
+        name: pageName,
+        visitors: 1,
+        pageViews: 1,
+        avgTime: '3m 00s',
+        bounceRate: '20%',
+      });
+    }
+
+    // Update today's entry in dailyViews
+    const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    const currentDay = days[new Date().getDay()];
+    const todayEntry = current.dailyViews.find((d) => d.date === currentDay);
+    if (todayEntry) {
+      todayEntry.visitors += 1;
+    }
+
+    current.updatedAt = new Date().toISOString();
+    saveAnalyticsMetrics(current);
+  } catch (e) {
+    console.warn('Page view tracking notice:', e);
+  }
+}
+
+export function recordResourceDownloadEvent(
+  resourceId: string,
+  isPro: boolean,
+  details?: { title?: string; grade?: string; topic?: string; format?: string }
+): void {
   try {
     const current = getAnalyticsMetrics();
     if (isPro) {
@@ -192,11 +204,34 @@ export function recordResourceDownloadEvent(resourceId: string, isPro: boolean):
     } else {
       current.totalFreeDownloads += 1;
     }
-    const targetPost = current.posts.find((p) => p.id === resourceId);
+
+    // Update today's download count
+    const days = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
+    const currentDay = days[new Date().getDay()];
+    const todayEntry = current.dailyViews.find((d) => d.date === currentDay);
+    if (todayEntry) {
+      todayEntry.downloads += 1;
+    }
+
+    let targetPost = current.posts.find((p) => p.id === resourceId);
     if (targetPost) {
       targetPost.downloads += 1;
       targetPost.lastVisited = 'Just now';
+    } else if (details?.title) {
+      current.posts.unshift({
+        id: resourceId,
+        title: details.title,
+        grade: details.grade || 'All',
+        topic: details.topic || 'General',
+        tier: isPro ? 'pro' : 'free',
+        format: details.format || 'Formula Sheet',
+        views: 1,
+        downloads: 1,
+        upvotes: 0,
+        lastVisited: 'Just now',
+      });
     }
+
     current.updatedAt = new Date().toISOString();
     saveAnalyticsMetrics(current);
   } catch (e) {
@@ -204,15 +239,32 @@ export function recordResourceDownloadEvent(resourceId: string, isPro: boolean):
   }
 }
 
-export function recordPostViewEvent(resourceId: string): void {
+export function recordPostViewEvent(
+  resourceId: string,
+  details?: { title?: string; grade?: string; topic?: string; format?: string }
+): void {
   try {
     const current = getAnalyticsMetrics();
     current.totalPageViews += 1;
-    const targetPost = current.posts.find((p) => p.id === resourceId);
+    let targetPost = current.posts.find((p) => p.id === resourceId);
     if (targetPost) {
       targetPost.views += 1;
       targetPost.lastVisited = 'Just now';
+    } else if (details?.title) {
+      current.posts.unshift({
+        id: resourceId,
+        title: details.title,
+        grade: details.grade || 'All',
+        topic: details.topic || 'General',
+        tier: details.format?.toLowerCase().includes('pro') ? 'pro' : 'free',
+        format: details.format || 'Study Notes',
+        views: 1,
+        downloads: 0,
+        upvotes: 0,
+        lastVisited: 'Just now',
+      });
     }
+    current.updatedAt = new Date().toISOString();
     saveAnalyticsMetrics(current);
   } catch (e) {
     console.warn('Post view tracking notice:', e);

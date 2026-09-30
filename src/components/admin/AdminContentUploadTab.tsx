@@ -32,8 +32,8 @@ export const AdminContentUploadTab: React.FC<AdminContentUploadTabProps> = ({
   const topicOptions = dynamicCategories.filter((c) => c.type === 'topic' && c.enabled);
   const formatOptions = dynamicCategories.filter((c) => c.type === 'format' && c.enabled);
 
-  // Top view switcher
-  const [viewTab, setViewTab] = useState<'ai_ingest' | 'manual' | 'catalog'>('ai_ingest');
+  // Top view switcher - default to catalog so uploaded content is immediately visible
+  const [viewTab, setViewTab] = useState<'catalog' | 'manual' | 'ai_ingest'>('catalog');
 
   // AI Ingest Sub-mode
   const [ingestMode, setIngestMode] = useState<IngestMode>('spreadsheet');
@@ -61,19 +61,27 @@ export const AdminContentUploadTab: React.FC<AdminContentUploadTabProps> = ({
   const [isPublishingBatch, setIsPublishingBatch] = useState<boolean>(false);
   const [showWebhookDocs, setShowWebhookDocs] = useState<boolean>(false);
 
-  // Single Manual Form State
+  // Single Manual Form State & Edit State
+  const [editingResourceId, setEditingResourceId] = useState<string | null>(null);
   const [title, setTitle] = useState('');
   const [grade, setGrade] = useState(gradeOptions[0]?.name || 'Class 10');
   const [topic, setTopic] = useState(topicOptions[0]?.name || 'Polynomials');
   const [format, setFormat] = useState(formatOptions[0]?.name || 'Formula Sheets (1-Pager)');
   const [tier, setTier] = useState<'free' | 'pro'>('free');
   const [downloadUrl, setDownloadUrl] = useState('');
+  const [imageUrl, setImageUrl] = useState('');
   const [videoSourceType, setVideoSourceType] = useState<'youtube' | 'facebook' | 'iframe'>('youtube');
   const [youtubeId, setYoutubeId] = useState('');
   const [facebookVideoUrl, setFacebookVideoUrl] = useState('');
   const [embedHtml, setEmbedHtml] = useState('');
   const [description, setDescription] = useState('');
   const [isPublishing, setIsPublishing] = useState(false);
+
+  // Filter & Search states for Catalog
+  const [catalogSearch, setCatalogSearch] = useState('');
+  const [catalogGrade, setCatalogGrade] = useState('All');
+  const [catalogTier, setCatalogTier] = useState('All');
+  const [previewModalResource, setPreviewModalResource] = useState<CustomResourceRecord | null>(null);
 
   // Local overrides for existing MATH_RESOURCES
   const [resourceTierOverrides, setResourceTierOverrides] = useState<Record<string, 'free' | 'pro'>>(getTierOverrides);
@@ -262,7 +270,66 @@ export const AdminContentUploadTab: React.FC<AdminContentUploadTabProps> = ({
     );
   };
 
-  // Single Manual Form Submit
+  const handleCancelEdit = () => {
+    setEditingResourceId(null);
+    setTitle('');
+    setDownloadUrl('');
+    setImageUrl('');
+    setYoutubeId('');
+    setFacebookVideoUrl('');
+    setEmbedHtml('');
+    setDescription('');
+  };
+
+  const handleEditCustom = (res: CustomResourceRecord) => {
+    setEditingResourceId(res.id);
+    setTitle(res.title || '');
+    setGrade(res.grade || gradeOptions[0]?.name || 'Class 10');
+    setTopic(res.topic || topicOptions[0]?.name || 'Polynomials');
+    setFormat(res.format || formatOptions[0]?.name || 'Formula Sheets (1-Pager)');
+    setTier(res.tier || 'free');
+    setDownloadUrl(res.downloadUrl || '');
+    setImageUrl(res.imageUrl || '');
+    setYoutubeId(res.youtubeId || '');
+    setFacebookVideoUrl(res.facebookVideoUrl || '');
+    setEmbedHtml(res.embedHtml || '');
+    setDescription(res.description || '');
+    setViewTab('manual');
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+    onToast(`Editing "${res.title}". Make changes and click Update.`);
+  };
+
+  const handleDuplicateCustom = async (res: CustomResourceRecord) => {
+    try {
+      const newId = `res-${Date.now()}`;
+      const duplicatePayload: CustomResourceRecord = {
+        ...res,
+        id: newId,
+        title: `${res.title} (Copy)`,
+        views: 0,
+        downloads: 0,
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+
+      const currentList = getLocalCustomResources();
+      const updatedList = [duplicatePayload, ...currentList];
+      saveLocalCustomResources(updatedList);
+
+      try {
+        await saveCustomResourceToFirestore(duplicatePayload);
+      } catch (cloudErr) {
+        console.warn('Saved duplicate locally, Firestore cloud notice:', cloudErr);
+      }
+
+      onToast(`🎉 Duplicated "${res.title}" successfully!`);
+      onRefresh();
+    } catch (err) {
+      onToast('Failed to duplicate resource.');
+    }
+  };
+
+  // Single Manual Form Submit (Create or Update)
   const handlePublishContent = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!title.trim()) {
@@ -272,7 +339,8 @@ export const AdminContentUploadTab: React.FC<AdminContentUploadTabProps> = ({
 
     setIsPublishing(true);
     try {
-      const newId = `res-${Date.now()}`;
+      const isEditing = Boolean(editingResourceId);
+      const targetId = editingResourceId || `res-${Date.now()}`;
 
       let resolvedYt = youtubeId.trim() || undefined;
       let resolvedFb = facebookVideoUrl.trim() || undefined;
@@ -285,26 +353,33 @@ export const AdminContentUploadTab: React.FC<AdminContentUploadTabProps> = ({
         }
       }
 
+      const existingRecord = isEditing ? getLocalCustomResources().find((r) => r.id === targetId) : null;
+
       const payload: CustomResourceRecord = {
-        id: newId,
+        id: targetId,
         title: title.trim(),
         grade,
         topic,
         format: effectiveFormat,
         tier,
         downloadUrl: downloadUrl.trim() || undefined,
+        imageUrl: imageUrl.trim() || undefined,
+        fileType: (resolvedFb || resolvedYt || embedHtml.trim()) ? 'video' : imageUrl.trim() ? 'image' : 'file',
         youtubeId: resolvedYt,
         facebookVideoUrl: resolvedFb,
         videoPlatform: resolvedFb ? 'facebook' : resolvedYt ? 'youtube' : undefined,
         embedHtml: embedHtml.trim() || undefined,
         description: description.trim() || undefined,
-        views: 0,
-        downloads: 0,
-        createdAt: new Date().toISOString(),
+        views: existingRecord?.views || 0,
+        downloads: existingRecord?.downloads || 0,
+        createdAt: existingRecord?.createdAt || new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
       };
 
       const currentList = getLocalCustomResources();
-      const updatedList = [payload, ...currentList.filter((r) => r.id !== newId)];
+      const updatedList = isEditing
+        ? currentList.map((r) => (r.id === targetId ? payload : r))
+        : [payload, ...currentList.filter((r) => r.id !== targetId)];
       saveLocalCustomResources(updatedList);
 
       try {
@@ -313,13 +388,9 @@ export const AdminContentUploadTab: React.FC<AdminContentUploadTabProps> = ({
         console.warn('Saved to local storage, Firestore cloud sync notice:', cloudErr);
       }
 
-      onToast(`🎉 Published "${title}" successfully! Live in website catalog.`);
-      setTitle('');
-      setDownloadUrl('');
-      setYoutubeId('');
-      setFacebookVideoUrl('');
-      setEmbedHtml('');
-      setDescription('');
+      onToast(isEditing ? `✅ Updated "${title}" successfully!` : `🎉 Published "${title}" successfully! Live in website catalog.`);
+      handleCancelEdit();
+      setViewTab('catalog');
       onRefresh();
     } catch (err) {
       onToast('Failed to publish material. Check connection.');
@@ -362,33 +433,6 @@ export const AdminContentUploadTab: React.FC<AdminContentUploadTabProps> = ({
       <div className="bg-slate-900 border border-slate-800 rounded-2xl p-2 flex items-center justify-between gap-2 overflow-x-auto">
         <div className="flex items-center gap-1.5">
           <button
-            onClick={() => setViewTab('ai_ingest')}
-            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
-              viewTab === 'ai_ingest'
-                ? 'bg-blue-600 text-white shadow-md'
-                : 'text-slate-400 hover:text-white hover:bg-slate-800'
-            }`}
-          >
-            <span className="material-symbols-outlined text-[18px]">auto_awesome</span>
-            <span>AI Automated Ingest (Excel / Drive / Sheets / API)</span>
-            <span className="bg-amber-400 text-slate-950 text-[10px] font-extrabold px-1.5 py-0.2 rounded-full">
-              Gemini AI
-            </span>
-          </button>
-
-          <button
-            onClick={() => setViewTab('manual')}
-            className={`flex items-center gap-2 px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
-              viewTab === 'manual'
-                ? 'bg-blue-600 text-white shadow-md'
-                : 'text-slate-400 hover:text-white hover:bg-slate-800'
-            }`}
-          >
-            <span className="material-symbols-outlined text-[18px]">edit_note</span>
-            <span>Manual Single Entry</span>
-          </button>
-
-          <button
             onClick={() => setViewTab('catalog')}
             className={`flex items-center gap-2 px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
               viewTab === 'catalog'
@@ -397,7 +441,39 @@ export const AdminContentUploadTab: React.FC<AdminContentUploadTabProps> = ({
             }`}
           >
             <span className="material-symbols-outlined text-[18px]">inventory_2</span>
-            <span>Manage Live Catalog ({customResources.length} uploaded)</span>
+            <span>Uploaded Content ({customResources.length})</span>
+          </button>
+
+          <button
+            onClick={() => {
+              if (!editingResourceId) handleCancelEdit();
+              setViewTab('manual');
+            }}
+            className={`flex items-center gap-2 px-3.5 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+              viewTab === 'manual'
+                ? 'bg-blue-600 text-white shadow-md'
+                : 'text-slate-400 hover:text-white hover:bg-slate-800'
+            }`}
+          >
+            <span className="material-symbols-outlined text-[18px]">
+              {editingResourceId ? 'edit' : 'add_circle'}
+            </span>
+            <span>{editingResourceId ? 'Edit Material' : '+ Upload Material'}</span>
+          </button>
+
+          <button
+            onClick={() => setViewTab('ai_ingest')}
+            className={`flex items-center gap-2 px-4 py-2.5 rounded-xl text-xs font-bold transition-all cursor-pointer whitespace-nowrap ${
+              viewTab === 'ai_ingest'
+                ? 'bg-blue-600 text-white shadow-md'
+                : 'text-slate-400 hover:text-white hover:bg-slate-800'
+            }`}
+          >
+            <span className="material-symbols-outlined text-[18px]">auto_awesome</span>
+            <span>AI Bulk Ingest (Excel / Drive)</span>
+            <span className="bg-amber-400 text-slate-950 text-[10px] font-extrabold px-1.5 py-0.2 rounded-full">
+              Gemini
+            </span>
           </button>
         </div>
 
@@ -1235,18 +1311,157 @@ Real Numbers 2-Minute Formula Sheet,Class 10,Real Numbers,Formula Sheet,free,htt
               </div>
             </div>
 
-            {/* Download URL / Google Drive */}
-            <div>
-              <label className="text-xs font-bold text-slate-700 block mb-1">
-                Direct PDF / Google Drive Link (Optional):
-              </label>
-              <input
-                type="url"
-                value={downloadUrl}
-                onChange={(e) => setDownloadUrl(e.target.value)}
-                placeholder="https://drive.google.com/file/d/.../view or direct CDN URL"
-                className="w-full px-3.5 py-2.5 bg-slate-50 border border-slate-300 rounded-xl text-xs focus:ring-2 focus:ring-blue-500 focus:outline-none font-mono text-slate-800"
-              />
+            {/* Media Attachments: File / Image / Video */}
+            <div className="p-4 bg-slate-50 border border-slate-200 rounded-2xl space-y-4">
+              <div className="flex items-center justify-between">
+                <span className="text-xs font-extrabold text-slate-800 uppercase tracking-wide flex items-center gap-1.5">
+                  <span className="material-symbols-outlined text-blue-600 text-[18px]">attachment</span>
+                  <span>Learning Media Attachments (Choose any: File, Image, or Video)</span>
+                </span>
+                <span className="text-[11px] text-slate-500 font-medium">Automatic Preview Generated</span>
+              </div>
+
+              {/* 1. File / PDF Attachment */}
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-slate-700 block">
+                  📄 Document / PDF File (URL or Direct Upload):
+                </label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={downloadUrl}
+                    onChange={(e) => setDownloadUrl(e.target.value)}
+                    placeholder="https://drive.google.com/file/d/.../view or direct PDF URL"
+                    className="flex-1 px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs focus:ring-2 focus:ring-blue-500 focus:outline-none font-mono text-slate-800"
+                  />
+                  <label className="px-3 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-xl text-xs font-bold cursor-pointer transition-colors shrink-0 flex items-center gap-1">
+                    <span className="material-symbols-outlined text-[16px]">upload_file</span>
+                    <span>Browse File</span>
+                    <input
+                      type="file"
+                      accept=".pdf,.doc,.docx,.xls,.xlsx,.ppt,.pptx,text/plain"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          const reader = new FileReader();
+                          reader.onload = (ev) => {
+                            const res = ev.target?.result as string;
+                            setDownloadUrl(res);
+                            if (!title) setTitle(file.name.replace(/\.[^/.]+$/, ''));
+                            onToast(`Attached file "${file.name}" (${(file.size / 1024).toFixed(0)} KB)`);
+                          };
+                          reader.readAsDataURL(file);
+                        }
+                      }}
+                    />
+                  </label>
+                </div>
+              </div>
+
+              {/* 2. Image / Diagram Attachment */}
+              <div className="space-y-1">
+                <label className="text-xs font-bold text-slate-700 block">
+                  🖼️ Image / Formula Snapshot / Mind Map (URL or Upload):
+                </label>
+                <div className="flex items-center gap-2">
+                  <input
+                    type="text"
+                    value={imageUrl}
+                    onChange={(e) => setImageUrl(e.target.value)}
+                    placeholder="https://images.unsplash.com/... or image URL"
+                    className="flex-1 px-3 py-2 bg-white border border-slate-300 rounded-xl text-xs focus:ring-2 focus:ring-blue-500 focus:outline-none font-mono text-slate-800"
+                  />
+                  <label className="px-3 py-2 bg-slate-200 hover:bg-slate-300 text-slate-700 rounded-xl text-xs font-bold cursor-pointer transition-colors shrink-0 flex items-center gap-1">
+                    <span className="material-symbols-outlined text-[16px]">image</span>
+                    <span>Upload Image</span>
+                    <input
+                      type="file"
+                      accept="image/*"
+                      className="hidden"
+                      onChange={(e) => {
+                        const file = e.target.files?.[0];
+                        if (file) {
+                          const reader = new FileReader();
+                          reader.onload = (ev) => {
+                            const res = ev.target?.result as string;
+                            setImageUrl(res);
+                            onToast(`Attached image "${file.name}"`);
+                          };
+                          reader.readAsDataURL(file);
+                        }
+                      }}
+                    />
+                  </label>
+                </div>
+              </div>
+
+              {/* Live Preview Inside Form if File, Image, or Video is present */}
+              {(imageUrl || downloadUrl || youtubeId || facebookVideoUrl || embedHtml) && (
+                <div className="p-3 bg-white rounded-xl border border-blue-200 space-y-2">
+                  <div className="flex items-center justify-between text-xs font-bold text-blue-900 border-b border-blue-100 pb-1.5">
+                    <span className="flex items-center gap-1">
+                      <span className="material-symbols-outlined text-[16px] text-blue-600">visibility</span>
+                      <span>Live Automatic Front-End Preview:</span>
+                    </span>
+                    <span className="text-[10px] text-emerald-600 font-bold bg-emerald-50 px-2 py-0.5 rounded-md border border-emerald-200">
+                      ✓ Ready for Student View
+                    </span>
+                  </div>
+
+                  <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 pt-1">
+                    {/* Image Preview */}
+                    {imageUrl && (
+                      <div className="rounded-lg overflow-hidden border border-slate-200 bg-slate-900 aspect-video flex items-center justify-center relative group">
+                        <img src={imageUrl} alt="Preview" className="w-full h-full object-cover" />
+                        <span className="absolute bottom-2 left-2 bg-slate-900/80 text-white text-[10px] px-2 py-0.5 rounded font-bold">
+                          Image Asset Preview
+                        </span>
+                      </div>
+                    )}
+
+                    {/* Video Preview */}
+                    {(youtubeId || facebookVideoUrl || embedHtml) && (
+                      <div className="rounded-lg overflow-hidden border border-slate-200 bg-slate-950 aspect-video flex items-center justify-center relative">
+                        {youtubeId ? (
+                          <iframe
+                            src={`https://www.youtube.com/embed/${youtubeId.includes('v=') ? youtubeId.split('v=')[1]?.split('&')[0] : youtubeId.includes('youtu.be/') ? youtubeId.split('youtu.be/')[1]?.split('?')[0] : youtubeId}?rel=0`}
+                            title="YouTube Preview"
+                            className="w-full h-full border-0"
+                            allowFullScreen
+                          />
+                        ) : facebookVideoUrl ? (
+                          <iframe
+                            src={`https://www.facebook.com/plugins/video.php?href=${encodeURIComponent(facebookVideoUrl)}&show_text=false`}
+                            title="Facebook Preview"
+                            className="w-full h-full border-0"
+                            allowFullScreen
+                          />
+                        ) : (
+                          <div dangerouslySetInnerHTML={{ __html: embedHtml }} className="w-full h-full flex items-center justify-center" />
+                        )}
+                      </div>
+                    )}
+
+                    {/* File / PDF Document Card Preview */}
+                    {downloadUrl && !imageUrl && !youtubeId && (
+                      <div className="p-3 bg-blue-50/50 rounded-xl border border-blue-100 flex items-center gap-3">
+                        <div className="w-10 h-10 rounded-lg bg-blue-600 text-white flex items-center justify-center shrink-0">
+                          <span className="material-symbols-outlined text-[22px]">description</span>
+                        </div>
+                        <div className="min-w-0">
+                          <div className="font-bold text-xs text-slate-900 truncate">
+                            {title || 'Document File Attached'}
+                          </div>
+                          <div className="text-[10px] text-slate-500 font-mono truncate">
+                            {downloadUrl.startsWith('data:') ? 'Embedded Base64 Data' : downloadUrl}
+                          </div>
+                        </div>
+                      </div>
+                    )}
+                  </div>
+                </div>
+              )}
             </div>
 
             {/* Description */}
@@ -1263,14 +1478,34 @@ Real Numbers 2-Minute Formula Sheet,Class 10,Real Numbers,Formula Sheet,free,htt
               />
             </div>
 
-            <div className="pt-2 flex justify-end">
+            <div className="pt-2 flex items-center justify-between">
+              {editingResourceId ? (
+                <button
+                  type="button"
+                  onClick={handleCancelEdit}
+                  className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 font-bold text-xs rounded-xl cursor-pointer transition-colors"
+                >
+                  Cancel Edit
+                </button>
+              ) : (
+                <div></div>
+              )}
+
               <button
                 type="submit"
                 disabled={isPublishing}
                 className="inline-flex items-center gap-2 bg-[#004ac6] hover:bg-blue-700 text-white font-bold text-xs sm:text-sm px-6 py-2.5 rounded-xl shadow-md transition-all cursor-pointer disabled:opacity-50"
               >
-                <span className="material-symbols-outlined text-[18px]">publish</span>
-                <span>{isPublishing ? 'Publishing...' : 'Publish to Student Portal'}</span>
+                <span className="material-symbols-outlined text-[18px]">
+                  {editingResourceId ? 'save' : 'publish'}
+                </span>
+                <span>
+                  {isPublishing
+                    ? 'Saving...'
+                    : editingResourceId
+                    ? 'Save Changes'
+                    : 'Publish to Student Portal'}
+                </span>
               </button>
             </div>
           </form>
@@ -1284,40 +1519,236 @@ Real Numbers 2-Minute Formula Sheet,Class 10,Real Numbers,Formula Sheet,free,htt
         <div className="space-y-6">
           {/* Custom Uploaded Resources */}
           <div className="bg-white rounded-2xl border border-slate-200 p-5 sm:p-6 shadow-xs">
-            <h3 className="text-base font-bold text-slate-900 mb-3 flex items-center justify-between">
-              <span>Custom Uploaded Materials ({customResources.length})</span>
-              <span className="text-xs font-normal text-slate-500">Live in Student Catalog</span>
-            </h3>
-
-            {customResources.length === 0 ? (
-              <div className="text-center py-8 text-xs text-slate-500 bg-slate-50 rounded-xl border border-dashed border-slate-200">
-                No custom resources uploaded yet. Use "AI Automated Ingest" above to batch import from spreadsheets or Google Drive.
+            <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-4 border-b border-slate-100 mb-4">
+              <div>
+                <h3 className="text-base font-bold text-slate-900 flex items-center gap-2">
+                  <span className="material-symbols-outlined text-blue-600">inventory_2</span>
+                  <span>Custom Uploaded Study Materials ({customResources.length})</span>
+                </h3>
+                <p className="text-xs text-slate-500">
+                  Manage, edit, duplicate, or remove custom formula sheets, notes, images, and video lessons.
+                </p>
               </div>
-            ) : (
-              <div className="divide-y divide-slate-100">
-                {customResources.map((res) => (
-                  <div key={res.id} className="py-3 flex items-center justify-between gap-3 text-xs">
-                    <div className="min-w-0">
-                      <div className="font-bold text-slate-900 truncate">{res.title}</div>
-                      <div className="text-[11px] text-slate-500">
-                        {res.grade} • {res.topic} • {res.format} •{' '}
-                        <span className={res.tier === 'pro' ? 'text-amber-600 font-bold' : 'text-emerald-600 font-bold'}>
-                          {res.tier.toUpperCase()}
-                        </span>
-                      </div>
-                    </div>
 
+              <button
+                onClick={() => {
+                  handleCancelEdit();
+                  setViewTab('manual');
+                }}
+                className="px-3.5 py-2 bg-blue-600 hover:bg-blue-500 text-white text-xs font-bold rounded-xl cursor-pointer transition-colors flex items-center gap-1.5 shadow-xs shrink-0"
+              >
+                <span className="material-symbols-outlined text-[16px]">add_circle</span>
+                <span>+ Upload New Material</span>
+              </button>
+            </div>
+
+            {/* Filter Bar */}
+            <div className="flex flex-wrap items-center justify-between gap-3 mb-4 bg-slate-50 p-3 rounded-xl border border-slate-200">
+              <div className="flex items-center gap-2 flex-1 min-w-[200px]">
+                <div className="relative flex-1">
+                  <input
+                    type="text"
+                    value={catalogSearch}
+                    onChange={(e) => setCatalogSearch(e.target.value)}
+                    placeholder="Search by title, topic, or format..."
+                    className="w-full pl-8 pr-3 py-1.5 bg-white border border-slate-300 rounded-xl text-xs focus:ring-2 focus:ring-blue-500 focus:outline-none text-slate-800"
+                  />
+                  <span className="material-symbols-outlined absolute left-2.5 top-2 text-[15px] text-slate-400">
+                    search
+                  </span>
+                </div>
+              </div>
+
+              <div className="flex items-center gap-2">
+                <select
+                  value={catalogGrade}
+                  onChange={(e) => setCatalogGrade(e.target.value)}
+                  className="px-2.5 py-1.5 bg-white border border-slate-300 rounded-xl text-xs font-semibold text-slate-700 focus:outline-none"
+                >
+                  <option value="All">All Grades</option>
+                  <option value="Class 10">Class 10</option>
+                  <option value="Class 9">Class 9</option>
+                  <option value="Class 8">Class 8</option>
+                  <option value="Class 7">Class 7</option>
+                  <option value="Class 6">Class 6</option>
+                  <option value="Class 5">Class 5</option>
+                </select>
+
+                <select
+                  value={catalogTier}
+                  onChange={(e) => setCatalogTier(e.target.value)}
+                  className="px-2.5 py-1.5 bg-white border border-slate-300 rounded-xl text-xs font-semibold text-slate-700 focus:outline-none"
+                >
+                  <option value="All">All Tiers</option>
+                  <option value="free">Free Access</option>
+                  <option value="pro">Pro Pass</option>
+                </select>
+              </div>
+            </div>
+
+            {/* Resources List / Table */}
+            {(() => {
+              const localList = getLocalCustomResources();
+              const map = new Map<string, CustomResourceRecord>();
+              localList.forEach((r) => map.set(r.id, r));
+              customResources.forEach((r) => map.set(r.id, r));
+              const allCustom = Array.from(map.values());
+
+              const filtered = allCustom.filter((r) => {
+                const matchSearch =
+                  r.title.toLowerCase().includes(catalogSearch.toLowerCase()) ||
+                  r.topic.toLowerCase().includes(catalogSearch.toLowerCase()) ||
+                  r.format.toLowerCase().includes(catalogSearch.toLowerCase());
+                const matchGrade = catalogGrade === 'All' || r.grade === catalogGrade;
+                const matchTier = catalogTier === 'All' || r.tier === catalogTier.toLowerCase();
+                return matchSearch && matchGrade && matchTier;
+              });
+
+              if (filtered.length === 0) {
+                return (
+                  <div className="text-center py-12 px-4 text-xs text-slate-500 bg-slate-50 rounded-2xl border border-dashed border-slate-200 space-y-2">
+                    <span className="material-symbols-outlined text-[36px] text-slate-400 block mx-auto">
+                      folder_open
+                    </span>
+                    <p className="font-bold text-slate-700">No uploaded materials found</p>
+                    <p className="text-slate-400 max-w-sm mx-auto">
+                      {allCustom.length === 0
+                        ? 'You haven\'t uploaded any custom study sheets or videos yet.'
+                        : 'No resources match your search filters.'}
+                    </p>
                     <button
-                      onClick={() => handleDeleteCustom(res.id, res.title)}
-                      className="p-1.5 text-slate-400 hover:text-red-600 rounded-lg cursor-pointer transition-colors"
-                      title="Delete resource"
+                      onClick={() => {
+                        handleCancelEdit();
+                        setViewTab('manual');
+                      }}
+                      className="mt-2 inline-flex items-center gap-1.5 px-3.5 py-2 bg-blue-600 hover:bg-blue-500 text-white rounded-xl font-bold cursor-pointer"
                     >
-                      <span className="material-symbols-outlined text-[18px]">delete</span>
+                      <span className="material-symbols-outlined text-[16px]">add</span>
+                      <span>+ Upload First Study Material</span>
                     </button>
                   </div>
-                ))}
-              </div>
-            )}
+                );
+              }
+
+              return (
+                <div className="divide-y divide-slate-100">
+                  {filtered.map((res) => {
+                    const hasVideo = !!res.youtubeId || !!res.facebookVideoUrl || !!res.videoUrl || !!res.embedHtml;
+                    const hasImage = !!res.imageUrl;
+                    const hasFile = !!res.downloadUrl;
+
+                    return (
+                      <div
+                        key={res.id}
+                        className="py-3.5 px-3 hover:bg-slate-50/80 rounded-xl transition-colors flex flex-col sm:flex-row sm:items-center justify-between gap-3 text-xs"
+                      >
+                        {/* Left: Thumbnail & Details */}
+                        <div className="flex items-center gap-3 min-w-0 flex-1">
+                          {/* Thumbnail / Media icon */}
+                          <div className="w-12 h-12 rounded-xl bg-slate-100 border border-slate-200 flex items-center justify-center shrink-0 overflow-hidden relative group">
+                            {hasImage ? (
+                              <img src={res.imageUrl} alt={res.title} className="w-full h-full object-cover" />
+                            ) : hasVideo ? (
+                              <div className="w-full h-full bg-slate-900 flex items-center justify-center text-red-400">
+                                <span className="material-symbols-outlined text-[22px]">smart_display</span>
+                              </div>
+                            ) : (
+                              <div className="w-full h-full bg-blue-50 flex items-center justify-center text-blue-600">
+                                <span className="material-symbols-outlined text-[22px]">description</span>
+                              </div>
+                            )}
+                          </div>
+
+                          <div className="min-w-0 flex-1">
+                            <div className="font-bold text-slate-900 text-sm truncate flex items-center gap-2">
+                              <span>{res.title}</span>
+                              {res.tier === 'pro' ? (
+                                <span className="px-2 py-0.5 rounded-full text-[9px] font-extrabold bg-amber-100 text-amber-900 uppercase">
+                                  PRO
+                                </span>
+                              ) : (
+                                <span className="px-2 py-0.5 rounded-full text-[9px] font-extrabold bg-emerald-100 text-emerald-900 uppercase">
+                                  FREE
+                                </span>
+                              )}
+                            </div>
+                            <div className="text-[11px] text-slate-500 mt-0.5 flex items-center gap-2 flex-wrap">
+                              <span className="font-semibold text-blue-700">{res.grade}</span>
+                              <span>•</span>
+                              <span>{res.topic}</span>
+                              <span>•</span>
+                              <span className="text-slate-400 font-mono">{res.format}</span>
+                              {hasVideo && (
+                                <span className="text-red-600 font-bold bg-red-50 px-1.5 py-0.2 rounded text-[10px]">
+                                  Video Lesson
+                                </span>
+                              )}
+                              {hasImage && (
+                                <span className="text-indigo-600 font-bold bg-indigo-50 px-1.5 py-0.2 rounded text-[10px]">
+                                  Image Asset
+                                </span>
+                              )}
+                              {hasFile && (
+                                <span className="text-emerald-700 font-bold bg-emerald-50 px-1.5 py-0.2 rounded text-[10px]">
+                                  Direct File
+                                </span>
+                              )}
+                            </div>
+                          </div>
+                        </div>
+
+                        {/* Right: Actions (Edit, Duplicate, Preview, Delete) */}
+                        <div className="flex items-center gap-1.5 self-end sm:self-center shrink-0">
+                          {/* Preview button */}
+                          <button
+                            type="button"
+                            onClick={() => setPreviewModalResource(res)}
+                            className="p-1.5 text-slate-500 hover:text-blue-700 hover:bg-blue-50 rounded-lg transition-colors cursor-pointer flex items-center gap-1 font-bold text-[11px]"
+                            title="Preview how students see this"
+                          >
+                            <span className="material-symbols-outlined text-[17px]">visibility</span>
+                            <span className="hidden md:inline">Preview</span>
+                          </button>
+
+                          {/* Edit button */}
+                          <button
+                            type="button"
+                            onClick={() => handleEditCustom(res)}
+                            className="p-1.5 text-slate-500 hover:text-amber-700 hover:bg-amber-50 rounded-lg transition-colors cursor-pointer flex items-center gap-1 font-bold text-[11px]"
+                            title="Edit this learning material"
+                          >
+                            <span className="material-symbols-outlined text-[17px]">edit</span>
+                            <span className="hidden md:inline">Edit</span>
+                          </button>
+
+                          {/* Duplicate button */}
+                          <button
+                            type="button"
+                            onClick={() => handleDuplicateCustom(res)}
+                            className="p-1.5 text-slate-500 hover:text-purple-700 hover:bg-purple-50 rounded-lg transition-colors cursor-pointer flex items-center gap-1 font-bold text-[11px]"
+                            title="Create a duplicate copy of this material"
+                          >
+                            <span className="material-symbols-outlined text-[17px]">content_copy</span>
+                            <span className="hidden md:inline">Duplicate</span>
+                          </button>
+
+                          {/* Delete button */}
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteCustom(res.id, res.title)}
+                            className="p-1.5 text-slate-400 hover:text-red-600 hover:bg-red-50 rounded-lg transition-colors cursor-pointer flex items-center gap-1 font-bold text-[11px]"
+                            title="Delete this material permanently"
+                          >
+                            <span className="material-symbols-outlined text-[17px]">delete</span>
+                            <span className="hidden md:inline">Delete</span>
+                          </button>
+                        </div>
+                      </div>
+                    );
+                  })}
+                </div>
+              );
+            })()}
           </div>
 
           {/* Core Curriculum Tier Overrides */}
@@ -1355,6 +1786,115 @@ Real Numbers 2-Minute Formula Sheet,Class 10,Real Numbers,Formula Sheet,free,htt
                   </div>
                 );
               })}
+            </div>
+          </div>
+        </div>
+      )}
+
+      {/* Quick Preview Modal */}
+      {previewModalResource && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-4 bg-slate-950/80 backdrop-blur-sm animate-fadeIn">
+          <div className="bg-white rounded-3xl w-full max-w-xl max-h-[90vh] overflow-y-auto p-6 shadow-2xl border border-slate-200 space-y-4">
+            <div className="flex items-center justify-between pb-3 border-b border-slate-100">
+              <div className="flex items-center gap-2">
+                <span className="material-symbols-outlined text-blue-600">visibility</span>
+                <h4 className="font-bold text-base text-slate-900">Student Card Preview</h4>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPreviewModalResource(null)}
+                className="w-8 h-8 rounded-full bg-slate-100 hover:bg-slate-200 flex items-center justify-center text-slate-500 cursor-pointer"
+              >
+                <span className="material-symbols-outlined text-[18px]">close</span>
+              </button>
+            </div>
+
+            {/* Front-End Block Preview */}
+            <div className="bg-white rounded-2xl p-5 border-2 border-blue-200 shadow-md space-y-3">
+              <div className="flex items-center justify-between gap-2">
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded-full bg-emerald-100 text-emerald-900">
+                  {previewModalResource.tier.toUpperCase()}
+                </span>
+                <span className="text-[10px] font-bold px-2 py-0.5 rounded bg-blue-50 text-blue-800">
+                  {previewModalResource.grade}
+                </span>
+              </div>
+
+              {/* Automatic preview if image */}
+              {previewModalResource.imageUrl && (
+                <div className="rounded-xl overflow-hidden aspect-video bg-slate-900">
+                  <img src={previewModalResource.imageUrl} alt="" className="w-full h-full object-cover" />
+                </div>
+              )}
+
+              {/* Automatic preview if video */}
+              {(previewModalResource.youtubeId || previewModalResource.facebookVideoUrl || previewModalResource.videoUrl) && (
+                <div className="rounded-xl overflow-hidden aspect-video bg-black flex items-center justify-center relative">
+                  {previewModalResource.youtubeId ? (
+                    <iframe
+                      src={`https://www.youtube.com/embed/${previewModalResource.youtubeId.includes('v=') ? previewModalResource.youtubeId.split('v=')[1]?.split('&')[0] : previewModalResource.youtubeId.includes('youtu.be/') ? previewModalResource.youtubeId.split('youtu.be/')[1]?.split('?')[0] : previewModalResource.youtubeId}?rel=0`}
+                      title="YouTube"
+                      className="w-full h-full border-0"
+                      allowFullScreen
+                    />
+                  ) : (
+                    <span className="text-white text-xs font-bold">Video Player</span>
+                  )}
+                </div>
+              )}
+
+              {/* Automatic preview if file */}
+              {previewModalResource.downloadUrl && !previewModalResource.imageUrl && !previewModalResource.youtubeId && (
+                <div className="p-3 bg-blue-50 rounded-xl border border-blue-100 flex items-center gap-3">
+                  <span className="material-symbols-outlined text-blue-600 text-[28px]">description</span>
+                  <div className="min-w-0 flex-1">
+                    <span className="text-xs font-bold text-slate-800 block">PDF / Document File</span>
+                    <span className="text-[10px] text-slate-500 font-mono truncate block">
+                      {previewModalResource.downloadUrl}
+                    </span>
+                  </div>
+                </div>
+              )}
+
+              <div>
+                <span className="text-[10px] font-bold text-blue-600 uppercase block">
+                  {previewModalResource.topic} • {previewModalResource.format}
+                </span>
+                <h4 className="text-base font-bold text-slate-900 mt-0.5">{previewModalResource.title}</h4>
+                {previewModalResource.description && (
+                  <p className="text-xs text-slate-500 mt-1">{previewModalResource.description}</p>
+                )}
+              </div>
+
+              <div className="pt-2 flex items-center gap-2">
+                <button
+                  type="button"
+                  className="flex-1 py-2.5 bg-blue-600 text-white rounded-xl font-bold text-xs flex items-center justify-center gap-1.5"
+                >
+                  <span className="material-symbols-outlined text-[16px]">file_download</span>
+                  <span>Download Learning Material</span>
+                </button>
+              </div>
+            </div>
+
+            <div className="flex justify-end gap-2 pt-2">
+              <button
+                type="button"
+                onClick={() => {
+                  handleEditCustom(previewModalResource);
+                  setPreviewModalResource(null);
+                }}
+                className="px-4 py-2 bg-blue-50 text-blue-700 hover:bg-blue-100 rounded-xl text-xs font-bold cursor-pointer"
+              >
+                Edit Material
+              </button>
+              <button
+                type="button"
+                onClick={() => setPreviewModalResource(null)}
+                className="px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 rounded-xl text-xs font-bold cursor-pointer"
+              >
+                Close Preview
+              </button>
             </div>
           </div>
         </div>

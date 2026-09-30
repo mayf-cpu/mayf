@@ -226,13 +226,6 @@ export const AdminAdsTab: React.FC<AdminAdsTabProps> = ({
                 className="w-full px-3 py-2 bg-slate-50 border border-slate-300 rounded-xl text-xs font-semibold focus:outline-none focus:ring-2 focus:ring-blue-500"
                 placeholder="ADVERTISEMENT"
               />
-              <button
-                type="button"
-                onClick={handleResetDefaults}
-                className="px-3 py-2 text-xs font-bold text-red-600 bg-red-50 hover:bg-red-100 rounded-xl border border-red-200 transition-colors shrink-0"
-              >
-                Reset
-              </button>
             </div>
           </div>
         </div>

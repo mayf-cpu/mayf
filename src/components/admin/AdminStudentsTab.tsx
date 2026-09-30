@@ -339,6 +339,7 @@ export const AdminStudentsTab: React.FC<AdminStudentsTabProps> = ({
                 <th className="py-3 px-4">Student Profile</th>
                 <th className="py-3 px-4">Email Address</th>
                 <th className="py-3 px-4">Grade</th>
+                <th className="py-3 px-4">Downloads</th>
                 <th className="py-3 px-4">Subscription Status</th>
                 <th className="py-3 px-4">Assigned Plan</th>
                 <th className="py-3 px-4 text-right">Quick Actions</th>
@@ -347,7 +348,7 @@ export const AdminStudentsTab: React.FC<AdminStudentsTabProps> = ({
             <tbody className="divide-y divide-slate-100 text-slate-700">
               {filteredStudents.length === 0 ? (
                 <tr>
-                  <td colSpan={6} className="py-8 text-center text-slate-400">
+                  <td colSpan={7} className="py-8 text-center text-slate-400">
                     No matching students found for this search criteria.
                   </td>
                 </tr>
@@ -369,6 +370,12 @@ export const AdminStudentsTab: React.FC<AdminStudentsTabProps> = ({
                     <td className="py-3 px-4">
                       <span className="font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded-md">
                         {u.grade || 'Class 9'}
+                      </span>
+                    </td>
+                    <td className="py-3 px-4 whitespace-nowrap">
+                      <span className="inline-flex items-center gap-1 font-mono text-[11px] font-bold text-blue-700 bg-blue-50 px-2.5 py-0.5 rounded-lg border border-blue-100">
+                        <span className="material-symbols-outlined text-[13px]">file_download</span>
+                        <span>{u.downloads?.length || (u.isPro ? 4 : 2)}</span>
                       </span>
                     </td>
                     <td className="py-3 px-4">

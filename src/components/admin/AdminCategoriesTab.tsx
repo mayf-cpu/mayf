@@ -447,13 +447,6 @@ export const AdminCategoriesTab: React.FC<AdminCategoriesTabProps> = ({
           <span className="text-xs font-bold text-slate-500 uppercase tracking-wider">
             Showing {filteredList.length} of {categories.length} Taxonomies
           </span>
-          <button
-            onClick={handleResetDefaults}
-            className="text-xs text-slate-400 hover:text-red-500 flex items-center gap-1 font-semibold transition-colors cursor-pointer"
-          >
-            <span className="material-symbols-outlined text-[14px]">refresh</span>
-            Reset Defaults
-          </button>
         </div>
 
         <div className="divide-y divide-slate-100">
