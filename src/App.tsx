@@ -22,7 +22,6 @@ import { LoginRequiredModal } from './components/LoginRequiredModal';
 import { MATH_RESOURCES, MathResource } from './data/mathResources';
 import { Header } from './components/Header';
 import { InteractiveFormulaDeckModal } from './components/InteractiveFormulaDeckModal';
-import { ResourceModal } from './components/ResourceModal';
 import { VideoPlayerModal } from './components/VideoPlayerModal';
 import { FlashcardsModal } from './components/FlashcardsModal';
 import { ProCheckoutModal } from './components/ProCheckoutModal';
@@ -43,7 +42,7 @@ import { FormulaDeckSandbox } from './components/FormulaDeckSandbox';
 import { AiTeacherModal } from './components/AiTeacherModal';
 import { AskTeacherPage } from './components/AskTeacherPage';
 import { ResourceStandalonePage } from './components/ResourceStandalonePage';
-import { generateDocumentCoverThumbnail } from './services/thumbnailGenerator';
+import { generateDocumentCoverThumbnail, getResourceThumbnail } from './services/thumbnailGenerator';
 import {
   HomePageBlock,
   getLocalPageBlocks,
@@ -152,6 +151,10 @@ export default function App() {
 
   // Dynamic Homepage Blocks Ordering state (Study Together • Grow Faster placed after content blocks by default)
   const [pageBlocks, setPageBlocks] = useState<HomePageBlock[]>(getLocalPageBlocks);
+
+  const sortedBlocks = useMemo(() => {
+    return [...pageBlocks].sort((a, b) => a.order - b.order);
+  }, [pageBlocks]);
 
   const [currentCurrency, setCurrentCurrency] = useState<CurrencyInfo>(getUserCurrency);
 
@@ -520,6 +523,7 @@ export default function App() {
       const defSeo = getSeoSettingsLocally();
       applySeoToDocument(defSeo);
       setPageText(getPageTextConfig());
+      setPageBlocks(DEFAULT_PAGE_BLOCKS);
       showToast('🎉 All admin features reset to clean working defaults!');
     };
     window.addEventListener('admin-master-reset', handleMasterReset);
@@ -1424,10 +1428,11 @@ export default function App() {
         themeConfig={themeConfig}
         allResources={allCatalogResources}
         onSelectResource={(res) => {
-          setCurrentView('store');
-          setSelectedResource(res);
-          if (res.hasVideo && res.videoUrl) {
+          if (res.hasVideo && res.videoUrl && !res.downloadUrl) {
+            setSelectedResource(res);
             setIsVideoModalOpen(true);
+          } else {
+            window.open(`/resource/${res.id}`, '_blank');
           }
         }}
       />
@@ -1475,7 +1480,15 @@ export default function App() {
           </section>
         )}
 
-        {/* Hero Section */}
+        
+        {/* Dynamic Re-orderable Page Blocks */}
+        {sortedBlocks.map((block) => {
+          if (!block.enabled) return null;
+          switch (block.id) {
+            case 'hero':
+              return (
+                <React.Fragment key={block.id}>
+                  {/* Hero Section */}
         <section className="relative w-full overflow-hidden bg-gradient-to-b from-[#dee8ff]/40 via-[#f9f9ff] to-[#f9f9ff] px-3 sm:px-6 lg:px-8 py-8 sm:py-12 lg:py-16">
           <div className="absolute -top-12 -left-12 w-64 h-64 bg-[#dbe1ff]/30 rounded-full blur-3xl pointer-events-none"></div>
           <div className="absolute top-1/3 -right-20 w-80 h-80 bg-[#ffddb8]/40 rounded-full blur-3xl pointer-events-none"></div>
@@ -1794,8 +1807,12 @@ export default function App() {
         <section className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 py-2 w-full">
           <AdPlacement location="home_hero_bottom" />
         </section>
-
-        {/* Interactive Grade / Class Quick Switcher Rail */}
+                </React.Fragment>
+              );
+            case 'class_selector':
+              return (
+                <React.Fragment key={block.id}>
+                  {/* Interactive Grade / Class Quick Switcher Rail */}
         <section className="max-w-7xl mx-auto w-full px-3 sm:px-6 lg:px-8 py-4">
           <div className="flex flex-col gap-2.5">
             <div className="flex items-center justify-between">
@@ -1926,17 +1943,12 @@ export default function App() {
             )}
           </div>
         </section>
-
-        {/* Social Media Community Channels Join Block (Displayed for all learners & visitors) */}
-        <SocialMediaJoinBlock
-          currentUser={currentUser}
-          userProfile={userProfile}
-          socialConfig={socialConfig}
-          onToast={showToast}
-          pageText={pageText}
-        />
-
-        {/* Multi-Criteria Filter & Search Console */}
+                </React.Fragment>
+              );
+            case 'catalog_filters':
+              return (
+                <React.Fragment key={block.id}>
+                  {/* Multi-Criteria Filter & Search Console */}
         <section className="max-w-7xl mx-auto w-full px-3 sm:px-6 lg:px-8 pt-2 pb-2" id="resource-catalog">
           <div className="bg-white rounded-2xl p-4 sm:p-5 shadow-sm border border-blue-50 space-y-3 sm:space-y-4 max-w-full overflow-hidden">
             {/* Search & Main Category Chips */}
@@ -2144,8 +2156,12 @@ export default function App() {
             </div>
           </div>
         </section>
-
-        {/* Resource Cards Catalog Grid */}
+                </React.Fragment>
+              );
+            case 'content_catalog':
+              return (
+                <React.Fragment key={block.id}>
+                  {/* Resource Cards Catalog Grid */}
         <section className="max-w-7xl mx-auto w-full px-3 sm:px-6 lg:px-8 py-5 sm:py-6" id="cards-grid">
           <div className="flex flex-col sm:flex-row sm:items-center justify-between mb-4 sm:mb-6 gap-2">
             <div className="flex items-center gap-2">
@@ -2235,11 +2251,7 @@ export default function App() {
                     {/* Automatic Preview for Video, Image, or File */}
                     {(() => {
                       const isVideo = Boolean(res.hasVideo || res.youtubeId || res.videoUrl || res.facebookVideoUrl || res.embedHtml);
-                      const cleanYt = res.youtubeId ? (res.youtubeId.includes('v=') ? res.youtubeId.split('v=')[1]?.split('&')[0] : res.youtubeId.includes('youtu.be/') ? res.youtubeId.split('youtu.be/')[1]?.split('?')[0] : res.youtubeId) : null;
-                      const videoThumb = res.thumbnailUrl || (cleanYt ? `https://img.youtube.com/vi/${cleanYt}/hqdefault.jpg` : null);
-                      const isImage = !isVideo && Boolean(res.imageUrl || (res.downloadUrl && /\.(png|jpe?g|webp|svg|gif)($|\?)/i.test(res.downloadUrl)) || (res.downloadUrl && res.downloadUrl.startsWith('data:image/')));
-                      const imageSrc = res.imageUrl || (isImage ? res.downloadUrl : null);
-                      const hasDocFile = !isVideo && !isImage && Boolean(res.downloadUrl);
+                      const thumbUrl = getResourceThumbnail(res);
 
                       if (isVideo) {
                         return (
@@ -2250,11 +2262,11 @@ export default function App() {
                             }}
                             className="relative rounded-xl overflow-hidden mb-3 aspect-video bg-slate-900 flex items-center justify-center cursor-pointer group/vid shadow-xs"
                           >
-                            {videoThumb ? (
+                            {thumbUrl ? (
                               <img
                                 alt={res.title}
                                 className="w-full h-full object-cover group-hover/vid:scale-105 transition-transform duration-300"
-                                src={videoThumb}
+                                src={thumbUrl}
                               />
                             ) : (
                               <div className="w-full h-full bg-gradient-to-br from-slate-900 to-blue-950 flex items-center justify-center">
@@ -2277,59 +2289,38 @@ export default function App() {
                         );
                       }
 
-                      if (isImage && imageSrc) {
-                        return (
-                          <div
-                            onClick={() => handleCardClick(res)}
-                            className="relative rounded-xl overflow-hidden mb-3 aspect-video bg-slate-100 flex items-center justify-center cursor-pointer group/img border border-slate-200 shadow-xs"
-                          >
+                      return (
+                        <div
+                          onClick={() => handleCardClick(res)}
+                          className="relative rounded-xl overflow-hidden mb-3 aspect-video bg-slate-950 flex items-center justify-center cursor-pointer group/img border border-slate-200/90 shadow-xs"
+                          title={`Open "${res.title}" in a separate window`}
+                        >
+                          {thumbUrl ? (
                             <img
                               alt={res.title}
                               className="w-full h-full object-cover group-hover/img:scale-105 transition-transform duration-300"
-                              src={imageSrc}
+                              src={thumbUrl}
                             />
-                            <div className="absolute inset-0 bg-slate-950/10 group-hover/img:bg-slate-950/20 transition-colors flex items-center justify-center opacity-0 group-hover/img:opacity-100">
-                              <div className="px-3 py-1.5 rounded-xl bg-white/95 text-slate-900 font-bold text-xs shadow-lg flex items-center gap-1">
-                                <span className="material-symbols-outlined text-[16px] text-blue-600">zoom_in</span>
-                                <span>Preview Diagram</span>
-                              </div>
+                          ) : (
+                            <div className="w-full h-full bg-gradient-to-br from-slate-900 via-blue-950 to-slate-900 flex items-center justify-center p-3 text-center text-white">
+                              <span className="font-extrabold text-xs">{res.title}</span>
                             </div>
-                            <span className="absolute bottom-2 left-2 bg-slate-900/80 text-white text-[10px] font-bold px-2 py-0.5 rounded">
-                              Visual Formula Sheet
-                            </span>
-                          </div>
-                        );
-                      }
-
-                      if (hasDocFile) {
-                        return (
-                          <div
-                            onClick={() => handleCardClick(res)}
-                            className="relative rounded-xl overflow-hidden mb-3 bg-gradient-to-br from-blue-50 to-indigo-50/60 border border-blue-100 p-3.5 flex items-center justify-between gap-3 cursor-pointer group/doc hover:border-blue-300 transition-all shadow-2xs"
-                          >
-                            <div className="flex items-center gap-2.5 min-w-0">
-                              <div className="w-10 h-10 rounded-xl bg-blue-600 text-white flex items-center justify-center shadow-xs group-hover/doc:scale-105 transition-transform shrink-0">
-                                <span className="material-symbols-outlined text-[22px]">description</span>
-                              </div>
-                              <div className="min-w-0">
-                                <div className="text-[11px] font-extrabold text-blue-950 truncate">
-                                  Official Learning PDF
-                                </div>
-                                <div className="text-[10px] text-slate-500 flex items-center gap-1">
-                                  <span>{res.sizeOrDuration || 'Standard Document'}</span>
-                                  <span>•</span>
-                                  <span className="text-emerald-700 font-bold">A4 Ready</span>
-                                </div>
-                              </div>
+                          )}
+                          <div className="absolute inset-0 bg-slate-950/15 group-hover/img:bg-slate-950/35 transition-colors flex items-center justify-center opacity-0 group-hover/img:opacity-100">
+                            <div className="px-3.5 py-1.5 rounded-xl bg-white text-slate-900 font-extrabold text-xs shadow-xl flex items-center gap-1.5 transform translate-y-1 group-hover/img:translate-y-0 transition-transform">
+                              <span className="material-symbols-outlined text-[16px] text-blue-600">open_in_new</span>
+                              <span>Open Material (New Window)</span>
                             </div>
-                            <span className="text-[10px] font-bold text-blue-700 bg-white px-2 py-1 rounded-lg border border-blue-200 group-hover/doc:bg-blue-600 group-hover/doc:text-white transition-colors shrink-0">
-                              View Preview
-                            </span>
                           </div>
-                        );
-                      }
-
-                      return null;
+                          <span className="absolute bottom-2 left-2 bg-slate-950/85 backdrop-blur-xs text-white text-[10px] font-extrabold px-2 py-0.5 rounded shadow-sm">
+                            {res.format || 'Study Notes (PDF)'}
+                          </span>
+                          <span className="absolute top-2 right-2 bg-blue-600 text-white text-[9px] font-bold px-1.5 py-0.5 rounded shadow-xs flex items-center gap-1">
+                            <span className="material-symbols-outlined text-[12px]">open_in_new</span>
+                            <span>Dedicated Page</span>
+                          </span>
+                        </div>
+                      );
                     })()}
 
                     {/* Title & Topic Header */}
@@ -2544,9 +2535,9 @@ export default function App() {
                         </button>
 
                         <button
-                          onClick={() => openShare(res.title, `${window.location.origin}${window.location.pathname}?resource=${res.id}#catalog`)}
+                          onClick={() => openShare(res.title, `${window.location.origin}/resource/${res.id}`)}
                           className="p-2 sm:p-2.5 bg-[#e7eeff] rounded-xl text-[#434655] hover:text-[#004ac6] hover:bg-[#dbe1ff] transition-colors cursor-pointer shrink-0"
-                          title="Share externally via Chrome direct link"
+                          title="Share direct webpage link externally"
                           type="button"
                         >
                           <span className="material-symbols-outlined text-[18px] sm:text-[20px]">share</span>
@@ -2571,210 +2562,12 @@ export default function App() {
             <AdPlacement location="catalog_bottom" />
           </div>
         </section>
-
-        {/* AI TEACHER SPOTLIGHT BANNER */}
-        <section className="max-w-7xl mx-auto w-full px-3 sm:px-6 lg:px-8 mt-10 sm:mt-14">
-          <div className="bg-gradient-to-r from-[#002a78] via-[#004ac6] to-[#1e58d8] rounded-3xl p-6 sm:p-8 text-white shadow-xl relative overflow-hidden flex flex-col md:flex-row items-center justify-between gap-6 border border-blue-400/30">
-            <div className="max-w-2xl">
-              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-400/20 text-amber-300 text-xs font-extrabold uppercase tracking-wider mb-3">
-                <span className="material-symbols-outlined text-[16px]">psychology</span>
-                <span>{pageText.aiTeacher.badge || 'AI Teacher Assistant • Step-by-Step Solver'}</span>
-              </div>
-              <h2 className="text-xl sm:text-2xl lg:text-3xl font-extrabold tracking-tight">
-                {pageText.aiTeacher.title || 'Stuck on a Tricky Math Problem?'}
-              </h2>
-              <p className="text-xs sm:text-sm text-blue-100 mt-2 leading-relaxed">
-                {pageText.aiTeacher.description || 'Meet Prof. Raman, your 24/7 personal math faculty! Simply type your question or upload a photo from your textbook. Receive clear, pedagogical step-by-step working, applied formulas, and exam cautions.'}
-              </p>
-              <div className="flex items-center gap-3 mt-4 text-xs font-semibold text-blue-200 flex-wrap">
-                <span className="flex items-center gap-1">
-                  <span className="material-symbols-outlined text-[16px] text-emerald-400">check_circle</span>
-                  <span>{pageText.aiTeacher.feature1 || 'Text or Photo Input'}</span>
-                </span>
-                <span className="flex items-center gap-1">
-                  <span className="material-symbols-outlined text-[16px] text-emerald-400">check_circle</span>
-                  <span>{pageText.aiTeacher.feature2 || 'Step-by-Step Proofs'}</span>
-                </span>
-                <span className="flex items-center gap-1">
-                  <span className="material-symbols-outlined text-[16px] text-emerald-400">check_circle</span>
-                  <span>{pageText.aiTeacher.feature3 || 'Class 5 - 10 & Olympiad'}</span>
-                </span>
-              </div>
-            </div>
-
-            <div className="flex flex-col sm:flex-row items-center gap-3 shrink-0 w-full sm:w-auto">
-              <button
-                onClick={() => handleNavigateToAskTeacher()}
-                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-500 hover:to-amber-600 text-slate-950 font-extrabold text-sm px-6 py-3.5 rounded-2xl shadow-lg transition-all cursor-pointer transform hover:scale-102"
-                title="Open Dedicated Ask Teacher Page (/ask-teacher)"
-              >
-                <span className="material-symbols-outlined text-[20px]">co_present</span>
-                <span>{pageText.aiTeacher.buttonText || 'Ask Teacher (Dedicated Page)'}</span>
-                <span className="material-symbols-outlined text-[18px]">open_in_new</span>
-              </button>
-
-              <button
-                onClick={() => {
-                  const url = getAskTeacherShareUrl(window.location.origin);
-                  navigator.clipboard?.writeText(url);
-                  showToast('Direct Ask Teacher link copied (opens in Chrome/external browser)!');
-                }}
-                className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 bg-white/20 hover:bg-white/30 text-white font-bold text-xs sm:text-sm px-4 py-3.5 rounded-2xl border border-white/25 transition-all cursor-pointer"
-                title="Copy shareable link for social media (forces Chrome/external browser)"
-              >
-                <span className="material-symbols-outlined text-[18px]">share</span>
-                <span>Share Link</span>
-              </button>
-            </div>
-          </div>
-        </section>
-
-        {/* INTERACTIVE FORMULA DECK ON HOME PAGE */}
-        <section id="formula-deck" className="max-w-7xl mx-auto w-full px-3 sm:px-6 lg:px-8 mt-12 sm:mt-16">
-          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
-            <div>
-              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-50 border border-blue-200 text-[#004ac6] text-xs font-extrabold uppercase tracking-wider mb-2">
-                <span className="material-symbols-outlined text-[16px]">functions</span>
-                <span>{pageText.formulaDeck.badge || 'Maths at Your Fingertips Sandbox'}</span>
-              </div>
-              <h2 className="text-xl sm:text-2xl lg:text-3xl font-extrabold text-[#111c2d] tracking-tight">
-                {pageText.formulaDeck.title || 'Interactive Formula Deck & Mathematical Transitions'}
-              </h2>
-              <p className="text-xs sm:text-sm text-slate-600 mt-1 max-w-2xl">
-                {pageText.formulaDeck.description || 'Experience mathematical concepts in action. Adjust parameters in real-time, inspect dynamic proofs, and watch algebra and geometry morph seamlessly.'}
-              </p>
-            </div>
-
-            <div className="flex items-center gap-2 shrink-0">
-              <button
-                onClick={handleNavigateToFormulaDeck}
-                className="inline-flex items-center gap-1.5 bg-[#004ac6] hover:bg-blue-700 text-white font-bold text-xs sm:text-sm px-4 py-2.5 rounded-xl shadow-md transition-all cursor-pointer"
-                title="Open Dedicated Formula Deck Page"
-              >
-                <span>{pageText.formulaDeck.buttonText || 'Launch Fullscreen Deck (/#formula-deck)'}</span>
-                <span className="material-symbols-outlined text-[18px]">open_in_new</span>
-              </button>
-            </div>
-          </div>
-
-          <FormulaDeckSandbox
-            onAskAiAboutFormula={(name) => handleOpenAiTeacher(`Can you teach me the full derivation, proof, and typical board exam questions for ${name}?`)}
-            onDownloadSheet={handleDownload}
-            isStandalonePage={false}
-          />
-        </section>
-
-        {/* Google AdSense Native Placement / Mid-Page Sponsored / Camp Banner */}
-        {pageText.midBanner.enabled && (
-        <section className="max-w-7xl mx-auto w-full px-3 sm:px-6 lg:px-8 my-5 sm:my-6">
-          <div className="w-full bg-[#f0f3ff] rounded-2xl p-3 sm:p-4 flex flex-col items-center justify-center text-center shadow-sm border border-gray-100">
-            <div className="flex items-center gap-1.5 mb-2">
-              <span className="text-[11px] font-bold tracking-wider uppercase text-[#737686]">
-                {pageText.midBanner.badge || 'Sponsored Content'}
-              </span>
-              <span className="material-symbols-outlined text-[14px] text-[#737686]">info</span>
-            </div>
-            <div className="w-full max-w-[728px] min-h-[76px] bg-white rounded-xl flex flex-col sm:flex-row items-center justify-between p-3 gap-3 shadow-inner border border-gray-100">
-              <div className="flex items-center gap-3 text-left w-full sm:w-auto">
-                <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-[#6ffbbe] text-[#002113] flex items-center justify-center shrink-0">
-                  <span className="material-symbols-outlined text-[24px] sm:text-[26px]">psychology</span>
-                </div>
-                <div className="min-w-0">
-                  <div className="text-xs sm:text-[13px] font-bold text-[#111c2d] truncate">
-                    {pageText.midBanner.title || 'Mental Math Master: Speed Multiplication Camp'}
-                  </div>
-                  <div className="text-[11px] sm:text-[13px] text-[#434655] truncate">
-                    {pageText.midBanner.subtitle || 'Live weekend sessions for ages 10-15 • Learn Vedic Math tricks'}
-                  </div>
-                </div>
-              </div>
-              <button
-                onClick={() =>
-                  setEnrollModalData({
-                    isOpen: true,
-                    title: pageText.midBanner.title || 'Speed Multiplication & Vedic Math Camp',
-                    subtitle: pageText.midBanner.subtitle || 'Live weekend masterclass for ages 10-15',
-                    isFree: true,
-                  })
-                }
-                className="w-full sm:w-auto text-center shrink-0 bg-[#2563eb] text-white text-xs sm:text-[13px] font-bold px-4 py-2 rounded-xl hover:bg-blue-700 transition-colors shadow-sm cursor-pointer"
-              >
-                {pageText.midBanner.buttonText || 'Claim Free Seat →'}
-              </button>
-            </div>
-          </div>
-        </section>
-        )}
-
-        {/* Formula Cheat-Sheet Teaser & Pro Masterclass Highlight */}
-        <section className="max-w-7xl mx-auto w-full px-3 sm:px-6 lg:px-8 py-6 sm:py-8" id="paid-masterclasses">
-          <div className="bg-gradient-to-r from-[#004ac6] to-[#2563eb] rounded-3xl p-5 sm:p-8 lg:p-10 text-white relative overflow-hidden shadow-2xl">
-            <div className="absolute -bottom-10 -right-10 w-96 h-96 bg-[#0053db] opacity-20 rounded-full blur-2xl pointer-events-none"></div>
-
-            <div className="relative z-10 flex flex-col lg:flex-row items-center justify-between gap-6 sm:gap-8">
-              <div className="max-w-2xl w-full">
-                <div className="inline-flex items-center gap-1.5 bg-[#fea619] text-[#2a1700] text-[10px] sm:text-[11px] font-bold px-3 py-1 rounded-full mb-3 sm:mb-4">
-                  <span className="material-symbols-outlined text-[14px]">stars</span> {pageText.proMasterclass.badge || 'THE ULTIMATE CLASS 9 & 10 MATHS VAULT'}
-                </div>
-                <h2 className="text-2xl sm:text-3xl lg:text-[40px] font-extrabold leading-tight">
-                  {pageText.proMasterclass.headline || 'Stop Memorizing Formulas. Understand Them Visually.'}
-                </h2>
-                <p className="mt-2.5 sm:mt-3 text-sm sm:text-base lg:text-lg text-[#eeefff] max-w-xl leading-relaxed">
-                  {pageText.proMasterclass.subtitle || 'Get unlimited access to all 48 chapter cheatsheets, video derivation library, and instant live doubt support before your board exams.'}
-                </p>
-
-                <div className="mt-5 sm:mt-6 flex flex-wrap items-center gap-3 sm:gap-4">
-                  <div className="flex items-center gap-1.5 sm:gap-2">
-                    <span className="material-symbols-outlined text-[#ffddb8] text-[18px] sm:text-[20px]">
-                      check_circle
-                    </span>
-                    <span className="text-xs sm:text-[13px] font-bold">{pageText.proMasterclass.perk1 || 'Printable Pocket Flashcards'}</span>
-                  </div>
-                  <div className="flex items-center gap-1.5 sm:gap-2">
-                    <span className="material-symbols-outlined text-[#ffddb8] text-[18px] sm:text-[20px]">
-                      check_circle
-                    </span>
-                    <span className="text-xs sm:text-[13px] font-bold">{pageText.proMasterclass.perk2 || 'NCERT Exemplar Video Solutions'}</span>
-                  </div>
-                  <div className="flex items-center gap-1.5 sm:gap-2">
-                    <span className="material-symbols-outlined text-[#ffddb8] text-[18px] sm:text-[20px]">
-                      check_circle
-                    </span>
-                    <span className="text-xs sm:text-[13px] font-bold">{pageText.proMasterclass.perk3 || 'WhatsApp Mentor Hotline'}</span>
-                  </div>
-                </div>
-              </div>
-
-              {/* Pricing Card */}
-              <div className="shrink-0 bg-white text-[#111c2d] rounded-2xl p-5 sm:p-6 shadow-xl max-w-full sm:max-w-xs w-full text-center border border-blue-50">
-                <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-[#855300]">
-                  {pageText.proMasterclass.dealTag || 'Limited Time Semester Deal'}
-                </span>
-                <div className="my-1.5 sm:my-2">
-                  <span className="text-3xl sm:text-[40px] font-extrabold text-[#004ac6]">{formatPrice(499, currentCurrency.code)}</span>
-                  <span className="text-xs sm:text-[14px] text-[#737686]"> / Year</span>
-                </div>
-                <p className="text-xs sm:text-[14px] text-[#434655] mb-3 sm:mb-4">
-                  {pageText.proMasterclass.dealDescription || 'Covers complete syllabus for your selected grade with monthly updates.'}
-                </p>
-                <button
-                  onClick={() => setIsProPassModalOpen(true)}
-                  className="w-full inline-flex items-center justify-center gap-2 bg-[#fea619] text-[#2a1700] text-sm sm:text-[15px] font-bold py-3 px-4 rounded-xl shadow-md hover:shadow-lg transition-transform active:translate-y-1 cursor-pointer tactile-btn-secondary"
-                >
-                  <span className="material-symbols-outlined text-[18px] sm:text-[20px]">
-                    shopping_cart_checkout
-                  </span>
-                  <span>{isUserPro ? 'Manage Active Pass' : (pageText.proMasterclass.buttonText || 'Get All-Access Pass')}</span>
-                </button>
-                <span className="text-[10px] sm:text-[11px] font-bold text-[#737686] block mt-2.5">
-                  {pageText.proMasterclass.guaranteeText || 'Cancel anytime • 7-day money-back guarantee'}
-                </span>
-              </div>
-            </div>
-          </div>
-        </section>
-
-        {/* Social Media Study Community Section */}
+                </React.Fragment>
+              );
+            case 'social_community':
+              return (
+                <React.Fragment key={block.id}>
+                  {/* Social Media Study Community Section */}
         <section className="max-w-7xl mx-auto w-full px-3 sm:px-6 lg:px-8 py-8 sm:py-10">
           <div className="text-center max-w-2xl mx-auto mb-6 sm:mb-8">
             <div className="inline-flex items-center gap-2 bg-[#dee8ff] px-3 py-1 rounded-full text-[#004ac6] text-[11px] font-bold uppercase tracking-wider mb-2">
@@ -2883,8 +2676,234 @@ export default function App() {
             </div>
           </div>
         </section>
+                  {/* Social Media Community Channels Join Block (Displayed for all learners & visitors) */}
+        <SocialMediaJoinBlock
+          currentUser={currentUser}
+          userProfile={userProfile}
+          socialConfig={socialConfig}
+          onToast={showToast}
+          pageText={pageText}
+        />
+                </React.Fragment>
+              );
+            case 'ai_teacher':
+              return (
+                <React.Fragment key={block.id}>
+                  {/* AI TEACHER SPOTLIGHT BANNER */}
+        <section className="max-w-7xl mx-auto w-full px-3 sm:px-6 lg:px-8 mt-10 sm:mt-14">
+          <div className="bg-gradient-to-r from-[#002a78] via-[#004ac6] to-[#1e58d8] rounded-3xl p-6 sm:p-8 text-white shadow-xl relative overflow-hidden flex flex-col md:flex-row items-center justify-between gap-6 border border-blue-400/30">
+            <div className="max-w-2xl">
+              <div className="inline-flex items-center gap-2 px-3 py-1 rounded-full bg-amber-400/20 text-amber-300 text-xs font-extrabold uppercase tracking-wider mb-3">
+                <span className="material-symbols-outlined text-[16px]">psychology</span>
+                <span>{pageText.aiTeacher.badge || 'AI Teacher Assistant • Step-by-Step Solver'}</span>
+              </div>
+              <h2 className="text-xl sm:text-2xl lg:text-3xl font-extrabold tracking-tight">
+                {pageText.aiTeacher.title || 'Stuck on a Tricky Math Problem?'}
+              </h2>
+              <p className="text-xs sm:text-sm text-blue-100 mt-2 leading-relaxed">
+                {pageText.aiTeacher.description || 'Meet Prof. Raman, your 24/7 personal math faculty! Simply type your question or upload a photo from your textbook. Receive clear, pedagogical step-by-step working, applied formulas, and exam cautions.'}
+              </p>
+              <div className="flex items-center gap-3 mt-4 text-xs font-semibold text-blue-200 flex-wrap">
+                <span className="flex items-center gap-1">
+                  <span className="material-symbols-outlined text-[16px] text-emerald-400">check_circle</span>
+                  <span>{pageText.aiTeacher.feature1 || 'Text or Photo Input'}</span>
+                </span>
+                <span className="flex items-center gap-1">
+                  <span className="material-symbols-outlined text-[16px] text-emerald-400">check_circle</span>
+                  <span>{pageText.aiTeacher.feature2 || 'Step-by-Step Proofs'}</span>
+                </span>
+                <span className="flex items-center gap-1">
+                  <span className="material-symbols-outlined text-[16px] text-emerald-400">check_circle</span>
+                  <span>{pageText.aiTeacher.feature3 || 'Class 5 - 10 & Olympiad'}</span>
+                </span>
+              </div>
+            </div>
 
-        {/* Interactive Quick FAQ Accordion */}
+            <div className="flex flex-col sm:flex-row items-center gap-3 shrink-0 w-full sm:w-auto">
+              <button
+                onClick={() => handleNavigateToAskTeacher()}
+                className="w-full sm:w-auto inline-flex items-center justify-center gap-2 bg-gradient-to-r from-amber-400 to-amber-500 hover:from-amber-500 hover:to-amber-600 text-slate-950 font-extrabold text-sm px-6 py-3.5 rounded-2xl shadow-lg transition-all cursor-pointer transform hover:scale-102"
+                title="Open Dedicated Ask Teacher Page (/ask-teacher)"
+              >
+                <span className="material-symbols-outlined text-[20px]">co_present</span>
+                <span>{pageText.aiTeacher.buttonText || 'Ask Teacher (Dedicated Page)'}</span>
+                <span className="material-symbols-outlined text-[18px]">open_in_new</span>
+              </button>
+
+              <button
+                onClick={() => {
+                  const url = getAskTeacherShareUrl(window.location.origin);
+                  navigator.clipboard?.writeText(url);
+                  showToast('Direct Ask Teacher link copied (opens in Chrome/external browser)!');
+                }}
+                className="w-full sm:w-auto inline-flex items-center justify-center gap-1.5 bg-white/20 hover:bg-white/30 text-white font-bold text-xs sm:text-sm px-4 py-3.5 rounded-2xl border border-white/25 transition-all cursor-pointer"
+                title="Copy shareable link for social media (forces Chrome/external browser)"
+              >
+                <span className="material-symbols-outlined text-[18px]">share</span>
+                <span>Share Link</span>
+              </button>
+            </div>
+          </div>
+        </section>
+                </React.Fragment>
+              );
+            case 'formula_deck':
+              return (
+                <React.Fragment key={block.id}>
+                  {/* INTERACTIVE FORMULA DECK ON HOME PAGE */}
+        <section id="formula-deck" className="max-w-7xl mx-auto w-full px-3 sm:px-6 lg:px-8 mt-12 sm:mt-16">
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-6">
+            <div>
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-50 border border-blue-200 text-[#004ac6] text-xs font-extrabold uppercase tracking-wider mb-2">
+                <span className="material-symbols-outlined text-[16px]">functions</span>
+                <span>{pageText.formulaDeck.badge || 'Maths at Your Fingertips Sandbox'}</span>
+              </div>
+              <h2 className="text-xl sm:text-2xl lg:text-3xl font-extrabold text-[#111c2d] tracking-tight">
+                {pageText.formulaDeck.title || 'Interactive Formula Deck & Mathematical Transitions'}
+              </h2>
+              <p className="text-xs sm:text-sm text-slate-600 mt-1 max-w-2xl">
+                {pageText.formulaDeck.description || 'Experience mathematical concepts in action. Adjust parameters in real-time, inspect dynamic proofs, and watch algebra and geometry morph seamlessly.'}
+              </p>
+            </div>
+
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                onClick={handleNavigateToFormulaDeck}
+                className="inline-flex items-center gap-1.5 bg-[#004ac6] hover:bg-blue-700 text-white font-bold text-xs sm:text-sm px-4 py-2.5 rounded-xl shadow-md transition-all cursor-pointer"
+                title="Open Dedicated Formula Deck Page"
+              >
+                <span>{pageText.formulaDeck.buttonText || 'Launch Fullscreen Deck (/#formula-deck)'}</span>
+                <span className="material-symbols-outlined text-[18px]">open_in_new</span>
+              </button>
+            </div>
+          </div>
+
+          <FormulaDeckSandbox
+            onAskAiAboutFormula={(name) => handleOpenAiTeacher(`Can you teach me the full derivation, proof, and typical board exam questions for ${name}?`)}
+            onDownloadSheet={handleDownload}
+            isStandalonePage={false}
+          />
+        </section>
+                </React.Fragment>
+              );
+            case 'paid_masterclasses':
+              return (
+                <React.Fragment key={block.id}>
+                  {/* Google AdSense Native Placement / Mid-Page Sponsored / Camp Banner */}
+        {pageText.midBanner.enabled && (
+        <section className="max-w-7xl mx-auto w-full px-3 sm:px-6 lg:px-8 my-5 sm:my-6">
+          <div className="w-full bg-[#f0f3ff] rounded-2xl p-3 sm:p-4 flex flex-col items-center justify-center text-center shadow-sm border border-gray-100">
+            <div className="flex items-center gap-1.5 mb-2">
+              <span className="text-[11px] font-bold tracking-wider uppercase text-[#737686]">
+                {pageText.midBanner.badge || 'Sponsored Content'}
+              </span>
+              <span className="material-symbols-outlined text-[14px] text-[#737686]">info</span>
+            </div>
+            <div className="w-full max-w-[728px] min-h-[76px] bg-white rounded-xl flex flex-col sm:flex-row items-center justify-between p-3 gap-3 shadow-inner border border-gray-100">
+              <div className="flex items-center gap-3 text-left w-full sm:w-auto">
+                <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-[#6ffbbe] text-[#002113] flex items-center justify-center shrink-0">
+                  <span className="material-symbols-outlined text-[24px] sm:text-[26px]">psychology</span>
+                </div>
+                <div className="min-w-0">
+                  <div className="text-xs sm:text-[13px] font-bold text-[#111c2d] truncate">
+                    {pageText.midBanner.title || 'Mental Math Master: Speed Multiplication Camp'}
+                  </div>
+                  <div className="text-[11px] sm:text-[13px] text-[#434655] truncate">
+                    {pageText.midBanner.subtitle || 'Live weekend sessions for ages 10-15 • Learn Vedic Math tricks'}
+                  </div>
+                </div>
+              </div>
+              <button
+                onClick={() =>
+                  setEnrollModalData({
+                    isOpen: true,
+                    title: pageText.midBanner.title || 'Speed Multiplication & Vedic Math Camp',
+                    subtitle: pageText.midBanner.subtitle || 'Live weekend masterclass for ages 10-15',
+                    isFree: true,
+                  })
+                }
+                className="w-full sm:w-auto text-center shrink-0 bg-[#2563eb] text-white text-xs sm:text-[13px] font-bold px-4 py-2 rounded-xl hover:bg-blue-700 transition-colors shadow-sm cursor-pointer"
+              >
+                {pageText.midBanner.buttonText || 'Claim Free Seat →'}
+              </button>
+            </div>
+          </div>
+        </section>
+        )}
+
+        {/* Formula Cheat-Sheet Teaser & Pro Masterclass Highlight */}
+        <section className="max-w-7xl mx-auto w-full px-3 sm:px-6 lg:px-8 py-6 sm:py-8" id="paid-masterclasses">
+          <div className="bg-gradient-to-r from-[#004ac6] to-[#2563eb] rounded-3xl p-5 sm:p-8 lg:p-10 text-white relative overflow-hidden shadow-2xl">
+            <div className="absolute -bottom-10 -right-10 w-96 h-96 bg-[#0053db] opacity-20 rounded-full blur-2xl pointer-events-none"></div>
+
+            <div className="relative z-10 flex flex-col lg:flex-row items-center justify-between gap-6 sm:gap-8">
+              <div className="max-w-2xl w-full">
+                <div className="inline-flex items-center gap-1.5 bg-[#fea619] text-[#2a1700] text-[10px] sm:text-[11px] font-bold px-3 py-1 rounded-full mb-3 sm:mb-4">
+                  <span className="material-symbols-outlined text-[14px]">stars</span> {pageText.proMasterclass.badge || 'THE ULTIMATE CLASS 9 & 10 MATHS VAULT'}
+                </div>
+                <h2 className="text-2xl sm:text-3xl lg:text-[40px] font-extrabold leading-tight">
+                  {pageText.proMasterclass.headline || 'Stop Memorizing Formulas. Understand Them Visually.'}
+                </h2>
+                <p className="mt-2.5 sm:mt-3 text-sm sm:text-base lg:text-lg text-[#eeefff] max-w-xl leading-relaxed">
+                  {pageText.proMasterclass.subtitle || 'Get unlimited access to all 48 chapter cheatsheets, video derivation library, and instant live doubt support before your board exams.'}
+                </p>
+
+                <div className="mt-5 sm:mt-6 flex flex-wrap items-center gap-3 sm:gap-4">
+                  <div className="flex items-center gap-1.5 sm:gap-2">
+                    <span className="material-symbols-outlined text-[#ffddb8] text-[18px] sm:text-[20px]">
+                      check_circle
+                    </span>
+                    <span className="text-xs sm:text-[13px] font-bold">{pageText.proMasterclass.perk1 || 'Printable Pocket Flashcards'}</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 sm:gap-2">
+                    <span className="material-symbols-outlined text-[#ffddb8] text-[18px] sm:text-[20px]">
+                      check_circle
+                    </span>
+                    <span className="text-xs sm:text-[13px] font-bold">{pageText.proMasterclass.perk2 || 'NCERT Exemplar Video Solutions'}</span>
+                  </div>
+                  <div className="flex items-center gap-1.5 sm:gap-2">
+                    <span className="material-symbols-outlined text-[#ffddb8] text-[18px] sm:text-[20px]">
+                      check_circle
+                    </span>
+                    <span className="text-xs sm:text-[13px] font-bold">{pageText.proMasterclass.perk3 || 'WhatsApp Mentor Hotline'}</span>
+                  </div>
+                </div>
+              </div>
+
+              {/* Pricing Card */}
+              <div className="shrink-0 bg-white text-[#111c2d] rounded-2xl p-5 sm:p-6 shadow-xl max-w-full sm:max-w-xs w-full text-center border border-blue-50">
+                <span className="text-[10px] sm:text-[11px] font-bold uppercase tracking-wider text-[#855300]">
+                  {pageText.proMasterclass.dealTag || 'Limited Time Semester Deal'}
+                </span>
+                <div className="my-1.5 sm:my-2">
+                  <span className="text-3xl sm:text-[40px] font-extrabold text-[#004ac6]">{formatPrice(499, currentCurrency.code)}</span>
+                  <span className="text-xs sm:text-[14px] text-[#737686]"> / Year</span>
+                </div>
+                <p className="text-xs sm:text-[14px] text-[#434655] mb-3 sm:mb-4">
+                  {pageText.proMasterclass.dealDescription || 'Covers complete syllabus for your selected grade with monthly updates.'}
+                </p>
+                <button
+                  onClick={() => setIsProPassModalOpen(true)}
+                  className="w-full inline-flex items-center justify-center gap-2 bg-[#fea619] text-[#2a1700] text-sm sm:text-[15px] font-bold py-3 px-4 rounded-xl shadow-md hover:shadow-lg transition-transform active:translate-y-1 cursor-pointer tactile-btn-secondary"
+                >
+                  <span className="material-symbols-outlined text-[18px] sm:text-[20px]">
+                    shopping_cart_checkout
+                  </span>
+                  <span>{isUserPro ? 'Manage Active Pass' : (pageText.proMasterclass.buttonText || 'Get All-Access Pass')}</span>
+                </button>
+                <span className="text-[10px] sm:text-[11px] font-bold text-[#737686] block mt-2.5">
+                  {pageText.proMasterclass.guaranteeText || 'Cancel anytime • 7-day money-back guarantee'}
+                </span>
+              </div>
+            </div>
+          </div>
+        </section>
+                </React.Fragment>
+              );
+            case 'faq':
+              return (
+                <React.Fragment key={block.id}>
+                  {/* Interactive Quick FAQ Accordion */}
         <section className="max-w-4xl mx-auto w-full px-3 sm:px-6 lg:px-8 py-6 sm:py-8 mb-4">
           <div className="text-center mb-5 sm:mb-6">
             <h2 className="text-xl sm:text-[24px] font-bold text-[#111c2d]">
@@ -2919,7 +2938,13 @@ export default function App() {
             ))}
           </div>
         </section>
-      </main>
+                </React.Fragment>
+              );
+            default:
+              return null;
+          }
+        })}
+        </main>
 
       {/* Above Footer Universal Ad Placement */}
       <div className="max-w-7xl mx-auto px-3 sm:px-6 lg:px-8 w-full my-4">
@@ -3175,30 +3200,6 @@ export default function App() {
         }}
       />
 
-      <ResourceModal
-        isOpen={!!selectedResource}
-        resource={selectedResource}
-        currentUser={currentUser}
-        onRequireLogin={(title, grade) => {
-          setPendingDownloadItem({
-            title,
-            size: selectedResource?.sizeOrDuration || '2.1 MB',
-            resource: selectedResource || undefined,
-          });
-          setIsLoginRequiredOpen(true);
-        }}
-        onClose={() => setSelectedResource(null)}
-        onShare={(title, r) => openShare(title, `${window.location.origin}${window.location.pathname}?resource=${r.id}`)}
-        onDownload={(title, size) => {
-          handleDownload(title, size, selectedResource || undefined);
-          setSelectedResource(null);
-        }}
-        onOpenProPass={() => {
-          setSelectedResource(null);
-          setIsProPassModalOpen(true);
-        }}
-      />
-
       <VideoPlayerModal
         isOpen={isVideoModalOpen}
         resource={selectedResource || MATH_RESOURCES[3]}
@@ -3240,9 +3241,9 @@ export default function App() {
         }}
         onOpenItem={(title) => {
           setIsDownloadsOpen(false);
-          const found = allCatalogResources.find((r) => r.title === title);
+          const found = allCatalogResources.find((r) => r.title === title || r.id === title);
           if (found) {
-            setSelectedResource(found);
+            window.open(`/resource/${found.id}`, '_blank');
           } else {
             setIsFormulaDeckOpen(true);
           }

@@ -33,7 +33,7 @@ export const ShareModal: React.FC<ShareModalProps> = ({ isOpen, onClose, title, 
   const shareText = `Check out "${title}" on Maths at Your Fingertips (Class 5 - 10 Learning Hub):`;
 
   const handleCopyStandard = () => {
-    navigator.clipboard?.writeText(`${shareText}\n${externalShareUrl}`);
+    navigator.clipboard?.writeText(externalShareUrl);
     setCopiedLink('standard');
     setTimeout(() => setCopiedLink(null), 2500);
   };

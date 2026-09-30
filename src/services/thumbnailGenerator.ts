@@ -211,3 +211,56 @@ export function generateDocumentCoverThumbnail(
 
   return canvas.toDataURL('image/jpeg', 0.88);
 }
+
+/**
+ * Returns the existing thumbnail or auto-generates an authentic cover thumbnail
+ * matching the exact metadata of the content item.
+ */
+export function getResourceThumbnail(resource: {
+  id?: string;
+  title: string;
+  grade?: string;
+  topic?: string;
+  format?: string;
+  tier?: 'free' | 'pro';
+  imageUrl?: string;
+  thumbnailUrl?: string;
+  downloadUrl?: string;
+  youtubeId?: string;
+  hasVideo?: boolean;
+}): string {
+  // If dedicated thumbnail or image exists, use it
+  if (resource.thumbnailUrl) return resource.thumbnailUrl;
+  if (resource.imageUrl) return resource.imageUrl;
+
+  // If YouTube video ID exists, return YouTube's high quality thumbnail
+  const cleanYt = resource.youtubeId
+    ? resource.youtubeId.includes('v=')
+      ? resource.youtubeId.split('v=')[1]?.split('&')[0]
+      : resource.youtubeId.includes('youtu.be/')
+      ? resource.youtubeId.split('youtu.be/')[1]?.split('?')[0]
+      : resource.youtubeId
+    : null;
+  if (cleanYt) {
+    return `https://img.youtube.com/vi/${cleanYt}/hqdefault.jpg`;
+  }
+
+  // If image downloadUrl exists
+  if (resource.downloadUrl && (/\.(png|jpe?g|webp|svg|gif)($|\?)/i.test(resource.downloadUrl) || resource.downloadUrl.startsWith('data:image/'))) {
+    return resource.downloadUrl;
+  }
+
+  // Otherwise, auto-generate standard high-definition academic cover thumbnail from title and metadata
+  try {
+    return generateDocumentCoverThumbnail(resource.title, {
+      title: resource.title,
+      grade: resource.grade,
+      topic: resource.topic,
+      format: resource.format,
+      tier: resource.tier,
+    });
+  } catch (e) {
+    return '';
+  }
+}
+

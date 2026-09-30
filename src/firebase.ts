@@ -500,7 +500,7 @@ export async function saveAssignedAdminsToFirestore(admins: AdminUserRecord[]): 
 export function isUserAdmin(user: User | null, profile?: UserProfile | null): boolean {
   if (!user || !user.email) return false;
   const cleanEmail = user.email.toLowerCase().trim();
-  if (cleanEmail === PRIMARY_SUPERADMIN_EMAIL.toLowerCase().trim()) return true;
+  if (INITIAL_ADMIN_EMAILS.some((e) => e.toLowerCase().trim() === cleanEmail)) return true;
 
   if (profile && (profile.role === 'admin' || profile.role === 'superadmin')) {
     return true;

@@ -83,9 +83,11 @@ app.get(['/teacher', '/teacher/*'], (req, res) => {
 
 // Direct route for standalone downloadable content pages (/resource/:id)
 app.get(['/resource/:id', '/resource/*'], (req, res, next) => {
-  const indexPath = path.resolve(__dirname, 'dist', 'index.html');
-  if (fs.existsSync(indexPath)) {
-    return res.sendFile(indexPath);
+  if (process.env.NODE_ENV === 'production') {
+    const indexPath = path.resolve(__dirname, 'dist', 'index.html');
+    if (fs.existsSync(indexPath)) {
+      return res.sendFile(indexPath);
+    }
   }
   next();
 });
