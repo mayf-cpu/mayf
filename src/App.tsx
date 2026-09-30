@@ -42,6 +42,7 @@ import { FormulaDeckSandbox } from './components/FormulaDeckSandbox';
 import { AiTeacherModal } from './components/AiTeacherModal';
 import { AskTeacherPage } from './components/AskTeacherPage';
 import { ResourceStandalonePage } from './components/ResourceStandalonePage';
+import { CatalogFilterDropdowns } from './components/CatalogFilterDropdowns';
 import { generateDocumentCoverThumbnail, getResourceThumbnail } from './services/thumbnailGenerator';
 import {
   HomePageBlock,
@@ -203,6 +204,11 @@ export default function App() {
   const [selectedFormat, setSelectedFormat] = useState<string>('All Formats');
   const [selectedTopic, setSelectedTopic] = useState<string>('');
   const [selectedStream, setSelectedStream] = useState<string>('All Streams');
+  const [selectedChapter, setSelectedChapter] = useState<string>('All Chapters');
+
+  // Pagination state for Handcrafted Study Vault (at least 20 blocks per page)
+  const [catalogPage, setCatalogPage] = useState<number>(1);
+  const ITEMS_PER_PAGE = 20;
 
   // Bookmarking & Downloads state
   const [bookmarkedIds, setBookmarkedIds] = useState<string[]>(['res-quad-class10']);
@@ -940,6 +946,22 @@ export default function App() {
         if (!matchesTopic) return false;
       }
 
+      // Chapter match (driven by Class Chapters dropdown menu - bypassed if searching)
+      if (selectedChapter && selectedChapter !== 'All Chapters' && !searchQuery.trim()) {
+        const qChap = selectedChapter.toLowerCase().trim();
+        const resTopic = (res.topic || '').toLowerCase().trim();
+        const resTitle = (res.title || '').toLowerCase().trim();
+        const resCat = (res.categoryTitle || '').toLowerCase().trim();
+        const resTags = (res.tags || []).map((t) => t.toLowerCase().trim());
+        const matchesChap =
+          resTopic.includes(qChap) ||
+          qChap.includes(resTopic) ||
+          resTitle.includes(qChap) ||
+          resCat.includes(qChap) ||
+          resTags.some((t) => t.includes(qChap) || qChap.includes(t));
+        if (!matchesChap) return false;
+      }
+
       // Stream / Board Curriculum match - bypassed if searching
       if (selectedStream && selectedStream !== 'All Streams' && !searchQuery.trim()) {
         const qStream = selectedStream.toLowerCase().trim();
@@ -958,7 +980,24 @@ export default function App() {
 
       return true;
     });
-  }, [allCatalogResources, searchQuery, selectedClass, priceTier, selectedFormat, selectedTopic, selectedStream]);
+  }, [allCatalogResources, searchQuery, selectedClass, priceTier, selectedFormat, selectedTopic, selectedStream, selectedChapter]);
+
+  // Catalog Pagination (at least 20 items per page with Previous / Next navigation)
+  const totalCatalogPages = Math.ceil(filteredResources.length / ITEMS_PER_PAGE) || 1;
+  const paginatedResources = useMemo(() => {
+    const start = (catalogPage - 1) * ITEMS_PER_PAGE;
+    return filteredResources.slice(start, start + ITEMS_PER_PAGE);
+  }, [filteredResources, catalogPage]);
+
+  // Reset page to 1 when filters change
+  useEffect(() => {
+    setCatalogPage(1);
+  }, [selectedClass, selectedStream, searchQuery, priceTier, selectedFormat, selectedTopic, selectedChapter]);
+
+  // Reset selectedChapter when selectedClass changes
+  useEffect(() => {
+    setSelectedChapter('All Chapters');
+  }, [selectedClass]);
 
   // Gated download with Student Login requirement & Captcha verification
   const handleDownload = (title: string, size?: string, resource?: MathResource) => {
@@ -1599,203 +1638,88 @@ export default function App() {
               </div>
             </div>
           ) : (
-            /* SPLIT BENTO HERO (DEFAULT) */
-            <div className="max-w-7xl mx-auto flex flex-col lg:flex-row items-center justify-between gap-8 sm:gap-10">
-              {/* Left Content */}
-              <div className="flex-1 text-left w-full">
-                <div className="inline-flex items-center gap-2 bg-white px-3 py-1.5 rounded-full shadow-sm mb-4 sm:mb-5 border border-gray-100 max-w-full">
-                  <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-[#fea619] text-[#2a1700] text-[11px] font-bold shrink-0">
-                    <span className="material-symbols-outlined text-[14px]">bolt</span>
-                  </span>
-                  <span className="text-xs sm:text-[13px] font-bold text-[#111c2d] truncate">
-                    {pageText.hero.badgeText || branding.heroBadgeText || 'CBSE, ICSE & State Boards • New 2025 Edition'}
-                  </span>
-                </div>
-
-                <h1 className="text-2xl sm:text-3xl md:text-4xl lg:text-[42px] font-extrabold text-[#111c2d] tracking-tight leading-[1.2] max-w-2xl">
-                  {pageText.hero.headlineMain || branding.siteTitle || 'Ace School Maths'}{' '}
-                  <span
-                    className="underline decoration-wavy decoration-2"
-                    style={{ color: themeConfig.primaryColor, textDecorationColor: themeConfig.accentColor || '#fea619' }}
-                  >
-                    {pageText.hero.headlineHighlight || branding.tagline || 'Without the Stress!'}
-                  </span>{' '}
-                  📐✨
-                </h1>
-
-                <p className="mt-3 sm:mt-4 text-sm sm:text-base lg:text-lg text-[#434655] max-w-xl leading-relaxed">
-                  {pageText.hero.tagline || (branding.tagline ? `${branding.tagline} • Handcrafted chapter notes, 2-minute formula sheets, NCERT walkthroughs, and animated video lessons tailor-made for Class 5 to 10.` : 'Handcrafted chapter notes, 2-minute formula sheets, NCERT walkthroughs, and animated video lessons tailor-made for Class 5 to 10.')}
-                </p>
-
-                {/* CTA Buttons with tactile bottom borders */}
-                <div className="mt-6 sm:mt-8 flex flex-col sm:flex-row items-stretch sm:items-center gap-3 sm:gap-4">
-                  <button
-                    onClick={() => {
-                      const el = document.getElementById('resource-catalog');
-                      el?.scrollIntoView({ behavior: 'smooth' });
-                    }}
-                    style={{ backgroundColor: themeConfig.primaryColor }}
-                    className="inline-flex items-center justify-center gap-2 text-white text-sm sm:text-[15px] font-bold px-6 py-3.5 rounded-xl shadow-md hover:shadow-lg transition-transform active:translate-y-1 cursor-pointer tactile-btn-primary"
-                  >
-                    <span className="material-symbols-outlined text-[20px]">auto_awesome</span>
-                    <span>{pageText.hero.ctaPrimaryText || 'Explore Free Notes'}</span>
-                  </button>
-
-                  <button
-                    onClick={() => setIsProPassModalOpen(true)}
-                    style={{ backgroundColor: themeConfig.accentColor || '#fea619' }}
-                    className="inline-flex items-center justify-center gap-2 text-[#2a1700] text-sm sm:text-[15px] font-bold px-6 py-3.5 rounded-xl shadow-md hover:shadow-lg transition-transform active:translate-y-1 cursor-pointer tactile-btn-secondary"
-                  >
-                    <span className="material-symbols-outlined text-[20px]">workspace_premium</span>
-                    <span>{isUserPro ? 'Manage Pro Vault' : (pageText.hero.ctaSecondaryText || 'Unlock Pro Masterclass')}</span>
-                    <span className="bg-white text-[#855300] text-[11px] font-bold px-2 py-0.5 rounded-md ml-1 shadow-2xs">
-                      {isUserPro ? 'ACTIVE' : 'PRO'}
-                    </span>
-                  </button>
-                </div>
-
-                {/* Social Proof Stats */}
-                <div className="mt-8 sm:mt-10 pt-5 sm:pt-6 flex flex-wrap items-center gap-4 sm:gap-8 lg:gap-10 border-t border-blue-50">
-                  <div className="flex items-center gap-2.5 sm:gap-3">
-                    <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-[#6ffbbe] text-[#002113] flex items-center justify-center shrink-0">
-                      <span className="material-symbols-outlined text-[20px] sm:text-[22px]">groups</span>
-                    </div>
-                    <div className="flex flex-col">
-                      <span className="text-lg sm:text-[20px] text-[#111c2d] font-extrabold leading-tight">{pageText.hero.stat1Value || '50,000+'}</span>
-                      <span className="text-[11px] font-bold text-[#434655]">{pageText.hero.stat1Label || 'Active Students'}</span>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-2.5 sm:gap-3">
-                    <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-[#ffddb8] text-[#2a1700] flex items-center justify-center shrink-0">
-                      <span className="material-symbols-outlined text-[20px] sm:text-[22px]">star</span>
-                    </div>
-                    <div className="flex flex-col">
-                      <span className="text-lg sm:text-[20px] text-[#111c2d] font-extrabold leading-tight">{pageText.hero.stat3Value || '4.9 / 5'}</span>
-                      <span className="text-[11px] font-bold text-[#434655]">{pageText.hero.stat3Label || 'Top-Rated Reviews'}</span>
-                    </div>
-                  </div>
-
-                  <div className="flex items-center gap-2.5 sm:gap-3">
-                    <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-[#dbe1ff] text-[#00174b] flex items-center justify-center shrink-0">
-                      <span className="material-symbols-outlined text-[20px] sm:text-[22px]">verified</span>
-                    </div>
-                    <div className="flex flex-col">
-                      <span className="text-lg sm:text-[20px] text-[#111c2d] font-extrabold leading-tight">{pageText.hero.stat2Value || '100%'}</span>
-                      <span className="text-[11px] font-bold text-[#434655]">{pageText.hero.stat2Label || 'Curriculum Aligned'}</span>
-                    </div>
-                  </div>
-                </div>
+            /* CENTERED BALANCED HERO */
+            <div className="max-w-4xl mx-auto text-center flex flex-col items-center">
+              <div className="inline-flex items-center gap-2 bg-white px-3.5 py-1.5 rounded-full shadow-sm mb-4 border border-gray-100 max-w-full">
+                <span className="inline-flex items-center justify-center w-5 h-5 rounded-full bg-[#fea619] text-[#2a1700] text-[11px] font-bold shrink-0">
+                  <span className="material-symbols-outlined text-[14px]">bolt</span>
+                </span>
+                <span className="text-xs sm:text-[13px] font-bold text-[#111c2d] truncate">
+                  {pageText.hero.badgeText || branding.heroBadgeText || 'CBSE, ICSE & State Boards • New 2025 Edition'}
+                </span>
               </div>
 
-              {/* Right Bento Box */}
-              <div className="w-full lg:w-5/12 max-w-full overflow-hidden">
-                <div className="bg-white rounded-2xl p-4 sm:p-5 shadow-xl border border-blue-100 max-w-full">
-                  <div className="flex items-center justify-between pb-3 gap-2">
-                    <div className="flex items-center gap-1.5 shrink-0">
-                      <span className="w-3 h-3 rounded-full bg-[#ba1a1a]"></span>
-                      <span className="w-3 h-3 rounded-full bg-[#fea619]"></span>
-                      <span className="w-3 h-3 rounded-full bg-[#006242]"></span>
-                    </div>
-                    <button
-                      onClick={handleNavigateToFormulaDeck}
-                      className="text-[11px] font-bold bg-[#dbe1ff] text-[#00174b] px-2.5 py-0.5 rounded-full hover:bg-blue-200 transition-colors cursor-pointer truncate"
-                    >
-                      Interactive Formula Deck
-                    </button>
+              <h1 className="text-2xl sm:text-3xl md:text-4xl lg:text-[42px] font-extrabold text-[#111c2d] tracking-tight leading-[1.2] max-w-3xl">
+                {pageText.hero.headlineMain || branding.siteTitle || 'Ace School Maths'}{' '}
+                <span
+                  className="underline decoration-wavy decoration-2"
+                  style={{ color: themeConfig.primaryColor, textDecorationColor: themeConfig.accentColor || '#fea619' }}
+                >
+                  {pageText.hero.headlineHighlight || branding.tagline || 'Without the Stress!'}
+                </span>{' '}
+                📐✨
+              </h1>
+
+              <p className="mt-3 sm:mt-4 text-sm sm:text-base lg:text-lg text-[#434655] max-w-2xl leading-relaxed">
+                {pageText.hero.tagline || (branding.tagline ? `${branding.tagline} • Handcrafted chapter notes, 2-minute formula sheets, NCERT walkthroughs, and animated video lessons tailor-made for Class 5 to 10.` : 'Handcrafted chapter notes, 2-minute formula sheets, NCERT walkthroughs, and animated video lessons tailor-made for Class 5 to 10.')}
+              </p>
+
+              {/* CTA Buttons with tactile bottom borders */}
+              <div className="mt-6 sm:mt-8 flex flex-col sm:flex-row items-center justify-center gap-3 sm:gap-4 w-full sm:w-auto">
+                <button
+                  onClick={() => {
+                    const el = document.getElementById('cards-grid') || document.getElementById('resource-catalog');
+                    el?.scrollIntoView({ behavior: 'smooth' });
+                  }}
+                  style={{ backgroundColor: themeConfig.primaryColor }}
+                  className="w-full sm:w-auto inline-flex items-center justify-center gap-2 text-white text-sm sm:text-[15px] font-bold px-6 py-3.5 rounded-xl shadow-md hover:shadow-lg transition-transform active:translate-y-1 cursor-pointer tactile-btn-primary"
+                >
+                  <span className="material-symbols-outlined text-[20px]">auto_awesome</span>
+                  <span>{pageText.hero.ctaPrimaryText || 'Explore Free Notes'}</span>
+                </button>
+
+                <button
+                  onClick={() => setIsProPassModalOpen(true)}
+                  style={{ backgroundColor: themeConfig.accentColor || '#fea619' }}
+                  className="w-full sm:w-auto inline-flex items-center justify-center gap-2 text-[#2a1700] text-sm sm:text-[15px] font-bold px-6 py-3.5 rounded-xl shadow-md hover:shadow-lg transition-transform active:translate-y-1 cursor-pointer tactile-btn-secondary"
+                >
+                  <span className="material-symbols-outlined text-[20px]">workspace_premium</span>
+                  <span>{isUserPro ? 'Manage Pro Vault' : (pageText.hero.ctaSecondaryText || 'Unlock Pro Masterclass')}</span>
+                  <span className="bg-white text-[#855300] text-[11px] font-bold px-2 py-0.5 rounded-md ml-1 shadow-2xs">
+                    {isUserPro ? 'ACTIVE' : 'PRO'}
+                  </span>
+                </button>
+              </div>
+
+              {/* Social Proof Stats */}
+              <div className="mt-8 sm:mt-10 pt-5 sm:pt-6 flex flex-wrap items-center justify-center gap-4 sm:gap-8 lg:gap-10 border-t border-blue-50">
+                <div className="flex items-center gap-2.5 sm:gap-3">
+                  <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-[#6ffbbe] text-[#002113] flex items-center justify-center shrink-0">
+                    <span className="material-symbols-outlined text-[20px] sm:text-[22px]">groups</span>
                   </div>
-
-                  {/* Illustrated Math Note Card Preview */}
-                  <div
-                    onClick={handleNavigateToFormulaDeck}
-                    className="rounded-xl bg-[#f0f3ff] p-3.5 sm:p-4 relative overflow-hidden cursor-pointer hover:bg-blue-50/80 transition-all border border-blue-50 group"
-                  >
-                    <div className="flex items-center justify-between gap-2">
-                      <div className="min-w-0">
-                        <span className="text-[11px] font-bold text-[#006242] uppercase tracking-wider block">
-                          Cheat Sheet #42
-                        </span>
-                        <h2 className="text-base sm:text-[18px] lg:text-[20px] font-bold text-[#111c2d] group-hover:text-[#004ac6] transition-colors truncate">
-                          Pythagorean &amp; Coordinate Tricks
-                        </h2>
-                      </div>
-                      <span className="material-symbols-outlined text-[#004ac6] text-[28px] sm:text-[32px] group-hover:rotate-12 transition-transform shrink-0">
-                        square_foot
-                      </span>
-                    </div>
-
-                    {/* Mathematical Vector doodle preview */}
-                    <div className="my-3 sm:my-4 bg-white rounded-lg p-2.5 sm:p-3 flex flex-col sm:flex-row items-center justify-around gap-2 shadow-sm border border-gray-100 max-w-full">
-                      <svg
-                        className="text-[#004ac6] fill-none stroke-current shrink-0"
-                        height="65"
-                        strokeWidth="2"
-                        viewBox="0 0 120 70"
-                        width="110"
-                      >
-                        <polygon fill="currentColor" fillOpacity="0.08" points="15,60 100,60 100,10"></polygon>
-                        <rect height="10" width="10" x="90" y="50"></rect>
-                        <text className="text-[10px] font-bold fill-current" stroke="none" x="50" y="68">
-                          b = base
-                        </text>
-                        <text className="text-[10px] font-bold fill-current" stroke="none" x="105" y="38">
-                          a
-                        </text>
-                        <text className="text-[10px] font-extrabold fill-current" stroke="none" x="42" y="30">
-                          c = √(a²+b²)
-                        </text>
-                      </svg>
-
-                      <div className="flex flex-col gap-1 text-center sm:text-right min-w-0">
-                        <span className="text-[10px] sm:text-[11px] font-bold text-[#006242] bg-[#6ffbbe] px-2 py-0.5 rounded-full inline-block">
-                          10-Sec Mastery
-                        </span>
-                        <span className="text-xs sm:text-[13px] font-bold text-[#111c2d] truncate">sin²θ + cos²θ = 1</span>
-                        <span className="text-[10px] sm:text-[11px] font-mono text-[#737686] truncate">(x - h)² + (y - k)² = r²</span>
-                      </div>
-                    </div>
-
-                    <div className="flex items-center justify-between pt-1 gap-2">
-                      <div className="flex -space-x-2 shrink-0">
-                        <img
-                          className="w-7 h-7 sm:w-8 sm:h-8 rounded-full shadow-sm object-cover border-2 border-white"
-                          alt="Student"
-                          src="https://lh3.googleusercontent.com/aida-public/AB6AXuDIv__ff-vDbxHMZHcL13vw5OgpJCYUqbpTemp7OEWuIyTnvrzkXE7qJ7hyTLA7q8IK-xkVAuOAhFNvEG9Sp2OxiJ6Y-WxP2vl1zJ1YHSZ5k-lUPXNePfIMssE8epKe_b7QupBtex9Wi5aXoRkV74QFuXP6BPtL17Xse8m0AZsoTxtsqzj8XYyU6Ijbl-BsVpVl-k7JfjHomW-yn5ZiPVFBO_bVpXLpNjMB_L6s4dTXEfjTm6wAdu6S"
-                        />
-                        <img
-                          className="w-7 h-7 sm:w-8 sm:h-8 rounded-full shadow-sm object-cover border-2 border-white"
-                          alt="Student"
-                          src="https://lh3.googleusercontent.com/aida-public/AB6AXuBdTUmiEhNjhptlbQVRXZGV7feJ1hEPNYCQGq44Ev8WisuhYQTI7DfBWVEtN3BckOK-LTWg_v8ReVmtaxoJkNN9-m9HCwAV7wt1A_6ewG190eqU45jcrVmOovCqamoTAmnkpYgeEoi_PEO0DjYUnrVBLNiLQj-W7QHTHTGtHxaaPaex_shqVlWcIh7ANReuXEtiDVSQHd_feUO9RacOYAXRPdXl1JrRkri4zAOZVcbORtzT-H42LKOy"
-                        />
-                        <div className="w-7 h-7 sm:w-8 sm:h-8 rounded-full bg-[#004ac6] text-white text-[10px] sm:text-[11px] font-bold flex items-center justify-center shadow-sm border-2 border-white">
-                          +9k
-                        </div>
-                      </div>
-                      <span className="text-[10px] sm:text-[11px] font-bold text-[#434655] flex items-center gap-1 truncate">
-                        <span className="material-symbols-outlined text-[15px] text-[#006242] shrink-0">
-                          check_circle
-                        </span>
-                        Verified by IIT Mentors
-                      </span>
-                    </div>
+                  <div className="flex flex-col text-left">
+                    <span className="text-lg sm:text-[20px] text-[#111c2d] font-extrabold leading-tight">{pageText.hero.stat1Value || '50,000+'}</span>
+                    <span className="text-[11px] font-bold text-[#434655]">{pageText.hero.stat1Label || 'Active Students'}</span>
                   </div>
+                </div>
 
-                  {/* Micro Floating Notification */}
-                  <div
-                    onClick={() =>
-                      setEnrollModalData({
-                        isOpen: true,
-                        title: 'Class 9 Half-Yearly Exam Blitz',
-                        subtitle: 'Starting in 4 days • Free Question Bank Included',
-                        isFree: true,
-                      })
-                    }
-                    className="mt-3 bg-[#ffddb8]/60 rounded-xl p-2.5 flex items-center gap-2.5 cursor-pointer hover:bg-[#ffddb8] transition-colors border border-amber-200"
-                  >
-                    <span className="material-symbols-outlined text-[#fea619] shrink-0">alarm_on</span>
-                    <p className="text-xs sm:text-[13px] text-[#2a1700] leading-snug">
-                      Class 9 Half-Yearly Exam Blitz in <strong>4 days</strong>. Grab test series!
-                    </p>
+                <div className="flex items-center gap-2.5 sm:gap-3">
+                  <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-[#ffddb8] text-[#2a1700] flex items-center justify-center shrink-0">
+                    <span className="material-symbols-outlined text-[20px] sm:text-[22px]">star</span>
+                  </div>
+                  <div className="flex flex-col text-left">
+                    <span className="text-lg sm:text-[20px] text-[#111c2d] font-extrabold leading-tight">{pageText.hero.stat3Value || '4.9 / 5'}</span>
+                    <span className="text-[11px] font-bold text-[#434655]">{pageText.hero.stat3Label || 'Top-Rated Reviews'}</span>
+                  </div>
+                </div>
+
+                <div className="flex items-center gap-2.5 sm:gap-3">
+                  <div className="w-9 h-9 sm:w-10 sm:h-10 rounded-xl bg-[#dbe1ff] text-[#00174b] flex items-center justify-center shrink-0">
+                    <span className="material-symbols-outlined text-[20px] sm:text-[22px]">verified</span>
+                  </div>
+                  <div className="flex flex-col text-left">
+                    <span className="text-lg sm:text-[20px] text-[#111c2d] font-extrabold leading-tight">{pageText.hero.stat2Value || '100%'}</span>
+                    <span className="text-[11px] font-bold text-[#434655]">{pageText.hero.stat2Label || 'Curriculum Aligned'}</span>
                   </div>
                 </div>
               </div>
@@ -1812,350 +1736,270 @@ export default function App() {
             case 'class_selector':
               return (
                 <React.Fragment key={block.id}>
-                  {/* Interactive Grade / Class Quick Switcher Rail */}
-        <section className="max-w-7xl mx-auto w-full px-3 sm:px-6 lg:px-8 py-4">
-          <div className="flex flex-col gap-2.5">
-            <div className="flex items-center justify-between">
-              <div className="flex items-center gap-2">
-                <span className="material-symbols-outlined text-[#004ac6] text-[20px]">tune</span>
-                <span className="text-xs sm:text-[15px] font-bold text-[#111c2d] uppercase tracking-wider">
-                  Select Your Grade / Class:
-                </span>
-              </div>
-              <span className="text-[11px] font-bold text-[#434655] hidden sm:inline-block">
-                Curriculum mapped automatically
-              </span>
-            </div>
-
-            {/* Segmented Class Tab Pills */}
-            <div className="flex items-center gap-2 overflow-x-auto pb-2 no-scrollbar w-full max-w-full" id="classTabs">
-              {classList.map((item) => {
-                const isSelected = selectedClass === item.name;
-                return (
-                  <button
-                    key={item.name}
-                    onClick={() => {
-                      setSelectedClass(item.name);
-                      showToast(`Switched syllabus to ${item.name}`);
-                    }}
-                    type="button"
-                    style={isSelected ? { backgroundColor: themeConfig.primaryColor } : {}}
-                    className={`shrink-0 flex items-center gap-1.5 sm:gap-2 px-3 sm:px-4 py-2 sm:py-2.5 rounded-full transition-all cursor-pointer ${
-                      isSelected
-                        ? 'text-white shadow-md tactile-btn-primary font-bold'
-                        : 'bg-white text-[#434655] hover:bg-[#e7eeff] hover:text-[#111c2d] shadow-sm border border-gray-100'
-                    }`}
-                  >
-                    <span
-                      className={`material-symbols-outlined text-[17px] sm:text-[18px] ${
-                        isSelected ? 'text-white' : item.name === 'Class 10' ? 'text-[#fea619]' : 'text-[#737686]'
-                      }`}
-                    >
-                      {item.icon}
-                    </span>
-                    <span className="text-xs sm:text-[15px] font-bold whitespace-nowrap">
-                      {isSelected && item.isActiveLabel ? item.isActiveLabel : item.label || item.name}
-                    </span>
-                    <span
-                      className={`text-[10px] sm:text-[11px] font-bold px-1.5 sm:px-2 py-0.5 rounded-full ${
-                        isSelected
-                          ? 'bg-white/20 text-white'
-                          : item.name === 'Class 10'
-                          ? 'bg-[#ffddb8] text-[#2a1700]'
-                          : 'bg-[#e7eeff] text-[#737686]'
-                      }`}
-                    >
-                      {item.count}
-                    </span>
-                  </button>
-                );
-              })}
-            </div>
-
-            {/* Curriculum Board / Stream Switcher Rail (driven by Admin Categories) */}
-            <div className="mt-2.5 pt-2.5 border-t border-blue-50 flex items-center gap-1.5 overflow-x-auto no-scrollbar">
-              <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider shrink-0 flex items-center gap-1">
-                <span className="material-symbols-outlined text-[14px]" style={{ color: themeConfig.primaryColor }}>domain</span>
-                Curriculum Board:
-              </span>
-              {streamList.map((stream) => {
-                const isSelected = selectedStream === stream;
-                return (
-                  <button
-                    key={stream}
-                    type="button"
-                    onClick={() => {
-                      setSelectedStream(stream);
-                      showToast(`Curriculum set to: ${stream}`);
-                    }}
-                    style={isSelected ? { backgroundColor: themeConfig.primaryColor, color: '#ffffff' } : {}}
-                    className={`shrink-0 px-3 py-1 rounded-full text-xs font-semibold transition-all cursor-pointer ${
-                      isSelected
-                        ? 'text-white shadow-xs font-bold'
-                        : 'bg-white text-slate-600 hover:bg-[#e7eeff] border border-gray-100'
-                    }`}
-                  >
-                    {stream}
-                  </button>
-                );
-              })}
-            </div>
-
-            {/* Child Subcategories of Selected Parent Class */}
-            {activeGradeChildren.length > 0 && (
-              <div className="mt-2.5 pt-2.5 border-t border-blue-50 flex items-center gap-1.5 overflow-x-auto no-scrollbar">
-                <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider shrink-0 flex items-center gap-1">
-                  <span className="material-symbols-outlined text-[14px]" style={{ color: themeConfig.primaryColor }}>subdirectory_arrow_right</span>
-                  {selectedClass} Chapters:
-                </span>
-                {activeGradeChildren.map((child) => {
-                  const isMatchingSearch = searchQuery.toLowerCase() === child.name.toLowerCase();
-                  return (
-                    <button
-                      key={child.id}
-                      onClick={() => {
-                        if (isMatchingSearch) {
-                          setSearchQuery('');
-                          showToast(`Cleared ${child.name} filter`);
+                  {/* Interactive Grade / Class Quick Switcher Dropdown Console */}
+                  <section className="max-w-7xl mx-auto w-full px-3 sm:px-6 lg:px-8 py-3">
+                    <CatalogFilterDropdowns
+                      selectedClass={selectedClass}
+                      onSelectClass={(grade) => {
+                        setSelectedClass(grade);
+                        showToast(`Switched syllabus to ${grade}`);
+                      }}
+                      classList={classList}
+                      selectedStream={selectedStream}
+                      onSelectStream={(stream) => {
+                        setSelectedStream(stream);
+                        showToast(`Curriculum set to: ${stream}`);
+                      }}
+                      streamList={streamList}
+                      activeGradeChildren={activeGradeChildren}
+                      selectedChapter={selectedChapter}
+                      onSelectChapter={(chap) => {
+                        setSelectedChapter(chap || 'All Chapters');
+                        if (chap) {
+                          showToast(`Filtered by ${chap}`);
                         } else {
-                          setSearchQuery(child.name);
-                          showToast(`Filtered by ${child.name}`);
+                          showToast('Showing all chapters');
                         }
                       }}
-                      style={isMatchingSearch ? { backgroundColor: themeConfig.primaryColor, color: '#ffffff' } : {}}
-                      className={`shrink-0 px-2.5 py-1 rounded-full text-xs font-semibold flex items-center gap-1 transition-all cursor-pointer ${
-                        isMatchingSearch
-                          ? 'text-white shadow-xs'
-                          : 'bg-indigo-50 text-indigo-700 hover:bg-indigo-100 border border-indigo-100'
-                      }`}
-                    >
-                      <span className="material-symbols-outlined text-[13px]">{child.icon || 'tag'}</span>
-                      <span>{child.name}</span>
-                      {child.badge && (
-                        <span className="text-[9px] bg-white/40 px-1 rounded-full font-bold">
-                          {child.badge}
-                        </span>
-                      )}
-                    </button>
-                  );
-                })}
-              </div>
-            )}
-          </div>
-        </section>
+                      selectedFormat={selectedFormat}
+                      onSelectFormat={(fmt) => {
+                        setSelectedFormat(fmt);
+                      }}
+                      formatList={formatList}
+                      selectedTopic={selectedTopic}
+                      onSelectTopic={(top) => {
+                        setSelectedTopic(top);
+                      }}
+                      topicList={topicList}
+                      themeColor={themeConfig.primaryColor}
+                    />
+                  </section>
                 </React.Fragment>
               );
             case 'catalog_filters':
               return (
                 <React.Fragment key={block.id}>
                   {/* Multi-Criteria Filter & Search Console */}
-        <section className="max-w-7xl mx-auto w-full px-3 sm:px-6 lg:px-8 pt-2 pb-2" id="resource-catalog">
-          <div className="bg-white rounded-2xl p-4 sm:p-5 shadow-sm border border-blue-50 space-y-3 sm:space-y-4 max-w-full overflow-hidden">
-            {/* Search & Main Category Chips */}
-            <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
-              {/* Search Field with Dropdown Suggestions */}
-              <div ref={catalogSearchRef} className="flex-1 relative flex items-center bg-[#f0f3ff] rounded-xl px-3 py-2 border border-blue-50">
-                <span className="material-symbols-outlined text-[#737686] mr-2 text-[18px] sm:text-[20px]">search</span>
-                <input
-                  className="w-full bg-transparent border-0 outline-none text-xs sm:text-[14px] text-[#111c2d] placeholder:text-[#737686]"
-                  placeholder={pageText.catalog.searchPlaceholder || "Type a chapter or theorem name (e.g. 'Coordinate Geometry', 'Circles')..."}
-                  type="text"
-                  value={searchQuery}
-                  onFocus={() => setCatalogSearchOpen(true)}
-                  onChange={(e) => {
-                    setSearchQuery(e.target.value);
-                    setCatalogSearchOpen(true);
-                  }}
-                  onKeyDown={(e) => {
-                    if (e.key === 'Enter') {
-                      setCatalogSearchOpen(false);
-                      const el = document.getElementById('cards-grid');
-                      el?.scrollIntoView({ behavior: 'smooth' });
-                    }
-                  }}
-                />
-                {searchQuery && (
-                  <button
-                    onClick={() => {
-                      setSearchQuery('');
-                      setCatalogSearchOpen(false);
-                    }}
-                    className="text-gray-400 hover:text-gray-600 mr-2 p-0.5 cursor-pointer"
-                    title="Clear search"
-                  >
-                    <span className="material-symbols-outlined text-[16px]">close</span>
-                  </button>
-                )}
-                <button
-                  onClick={() => {
-                    setCatalogSearchOpen(false);
-                    const el = document.getElementById('cards-grid');
-                    el?.scrollIntoView({ behavior: 'smooth' });
-                  }}
-                  className="text-[#004ac6] hover:text-[#2563eb] text-[11px] font-bold px-2.5 py-1 rounded bg-[#e7eeff] cursor-pointer shrink-0"
-                  type="button"
-                >
-                  Search
-                </button>
-
-                {/* Catalog Suggestions Dropdown */}
-                {catalogSearchOpen && searchQuery.trim() && (
-                  <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-2xl shadow-2xl border border-blue-100 z-50 overflow-hidden max-h-[380px] overflow-y-auto animate-fadeIn divide-y divide-slate-100 text-left">
-                    {catalogMatchingTopics.length > 0 && (
-                      <div className="p-2.5 bg-slate-50/70">
-                        <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 px-1 block mb-1">
-                          Matching Chapters &amp; Topics
-                        </span>
-                        <div className="flex flex-wrap gap-1.5">
-                          {catalogMatchingTopics.map((topicName) => (
-                            <button
-                              key={topicName}
-                              type="button"
-                              onClick={() => {
-                                setSearchQuery(topicName);
+                  <section className="max-w-7xl mx-auto w-full px-3 sm:px-6 lg:px-8 pt-1 pb-3" id="resource-catalog">
+                    <div className="bg-white rounded-2xl p-4 sm:p-5 shadow-sm border border-blue-50 space-y-3 sm:space-y-4 max-w-full overflow-hidden">
+                      {/* Search & Main Category Chips */}
+                      <div className="flex flex-col md:flex-row items-stretch md:items-center justify-between gap-3">
+                        {/* Search Field with Dropdown Suggestions */}
+                        <div ref={catalogSearchRef} className="flex-1 relative flex items-center bg-[#f0f3ff] rounded-xl px-3 py-2 border border-blue-50">
+                          <span className="material-symbols-outlined text-[#737686] mr-2 text-[18px] sm:text-[20px]">search</span>
+                          <input
+                            className="w-full bg-transparent border-0 outline-none text-xs sm:text-[14px] text-[#111c2d] placeholder:text-[#737686]"
+                            placeholder={pageText.catalog.searchPlaceholder || "Type a chapter or theorem name (e.g. 'Coordinate Geometry', 'Circles')..."}
+                            type="text"
+                            value={searchQuery}
+                            onFocus={() => setCatalogSearchOpen(true)}
+                            onChange={(e) => {
+                              setSearchQuery(e.target.value);
+                              setCatalogSearchOpen(true);
+                            }}
+                            onKeyDown={(e) => {
+                              if (e.key === 'Enter') {
                                 setCatalogSearchOpen(false);
-                                document.getElementById('cards-grid')?.scrollIntoView({ behavior: 'smooth' });
+                                const el = document.getElementById('cards-grid');
+                                el?.scrollIntoView({ behavior: 'smooth' });
+                              }
+                            }}
+                          />
+                          {searchQuery && (
+                            <button
+                              onClick={() => {
+                                setSearchQuery('');
+                                setCatalogSearchOpen(false);
                               }}
-                              className="bg-white hover:bg-blue-50 text-blue-700 border border-blue-200 text-xs font-bold px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
+                              className="text-gray-400 hover:text-gray-600 mr-2 p-0.5 cursor-pointer"
+                              title="Clear search"
                             >
-                              {topicName}
+                              <span className="material-symbols-outlined text-[16px]">close</span>
                             </button>
-                          ))}
+                          )}
+                          <button
+                            onClick={() => {
+                              setCatalogSearchOpen(false);
+                              const el = document.getElementById('cards-grid');
+                              el?.scrollIntoView({ behavior: 'smooth' });
+                            }}
+                            className="text-[#004ac6] hover:text-[#2563eb] text-[11px] font-bold px-2.5 py-1 rounded bg-[#e7eeff] cursor-pointer shrink-0"
+                            type="button"
+                          >
+                            Search
+                          </button>
+
+                          {/* Catalog Suggestions Dropdown */}
+                          {catalogSearchOpen && searchQuery.trim() && (
+                            <div className="absolute top-full left-0 right-0 mt-2 bg-white rounded-2xl shadow-2xl border border-blue-100 z-50 overflow-hidden max-h-[380px] overflow-y-auto animate-fadeIn divide-y divide-slate-100 text-left">
+                              {catalogMatchingTopics.length > 0 && (
+                                <div className="p-2.5 bg-slate-50/70">
+                                  <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 px-1 block mb-1">
+                                    Matching Chapters &amp; Topics
+                                  </span>
+                                  <div className="flex flex-wrap gap-1.5">
+                                    {catalogMatchingTopics.map((topicName) => (
+                                      <button
+                                        key={topicName}
+                                        type="button"
+                                        onClick={() => {
+                                          setSearchQuery(topicName);
+                                          setCatalogSearchOpen(false);
+                                          document.getElementById('cards-grid')?.scrollIntoView({ behavior: 'smooth' });
+                                        }}
+                                        className="bg-white hover:bg-blue-50 text-blue-700 border border-blue-200 text-xs font-bold px-2.5 py-1 rounded-lg transition-colors cursor-pointer"
+                                      >
+                                        {topicName}
+                                      </button>
+                                    ))}
+                                  </div>
+                                </div>
+                              )}
+
+                              {catalogMatchingResources.length > 0 ? (
+                                <div className="py-1">
+                                  <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 px-3 py-1 block">
+                                    Matching Resources ({catalogMatchingResources.length})
+                                  </span>
+                                  {catalogMatchingResources.map((res) => (
+                                    <div
+                                      key={res.id}
+                                      onClick={() => {
+                                        setSelectedResource(res);
+                                        setCatalogSearchOpen(false);
+                                      }}
+                                      className="px-3.5 py-2 hover:bg-blue-50/60 transition-colors cursor-pointer flex items-center justify-between gap-3 group"
+                                    >
+                                      <div className="min-w-0">
+                                        <div className="text-xs font-bold text-slate-800 group-hover:text-blue-700 truncate">
+                                          {res.title}
+                                        </div>
+                                        <div className="text-[10px] text-slate-500 truncate">
+                                          {res.grade} • {res.topic} • {res.format}
+                                        </div>
+                                      </div>
+                                      <span
+                                        className={`text-[9px] font-extrabold px-1.5 py-0.5 rounded shrink-0 ${
+                                          res.tier === 'free'
+                                            ? 'bg-emerald-100 text-emerald-800'
+                                            : 'bg-amber-100 text-amber-800'
+                                        }`}
+                                      >
+                                        {res.tier === 'free' ? 'FREE' : 'PRO'}
+                                      </span>
+                                    </div>
+                                  ))}
+                                </div>
+                              ) : (
+                                <div className="p-3 text-center text-xs text-slate-500">
+                                  No direct matches. Press &quot;Search&quot; to inspect all filtered resources.
+                                </div>
+                              )}
+                            </div>
+                          )}
+                        </div>
+
+                        {/* Price Tier Switcher Pill */}
+                        <div className="flex items-center gap-1 bg-[#f0f3ff] p-1 rounded-xl w-full md:w-auto max-w-full border border-blue-50 overflow-x-auto no-scrollbar">
+                          <button
+                            onClick={() => setPriceTier('all')}
+                            className={`px-2.5 sm:px-3 py-1.5 rounded-lg text-xs sm:text-[13px] font-bold transition-all cursor-pointer whitespace-nowrap ${
+                              priceTier === 'all'
+                                ? 'bg-white text-[#111c2d] shadow-sm'
+                                : 'text-[#434655] hover:text-[#111c2d]'
+                            }`}
+                            type="button"
+                          >
+                            All Resources
+                          </button>
+                          <button
+                            onClick={() => setPriceTier('free')}
+                            className={`px-2.5 sm:px-3 py-1.5 rounded-lg text-xs sm:text-[13px] font-bold flex items-center gap-1 transition-all cursor-pointer whitespace-nowrap ${
+                              priceTier === 'free'
+                                ? 'bg-white text-[#111c2d] shadow-sm'
+                                : 'text-[#434655] hover:text-[#111c2d]'
+                            }`}
+                            type="button"
+                          >
+                            <span>🆓</span> <span>Free Only</span>
+                          </button>
+                          <button
+                            onClick={() => setPriceTier('pro')}
+                            className={`px-2.5 sm:px-3 py-1.5 rounded-lg text-xs sm:text-[13px] font-bold flex items-center gap-1 transition-all cursor-pointer whitespace-nowrap ${
+                              priceTier === 'pro'
+                                ? 'bg-white text-[#111c2d] shadow-sm'
+                                : 'text-[#434655] hover:text-[#111c2d]'
+                            }`}
+                            type="button"
+                          >
+                            <span>💎</span> <span>Paid Masterclass</span>
+                          </button>
                         </div>
                       </div>
-                    )}
 
-                    {catalogMatchingResources.length > 0 ? (
-                      <div className="py-1">
-                        <span className="text-[10px] font-black uppercase tracking-wider text-slate-400 px-3 py-1 block">
-                          Matching Resources ({catalogMatchingResources.length})
-                        </span>
-                        {catalogMatchingResources.map((res) => (
-                          <div
-                            key={res.id}
-                            onClick={() => {
-                              setSelectedResource(res);
-                              setCatalogSearchOpen(false);
-                            }}
-                            className="px-3.5 py-2 hover:bg-blue-50/60 transition-colors cursor-pointer flex items-center justify-between gap-3 group"
-                          >
-                            <div className="min-w-0">
-                              <div className="text-xs font-bold text-slate-800 group-hover:text-blue-700 truncate">
-                                {res.title}
-                              </div>
-                              <div className="text-[10px] text-slate-500 truncate">
-                                {res.grade} • {res.topic} • {res.format}
-                              </div>
-                            </div>
-                            <span
-                              className={`text-[9px] font-extrabold px-1.5 py-0.5 rounded shrink-0 ${
-                                res.tier === 'free'
-                                  ? 'bg-emerald-100 text-emerald-800'
-                                  : 'bg-amber-100 text-amber-800'
-                              }`}
-                            >
-                              {res.tier === 'free' ? 'FREE' : 'PRO'}
+                      {/* Active Filter Pills Indicator & Quick Reset */}
+                      {(selectedClass !== 'Class 9' || selectedStream !== 'All Streams' || (selectedChapter && selectedChapter !== 'All Chapters') || selectedFormat !== 'All Formats' || selectedTopic || priceTier !== 'all' || searchQuery.trim()) && (
+                        <div className="pt-2 border-t border-slate-100 flex flex-wrap items-center justify-between gap-2">
+                          <div className="flex flex-wrap items-center gap-1.5">
+                            <span className="text-[11px] font-bold text-slate-400 uppercase tracking-wider mr-1">
+                              Active Filters:
                             </span>
+                            {selectedClass !== 'All' && (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-blue-50 text-blue-800 border border-blue-100">
+                                🎓 {selectedClass}
+                              </span>
+                            )}
+                            {selectedStream !== 'All Streams' && (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-amber-50 text-amber-800 border border-amber-100">
+                                🏛️ {selectedStream}
+                              </span>
+                            )}
+                            {selectedChapter && selectedChapter !== 'All Chapters' && (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-indigo-50 text-indigo-800 border border-indigo-100">
+                                📖 {selectedChapter}
+                                <button type="button" onClick={() => setSelectedChapter('All Chapters')} className="hover:text-red-500 ml-0.5 cursor-pointer">×</button>
+                              </span>
+                            )}
+                            {selectedFormat !== 'All Formats' && (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-emerald-50 text-emerald-800 border border-emerald-100">
+                                📄 {selectedFormat}
+                                <button type="button" onClick={() => setSelectedFormat('All Formats')} className="hover:text-red-500 ml-0.5 cursor-pointer">×</button>
+                              </span>
+                            )}
+                            {selectedTopic && (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-purple-50 text-purple-800 border border-purple-100">
+                                🏷️ {selectedTopic}
+                                <button type="button" onClick={() => setSelectedTopic('')} className="hover:text-red-500 ml-0.5 cursor-pointer">×</button>
+                              </span>
+                            )}
+                            {priceTier !== 'all' && (
+                              <span className="inline-flex items-center gap-1 px-2.5 py-0.5 rounded-full text-xs font-bold bg-slate-100 text-slate-800 border border-slate-200">
+                                {priceTier === 'free' ? '🆓 Free Only' : '💎 Paid Only'}
+                                <button type="button" onClick={() => setPriceTier('all')} className="hover:text-red-500 ml-0.5 cursor-pointer">×</button>
+                              </span>
+                            )}
                           </div>
-                        ))}
-                      </div>
-                    ) : (
-                      <div className="p-3 text-center text-xs text-slate-500">
-                        No direct matches. Press &quot;Search&quot; to inspect all filtered resources.
-                      </div>
-                    )}
-                  </div>
-                )}
-              </div>
-
-              {/* Price Tier Switcher Pill */}
-              <div className="flex items-center gap-1 bg-[#f0f3ff] p-1 rounded-xl w-full md:w-auto max-w-full border border-blue-50 overflow-x-auto no-scrollbar">
-                <button
-                  onClick={() => setPriceTier('all')}
-                  className={`px-2.5 sm:px-3 py-1.5 rounded-lg text-xs sm:text-[13px] font-bold transition-all cursor-pointer whitespace-nowrap ${
-                    priceTier === 'all'
-                      ? 'bg-white text-[#111c2d] shadow-sm'
-                      : 'text-[#434655] hover:text-[#111c2d]'
-                  }`}
-                  type="button"
-                >
-                  All Resources
-                </button>
-                <button
-                  onClick={() => setPriceTier('free')}
-                  className={`px-2.5 sm:px-3 py-1.5 rounded-lg text-xs sm:text-[13px] font-bold flex items-center gap-1 transition-all cursor-pointer whitespace-nowrap ${
-                    priceTier === 'free'
-                      ? 'bg-white text-[#111c2d] shadow-sm'
-                      : 'text-[#434655] hover:text-[#111c2d]'
-                  }`}
-                  type="button"
-                >
-                  <span>🆓</span> <span>Free Only</span>
-                </button>
-                <button
-                  onClick={() => setPriceTier('pro')}
-                  className={`px-2.5 sm:px-3 py-1.5 rounded-lg text-xs sm:text-[13px] font-bold flex items-center gap-1 transition-all cursor-pointer whitespace-nowrap ${
-                    priceTier === 'pro'
-                      ? 'bg-white text-[#111c2d] shadow-sm'
-                      : 'text-[#434655] hover:text-[#111c2d]'
-                  }`}
-                  type="button"
-                >
-                  <span>💎</span> <span>Paid Masterclass</span>
-                </button>
-              </div>
-            </div>
-
-            {/* Content Type Filter Badges */}
-            <div className="flex items-center gap-1.5 sm:gap-2 overflow-x-auto pb-1 whitespace-nowrap no-scrollbar w-full">
-              <span className="text-[11px] font-bold text-[#737686] uppercase tracking-wider mr-1 shrink-0">
-                Type:
-              </span>
-              {formatList.map((fmt) => {
-                const isSelected = selectedFormat === fmt;
-                return (
-                  <button
-                    key={fmt}
-                    onClick={() => setSelectedFormat(fmt)}
-                    style={isSelected ? { backgroundColor: themeConfig.primaryColor, color: '#ffffff' } : {}}
-                    className={`px-2.5 sm:px-3 py-1 rounded-full text-[10px] sm:text-[11px] font-bold transition-all cursor-pointer shrink-0 ${
-                      isSelected
-                        ? 'text-white shadow-2xs font-bold'
-                        : 'bg-[#f0f3ff] text-[#434655] hover:bg-[#e7eeff]'
-                    }`}
-                    type="button"
-                  >
-                    {fmt}
-                  </button>
-                );
-              })}
-            </div>
-
-            {/* Domain Topic Chips */}
-            <div className="flex items-center gap-1.5 flex-wrap pt-2 border-t border-gray-100">
-              <span className="text-[11px] font-bold text-[#737686] uppercase tracking-wider mr-1">
-                Topics:
-              </span>
-              {topicList.map((topic) => {
-                const isActive = selectedTopic === topic;
-                return (
-                  <span
-                    key={topic}
-                    onClick={() => setSelectedTopic(isActive ? '' : topic)}
-                    style={isActive ? { backgroundColor: themeConfig.primaryColor, color: '#ffffff' } : {}}
-                    className={`px-2 sm:px-2.5 py-0.5 sm:py-1 rounded-lg text-[10px] sm:text-[11px] font-bold cursor-pointer transition-colors ${
-                      isActive
-                        ? 'text-white shadow-2xs font-bold'
-                        : 'bg-[#dee8ff] text-[#434655] hover:bg-[#dbe1ff] hover:text-[#00174b]'
-                    }`}
-                  >
-                    {topic} {isActive ? '✓' : ''}
-                  </span>
-                );
-              })}
-            </div>
-          </div>
-        </section>
+                          <button
+                            type="button"
+                            onClick={() => {
+                              setSelectedClass('Class 9');
+                              setSelectedStream('All Streams');
+                              setSelectedChapter('All Chapters');
+                              setSelectedFormat('All Formats');
+                              setSelectedTopic('');
+                              setPriceTier('all');
+                              setSearchQuery('');
+                              showToast('Reset all filters to default');
+                            }}
+                            className="text-xs font-bold text-blue-600 hover:text-blue-800 cursor-pointer flex items-center gap-1"
+                          >
+                            <span className="material-symbols-outlined text-[15px]">refresh</span>
+                            <span>Reset Filters</span>
+                          </button>
+                        </div>
+                      )}
+                    </div>
+                  </section>
                 </React.Fragment>
               );
             case 'content_catalog':
@@ -2172,7 +2016,7 @@ export default function App() {
             </div>
             <div className="flex flex-col sm:items-end">
               <span className="text-xs sm:text-[14px] text-[#434655]">
-                {pageText.catalog.subtitle ? `${pageText.catalog.subtitle} • ` : ''}Showing {filteredResources.length} of 148 verified resources
+                {pageText.catalog.subtitle ? `${pageText.catalog.subtitle} • ` : ''}Showing {paginatedResources.length} of {filteredResources.length} blocks (Page {catalogPage} of {totalCatalogPages})
               </span>
               {pageText.catalog.activeFilterHint && (
                 <span className="text-[11px] font-semibold text-emerald-700 mt-0.5">
@@ -2194,7 +2038,7 @@ export default function App() {
                 : 'grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3'
             }`}
           >
-            {filteredResources.map((res, index) => {
+            {paginatedResources.map((res, index) => {
               const isBookmarked = bookmarkedIds.includes(res.id);
 
               return (
@@ -2557,6 +2401,84 @@ export default function App() {
             })}
           </div>
 
+          {/* Handcrafted Study Vault Pagination (at least 20 blocks per page, Previous/Next navigation) */}
+          {filteredResources.length > 0 && (
+            <div className="mt-8 pt-6 border-t border-slate-200/80 flex flex-col sm:flex-row items-center justify-between gap-4">
+              <div className="text-xs sm:text-[13px] text-slate-500 font-medium">
+                Showing <span className="font-bold text-slate-900">{(catalogPage - 1) * ITEMS_PER_PAGE + 1}</span> to{' '}
+                <span className="font-bold text-slate-900">{Math.min(catalogPage * ITEMS_PER_PAGE, filteredResources.length)}</span> of{' '}
+                <span className="font-bold text-slate-900">{filteredResources.length}</span> study vault blocks
+              </div>
+
+              <div className="flex items-center gap-2">
+                {/* Previous Button */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (catalogPage > 1) {
+                      setCatalogPage((prev) => prev - 1);
+                      document.getElementById('cards-grid')?.scrollIntoView({ behavior: 'smooth' });
+                    }
+                  }}
+                  disabled={catalogPage <= 1}
+                  className={`inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all shadow-xs ${
+                    catalogPage <= 1
+                      ? 'bg-slate-100 text-slate-400 cursor-not-allowed border border-slate-200/60'
+                      : 'bg-white text-slate-700 hover:bg-blue-50 hover:text-blue-700 border border-slate-200 cursor-pointer active:scale-95'
+                  }`}
+                >
+                  <span className="material-symbols-outlined text-[18px]">chevron_left</span>
+                  <span>Previous</span>
+                </button>
+
+                {/* Page Number Pills */}
+                <div className="flex items-center gap-1.5">
+                  {Array.from({ length: totalCatalogPages }, (_, i) => i + 1).map((pageNum) => {
+                    const isCurrent = pageNum === catalogPage;
+                    return (
+                      <button
+                        key={pageNum}
+                        type="button"
+                        onClick={() => {
+                          setCatalogPage(pageNum);
+                          document.getElementById('cards-grid')?.scrollIntoView({ behavior: 'smooth' });
+                        }}
+                        style={isCurrent ? { backgroundColor: themeConfig.primaryColor, borderColor: themeConfig.primaryColor } : {}}
+                        className={`w-9 h-9 sm:w-10 sm:h-10 rounded-xl text-xs sm:text-sm font-bold transition-all flex items-center justify-center cursor-pointer ${
+                          isCurrent
+                            ? 'text-white shadow-md font-extrabold'
+                            : 'bg-white text-slate-700 hover:bg-slate-100 border border-slate-200'
+                        }`}
+                      >
+                        {pageNum}
+                      </button>
+                    );
+                  })}
+                </div>
+
+                {/* Next Button */}
+                <button
+                  type="button"
+                  onClick={() => {
+                    if (catalogPage < totalCatalogPages) {
+                      setCatalogPage((prev) => prev + 1);
+                      document.getElementById('cards-grid')?.scrollIntoView({ behavior: 'smooth' });
+                    }
+                  }}
+                  disabled={catalogPage >= totalCatalogPages}
+                  className={`inline-flex items-center gap-1.5 px-4 py-2.5 rounded-xl text-xs sm:text-sm font-bold transition-all shadow-xs ${
+                    catalogPage >= totalCatalogPages
+                      ? 'bg-slate-100 text-slate-400 cursor-not-allowed border border-slate-200/60'
+                      : 'bg-white text-slate-700 hover:bg-blue-50 hover:text-blue-700 border border-slate-200 cursor-pointer active:scale-95'
+                  }`}
+                >
+                  <span>Next</span>
+                  <span className="material-symbols-outlined text-[18px]">chevron_right</span>
+                </button>
+              </div>
+            </div>
+          )}
+
           {/* Catalog Bottom Leaderboard Ad */}
           <div className="mt-8">
             <AdPlacement location="catalog_bottom" />
@@ -2567,123 +2489,14 @@ export default function App() {
             case 'social_community':
               return (
                 <React.Fragment key={block.id}>
-                  {/* Social Media Study Community Section */}
-        <section className="max-w-7xl mx-auto w-full px-3 sm:px-6 lg:px-8 py-8 sm:py-10">
-          <div className="text-center max-w-2xl mx-auto mb-6 sm:mb-8">
-            <div className="inline-flex items-center gap-2 bg-[#dee8ff] px-3 py-1 rounded-full text-[#004ac6] text-[11px] font-bold uppercase tracking-wider mb-2">
-              <span>{pageText.socialCommunity.badge || 'Study Together • Grow Faster'}</span>
-            </div>
-            <h2 className="text-2xl sm:text-[28px] lg:text-[32px] font-bold text-[#111c2d]">
-              {pageText.socialCommunity.title || 'Join 150k+ Maths Champions on Our Channels'}
-            </h2>
-            <p className="text-xs sm:text-base text-[#434655] mt-1.5 sm:mt-2">
-              {pageText.socialCommunity.subtitle || 'Daily morning formulas, 60-second theorem reels, previous year question polls, and round-the-clock homework peer support.'}
-            </p>
-          </div>
-
-          {/* 4 Community Platform Cards */}
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-4 gap-4 sm:gap-5 w-full">
-            {/* YouTube */}
-            <div className="bg-white rounded-2xl p-4 sm:p-5 shadow-sm hover:shadow-md transition-all flex flex-col justify-between border border-gray-100">
-              <div>
-                <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-[#ba1a1a]/10 text-[#ba1a1a] flex items-center justify-center mb-3 sm:mb-4">
-                  <span className="material-symbols-outlined text-[24px] sm:text-[28px]">smart_display</span>
-                </div>
-                <span className="text-[11px] font-bold text-[#ba1a1a]">120k Subscribers</span>
-                <h3 className="text-lg sm:text-[20px] font-bold text-[#111c2d] mt-1">YouTube Channel</h3>
-                <p className="text-xs sm:text-[14px] text-[#434655] mt-1.5 leading-relaxed">
-                  Full-length chapter marathons, animated 3D proofs, and LIVE doubt sessions every Sunday.
-                </p>
-              </div>
-              <a
-                className="mt-4 inline-flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl bg-[#e7eeff] text-[#ba1a1a] hover:bg-[#ba1a1a] hover:text-white text-xs sm:text-[13px] font-bold transition-colors"
-                href={socialConfig.platforms.youtube.url || "https://youtube.com"}
-                rel="noopener noreferrer"
-                target="_blank"
-              >
-                <span>Watch Free Lectures</span>
-                <span className="material-symbols-outlined text-[15px]">open_in_new</span>
-              </a>
-            </div>
-
-            {/* Telegram */}
-            <div className="bg-white rounded-2xl p-4 sm:p-5 shadow-sm hover:shadow-md transition-all flex flex-col justify-between border border-gray-100">
-              <div>
-                <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-[#004ac6]/10 text-[#004ac6] flex items-center justify-center mb-3 sm:mb-4">
-                  <span className="material-symbols-outlined text-[24px] sm:text-[28px]">send</span>
-                </div>
-                <span className="text-[11px] font-bold text-[#004ac6]">25k Members</span>
-                <h3 className="text-lg sm:text-[20px] font-bold text-[#111c2d] mt-1">Telegram Daily Quiz</h3>
-                <p className="text-xs sm:text-[14px] text-[#434655] mt-1.5 leading-relaxed">
-                  Daily 5-question math polls at 7 PM. Download notes and NCERT solutions without ads.
-                </p>
-              </div>
-              <a
-                className="mt-4 inline-flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl bg-[#e7eeff] text-[#004ac6] hover:bg-[#2563eb] hover:text-white transition-colors text-xs sm:text-[13px] font-bold"
-                href={socialConfig.platforms.telegram.groupUrl || socialConfig.platforms.telegram.url || "https://t.me"}
-                rel="noopener noreferrer"
-                target="_blank"
-              >
-                <span>Join Telegram Channel</span>
-                <span className="material-symbols-outlined text-[15px]">arrow_forward</span>
-              </a>
-            </div>
-
-            {/* Instagram */}
-            <div className="bg-white rounded-2xl p-4 sm:p-5 shadow-sm hover:shadow-md transition-all flex flex-col justify-between border border-gray-100">
-              <div>
-                <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-[#fea619]/20 text-[#fea619] flex items-center justify-center mb-3 sm:mb-4">
-                  <span className="material-symbols-outlined text-[24px] sm:text-[28px]">motion_photos_on</span>
-                </div>
-                <span className="text-[11px] font-bold text-[#855300]">45k Followers</span>
-                <h3 className="text-lg sm:text-[20px] font-bold text-[#111c2d] mt-1">Instagram Reels</h3>
-                <p className="text-xs sm:text-[14px] text-[#434655] mt-1.5 leading-relaxed">
-                  60-second math hacks, exam day memory tips, and hilarious student relatable study memes.
-                </p>
-              </div>
-              <a
-                className="mt-4 inline-flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl bg-[#e7eeff] text-[#111c2d] hover:bg-[#ffddb8] hover:text-[#2a1700] transition-colors text-xs sm:text-[13px] font-bold"
-                href={socialConfig.platforms.instagram.url || "https://instagram.com"}
-                rel="noopener noreferrer"
-                target="_blank"
-              >
-                <span>Follow {socialConfig.platforms.instagram.handleOrNumber || "@MathsAtFingertips"}</span>
-                <span className="material-symbols-outlined text-[15px]">open_in_new</span>
-              </a>
-            </div>
-
-            {/* WhatsApp Doubt Group */}
-            <div className="bg-white rounded-2xl p-4 sm:p-5 shadow-sm hover:shadow-md transition-all flex flex-col justify-between border border-gray-100">
-              <div>
-                <div className="w-10 h-10 sm:w-12 sm:h-12 rounded-xl bg-[#6ffbbe] text-[#002113] flex items-center justify-center mb-3 sm:mb-4">
-                  <span className="material-symbols-outlined text-[24px] sm:text-[28px]">forum</span>
-                </div>
-                <span className="text-[11px] font-bold text-[#006242]">12 Active Batches</span>
-                <h3 className="text-lg sm:text-[20px] font-bold text-[#111c2d] mt-1">WhatsApp Doubt Desk</h3>
-                <p className="text-xs sm:text-[14px] text-[#434655] mt-1.5 leading-relaxed">
-                  Stuck on a homework sum? Snap a picture and receive peer solutions verified by top mentors.
-                </p>
-              </div>
-              <a
-                className="mt-4 inline-flex items-center justify-center gap-1.5 py-2 px-3 rounded-xl bg-[#6ffbbe] text-[#002113] hover:bg-[#4edea3] transition-colors text-xs sm:text-[13px] font-bold"
-                href={socialConfig.platforms.whatsapp.groupUrl || socialConfig.platforms.whatsapp.url || "https://whatsapp.com"}
-                rel="noopener noreferrer"
-                target="_blank"
-              >
-                <span>Join WhatsApp Group</span>
-                <span className="material-symbols-outlined text-[15px]">group_add</span>
-              </a>
-            </div>
-          </div>
-        </section>
-                  {/* Social Media Community Channels Join Block (Displayed for all learners & visitors) */}
-        <SocialMediaJoinBlock
-          currentUser={currentUser}
-          userProfile={userProfile}
-          socialConfig={socialConfig}
-          onToast={showToast}
-          pageText={pageText}
-        />
+                  {/* Social Media Community Channels Join Block (Colorful Designed Community Vault) */}
+                  <SocialMediaJoinBlock
+                    currentUser={currentUser}
+                    userProfile={userProfile}
+                    socialConfig={socialConfig}
+                    onToast={showToast}
+                    pageText={pageText}
+                  />
                 </React.Fragment>
               );
             case 'ai_teacher':

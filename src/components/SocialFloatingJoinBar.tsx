@@ -11,7 +11,7 @@ export const SocialFloatingJoinBar: React.FC<SocialFloatingJoinBarProps> = ({
   socialConfig = getSocialConfig(),
   onToast,
 }) => {
-  const [isExpanded, setIsExpanded] = useState<boolean>(true);
+  const [isExpanded, setIsExpanded] = useState<boolean>(false);
 
   const platforms = socialConfig.platforms;
   const whatsappCfg = platforms.whatsapp;

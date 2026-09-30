@@ -20,8 +20,8 @@ interface FormulaCard {
   title: string;
   formula: string;
   explanation: string;
-  sandboxModule?: 'pythagoras' | 'quadratic' | 'algebraic' | 'circle' | 'mensuration' | 'progressions';
-  category: 'algebra' | 'geometry' | 'trigonometry' | 'mensuration' | 'statistics';
+  sandboxModule?: string;
+  category: 'algebra' | 'geometry' | 'trigonometry' | 'mensuration' | 'statistics' | 'calculus' | 'numbers';
 }
 
 const FORMULA_COLLECTION: FormulaCard[] = [
@@ -92,16 +92,68 @@ const FORMULA_COLLECTION: FormulaCard[] = [
     title: 'Distance & Section Formulas',
     formula: 'd = √((x₂ - x₁)² + (y₂ - y₁)²), P(x,y) = ((mx₂ + nx₁)/(m+n), (my₂ + ny₁)/(m+n))',
     explanation: 'Measures exact Cartesian distance between two points and internal section division coordinates.',
+    sandboxModule: 'coordinate_geom',
     category: 'geometry',
   },
   {
     id: 'f-stats',
-    topic: 'Statistics & Probability',
+    topic: 'Statistics & Central Tendency',
     grade: 'Class 9-10',
     title: 'Empirical Relationship of Central Tendency',
-    formula: '3 Median = Mode + 2 Mean, P(E) + P(not E) = 1',
-    explanation: 'Connects Mean, Median, and Mode in moderately skewed distributions, plus complementary probabilities.',
+    formula: '3 Median = Mode + 2 Mean',
+    explanation: 'Connects Mean, Median, and Mode in moderately skewed distributions.',
+    sandboxModule: 'statistics',
     category: 'statistics',
+  },
+  {
+    id: 'f-unit-circle',
+    topic: 'Trigonometry & Unit Circle',
+    grade: 'Class 11-12',
+    title: 'Trigonometric Unit Circle & Wave Projections',
+    formula: 'P(cos θ, sin θ), sin²θ + cos²θ = 1',
+    explanation: '360° rotational definitions of sine and cosine with Cartesian projections and quadrant signs.',
+    sandboxModule: 'unit_circle',
+    category: 'trigonometry',
+  },
+  {
+    id: 'f-bpt',
+    topic: 'Triangles & Proportionality',
+    grade: 'Class 10',
+    title: 'Thales Basic Proportionality Theorem (BPT)',
+    formula: 'AD / DB = AE / EC, Area(ADE)/Area(ABC) = (AD/AB)²',
+    explanation: 'Fundamental theorem of similar triangles with parallel dividing transversals.',
+    sandboxModule: 'similar_triangles',
+    category: 'geometry',
+  },
+  {
+    id: 'f-calculus',
+    topic: 'Differential Calculus',
+    grade: 'Class 11-12',
+    title: 'Derivative as Instantaneous Tangent Slope',
+    formula: "f'(x) = lim(Δx→0) [f(x+Δx) - f(x)] / Δx",
+    explanation: 'Transition of secant average rate of change into instantaneous tangent derivative slope.',
+    sandboxModule: 'calculus',
+    category: 'calculus',
+  },
+  {
+    id: 'f-gp',
+    topic: 'Geometric Progressions',
+    grade: 'Class 11',
+    title: 'GP N-th Term & Infinite Convergent Sum',
+    formula: 'aₙ = a·rⁿ⁻¹, S_∞ = a / (1 - r) for |r| < 1',
+    explanation: 'Exponential scaling series and sum formulas for finite and infinite progressions.',
+    sandboxModule: 'geom_progression',
+    category: 'algebra',
+  },
+  {
+    id: 'f-fractions',
+    topic: 'Number Systems & Foundations',
+    grade: 'Class 5-7',
+    title: 'Fraction, Decimal & Percentage Inter-Conversion',
+    formula: 'Fraction a/b = Decimal (a÷b) = Percentage (a/b × 100)%',
+    explanation: 'Core arithmetic representations of parts of a whole with dynamic visual models.',
+    sandboxModule: 'fractions',
+    category: 'numbers',
   },
 ];
 
