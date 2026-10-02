@@ -120,6 +120,105 @@ app.get('/api/health', (req, res) => {
   });
 });
 
+// Persistent Admin Roles Storage & API Endpoints
+const ADMINS_FILE_PATH = path.resolve(__dirname, 'src', 'data', 'assignedAdmins.json');
+
+function getStoredAdmins(): any[] {
+  try {
+    if (fs.existsSync(ADMINS_FILE_PATH)) {
+      const content = fs.readFileSync(ADMINS_FILE_PATH, 'utf-8');
+      const parsed = JSON.parse(content);
+      if (Array.isArray(parsed)) return parsed;
+    }
+  } catch (err) {
+    console.error('Error reading admins file:', err);
+  }
+  return [];
+}
+
+function saveStoredAdmins(admins: any[]): void {
+  try {
+    const dir = path.dirname(ADMINS_FILE_PATH);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    fs.writeFileSync(ADMINS_FILE_PATH, JSON.stringify(admins, null, 2), 'utf-8');
+  } catch (err) {
+    console.error('Error writing admins file:', err);
+  }
+}
+
+// 1. Get all assigned admins
+app.get('/api/admin/roles', (req, res) => {
+  const admins = getStoredAdmins();
+  res.json({ success: true, admins });
+});
+
+// 2. Assign / update admin
+app.post('/api/admin/roles', (req, res) => {
+  const newAdmin = req.body;
+  if (!newAdmin || !newAdmin.email) {
+    return res.status(400).json({ success: false, error: 'Email is required' });
+  }
+
+  const cleanEmail = String(newAdmin.email).toLowerCase().trim();
+  const currentAdmins = getStoredAdmins();
+  const filtered = currentAdmins.filter((a) => a.email.toLowerCase().trim() !== cleanEmail);
+  const record = {
+    email: cleanEmail,
+    role: newAdmin.role || 'admin',
+    displayName: newAdmin.displayName || cleanEmail.split('@')[0],
+    assignedBy: newAdmin.assignedBy || 'Admin Management Panel',
+    assignedAt: newAdmin.assignedAt || new Date().toISOString(),
+    notes: newAdmin.notes || '',
+  };
+
+  filtered.push(record);
+  saveStoredAdmins(filtered);
+  return res.json({ success: true, admin: record, admins: filtered });
+});
+
+// 3. Delete / revoke admin
+app.delete('/api/admin/roles/:email', (req, res) => {
+  const emailToDelete = decodeURIComponent(req.params.email || '').toLowerCase().trim();
+  const currentAdmins = getStoredAdmins();
+  const updated = currentAdmins.filter((a) => a.email.toLowerCase().trim() !== emailToDelete);
+  saveStoredAdmins(updated);
+  return res.json({ success: true, admins: updated });
+});
+
+// 4. Verify admin status live (called on sign-in and authorization check)
+app.post('/api/admin/roles/verify', (req, res) => {
+  const { email } = req.body || {};
+  if (!email) {
+    return res.json({ isAdmin: false });
+  }
+  const cleanEmail = String(email).toLowerCase().trim();
+  const hardcoded = [
+    'sachinagrawal16@gmail.com',
+    'sachin.itig@gmail.com',
+    '2026vivekkushwah@gmail.com',
+    'vivekkushwah@gmail.com',
+    'admin@mathsatyourfingertips.com',
+    'ntnagrawal146@gmail.com',
+  ];
+
+  if (hardcoded.includes(cleanEmail)) {
+    return res.json({
+      isAdmin: true,
+      role: cleanEmail === 'sachinagrawal16@gmail.com' || cleanEmail === 'ntnagrawal146@gmail.com' ? 'superadmin' : 'admin',
+    });
+  }
+
+  const currentAdmins = getStoredAdmins();
+  const found = currentAdmins.find((a) => a.email.toLowerCase().trim() === cleanEmail);
+  if (found) {
+    return res.json({ isAdmin: true, role: found.role, admin: found });
+  }
+
+  return res.json({ isAdmin: false });
+});
+
 // Live Domain Redirection Check Endpoint
 app.all('/api/admin/check-redirect', async (req, res) => {
   try {

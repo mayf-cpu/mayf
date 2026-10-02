@@ -198,25 +198,39 @@ export const AdminControlPanelPage: React.FC<AdminControlPanelPageProps> = ({
   const [loadingOrders, setLoadingOrders] = useState(false);
   const [isMigratingLegacy, setIsMigratingLegacy] = useState(false);
   const [liveAdminVerified, setLiveAdminVerified] = useState(false);
-  const [isCheckingAdminStatus, setIsCheckingAdminStatus] = useState(Boolean(currentUser));
+  const [isCheckingAdminStatus, setIsCheckingAdminStatus] = useState(() => {
+    if (!currentUser?.email) return false;
+    const cleanEmail = currentUser.email.toLowerCase().trim();
+    return !INITIAL_ADMIN_EMAILS.some((e) => e.toLowerCase().trim() === cleanEmail) &&
+      !getCachedAssignedAdmins().some((a) => a.email.toLowerCase().trim() === cleanEmail);
+  });
 
-  // Verify live admin status for current user if not already verified
+  // Verify live admin status for current user
   useEffect(() => {
     let isMounted = true;
     if (currentUser?.email) {
-      setIsCheckingAdminStatus(true);
-      checkIsUserAdminLive(currentUser.email)
-        .then((verified) => {
-          if (isMounted) {
-            if (verified) {
-              setLiveAdminVerified(true);
+      const cleanEmail = currentUser.email.toLowerCase().trim();
+      const inInitials = INITIAL_ADMIN_EMAILS.some((e) => e.toLowerCase().trim() === cleanEmail);
+      const inCached = getCachedAssignedAdmins().some((a) => a.email.toLowerCase().trim() === cleanEmail);
+
+      if (inInitials || inCached) {
+        setLiveAdminVerified(true);
+        setIsCheckingAdminStatus(false);
+      } else {
+        setIsCheckingAdminStatus(true);
+        checkIsUserAdminLive(currentUser.email)
+          .then((verified) => {
+            if (isMounted) {
+              if (verified) {
+                setLiveAdminVerified(true);
+              }
+              setIsCheckingAdminStatus(false);
             }
-            setIsCheckingAdminStatus(false);
-          }
-        })
-        .catch(() => {
-          if (isMounted) setIsCheckingAdminStatus(false);
-        });
+          })
+          .catch(() => {
+            if (isMounted) setIsCheckingAdminStatus(false);
+          });
+      }
     } else {
       setIsCheckingAdminStatus(false);
       setLiveAdminVerified(false);
@@ -619,7 +633,16 @@ export const AdminControlPanelPage: React.FC<AdminControlPanelPageProps> = ({
   }, [activeTab, currentRole]);
 
   // Requirement 3: If a logged-in user is not an admin, do not display any message on admin login page; throw a page error
-  if (currentUser && !isAuthorized && !isCheckingAdminStatus) {
+  if (currentUser && !isAuthorized) {
+    if (isCheckingAdminStatus) {
+      return (
+        <div className="min-h-screen w-full bg-slate-950 text-slate-100 flex flex-col items-center justify-center p-6 text-center font-sans">
+          <div className="w-10 h-10 border-3 border-blue-500 border-t-transparent rounded-full animate-spin mb-3"></div>
+          <p className="text-xs font-semibold text-slate-400">Verifying administrative access...</p>
+        </div>
+      );
+    }
+
     return (
       <div className="min-h-screen w-full bg-slate-950 text-slate-100 flex flex-col items-center justify-center p-6 text-center font-sans">
         <div className="max-w-md w-full bg-slate-900 border border-slate-800 rounded-3xl p-8 sm:p-10 shadow-2xl">

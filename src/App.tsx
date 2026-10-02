@@ -725,14 +725,20 @@ export default function App() {
     try {
       setAuthLoading(true);
       const user = await signInWithGoogle();
+      if (user?.email) {
+        try {
+          await checkIsUserAdminLive(user.email);
+          await loadAssignedAdminsFromFirestore();
+        } catch {}
+      }
       showToast(`Welcome back, ${user.displayName || 'Learner'}!`);
       // If a download was requested before login, resume it now!
       if (pendingDownloadItem) {
         setIsLoginRequiredOpen(false);
         setIsCaptchaModalOpen(true);
         showToast(`✓ Signed in! Continuing download for "${pendingDownloadItem.title}"...`);
-      } else {
-        // Open mobile number registration block with Indian country code (+91) default
+      } else if (currentView !== 'admin') {
+        // Open mobile number registration block only on student portal, not on admin login
         setShowMobileRegisterModal(true);
       }
     } catch (err: any) {

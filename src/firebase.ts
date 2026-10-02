@@ -504,6 +504,24 @@ export async function loadAssignedAdminsFromFirestore(): Promise<AdminUserRecord
   const mergedMap = new Map<string, AdminUserRecord>();
   getCachedAssignedAdmins().forEach((a) => mergedMap.set(a.email.toLowerCase().trim(), a));
 
+  // 1. Fetch from server-side persistent endpoint
+  try {
+    const res = await fetch('/api/admin/roles');
+    if (res.ok) {
+      const data = await res.json();
+      if (Array.isArray(data.admins)) {
+        data.admins.forEach((item: AdminUserRecord) => {
+          if (item?.email) {
+            mergedMap.set(item.email.toLowerCase().trim(), item);
+          }
+        });
+      }
+    }
+  } catch (_apiErr) {
+    // Non-blocking fallback
+  }
+
+  // 2. Fetch from Firestore settings/admins
   try {
     const docRef = doc(db, 'settings', 'admins');
     const snap = await getDoc(docRef);
@@ -521,6 +539,7 @@ export async function loadAssignedAdminsFromFirestore(): Promise<AdminUserRecord
     // Graceful fallback
   }
 
+  // 3. Fetch from Firestore admins collection
   try {
     const adminsCol = collection(db, 'admins');
     const snap = await getDocs(adminsCol);
@@ -549,7 +568,18 @@ export async function loadAssignedAdminsFromFirestore(): Promise<AdminUserRecord
 export async function saveAssignedAdminsToFirestore(admins: AdminUserRecord[]): Promise<void> {
   saveCachedAssignedAdmins(admins);
   
-  // 1. Write to settings/admins
+  // 1. Persist to server backend API (guarantees cross-device & cross-browser persistence)
+  for (const admin of admins) {
+    try {
+      await fetch('/api/admin/roles', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify(admin),
+      });
+    } catch (_serverErr) {}
+  }
+
+  // 2. Write to settings/admins in Firestore
   try {
     const docRef = doc(db, 'settings', 'admins');
     await setDoc(
@@ -564,7 +594,7 @@ export async function saveAssignedAdminsToFirestore(admins: AdminUserRecord[]): 
     console.warn('saveAssignedAdminsToFirestore settings error:', err);
   }
 
-  // 2. Also write individual documents in admins/{email} so security rules and live checks verify instantaneously
+  // 3. Also write individual documents in admins/{email} so security rules and live checks verify instantaneously
   for (const admin of admins) {
     try {
       const emailDoc = admin.email.toLowerCase().trim();
@@ -583,7 +613,7 @@ export async function saveAssignedAdminsToFirestore(admins: AdminUserRecord[]): 
     }
   }
 
-  // 3. Update existing users with this email to reflect their new assigned role
+  // 4. Update existing users with this email to reflect their new assigned role
   try {
     const localUsers = getLocalUsers();
     let hasLocalUpdates = false;
@@ -606,9 +636,17 @@ export async function saveAssignedAdminsToFirestore(admins: AdminUserRecord[]): 
 }
 
 export async function deleteAssignedAdminFromFirestore(email: string): Promise<void> {
+  const cleanEmail = email.toLowerCase().trim();
+  // 1. Delete on server backend
   try {
-    const emailDoc = email.toLowerCase().trim();
-    await deleteDoc(doc(db, 'admins', emailDoc));
+    await fetch(`/api/admin/roles/${encodeURIComponent(cleanEmail)}`, {
+      method: 'DELETE',
+    });
+  } catch (_e) {}
+
+  // 2. Delete in Firestore
+  try {
+    await deleteDoc(doc(db, 'admins', cleanEmail));
   } catch (_e) {
     // non-blocking
   }
@@ -622,6 +660,31 @@ export async function checkIsUserAdminLive(email: string | null | undefined): Pr
   const cached = getCachedAssignedAdmins();
   if (cached.some((a) => a.email.toLowerCase().trim() === cleanEmail)) return true;
 
+  // 1. Verify with backend server API (immediate, reliable cross-browser check)
+  try {
+    const res = await fetch('/api/admin/roles/verify', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ email: cleanEmail }),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (data.isAdmin) {
+        const newAdmin: AdminUserRecord = {
+          email: cleanEmail,
+          role: data.role || 'admin',
+          displayName: data.admin?.displayName || cleanEmail.split('@')[0],
+          assignedBy: data.admin?.assignedBy || 'Live Check',
+          assignedAt: data.admin?.assignedAt || new Date().toISOString(),
+          notes: data.admin?.notes || '',
+        };
+        saveCachedAssignedAdmins([...cached.filter((c) => c.email.toLowerCase().trim() !== cleanEmail), newAdmin]);
+        return true;
+      }
+    }
+  } catch (_serverErr) {}
+
+  // 2. Check Firestore admins/{cleanEmail}
   try {
     const adminDoc = await getDoc(doc(db, 'admins', cleanEmail));
     if (adminDoc.exists()) {
@@ -639,6 +702,7 @@ export async function checkIsUserAdminLive(email: string | null | undefined): Pr
     }
   } catch (_e) {}
 
+  // 3. Check Firestore settings/admins
   try {
     const settingsSnap = await getDoc(doc(db, 'settings', 'admins'));
     if (settingsSnap.exists()) {

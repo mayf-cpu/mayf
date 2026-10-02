@@ -1,0 +1,50 @@
+[
+  {
+    "email": "sachinagrawal16@gmail.com",
+    "role": "superadmin",
+    "displayName": "Primary System Administrator",
+    "assignedBy": "System Bootstrap",
+    "assignedAt": "2025-01-01T00:00:00.000Z",
+    "notes": "Superadministrator with permanent authority"
+  },
+  {
+    "email": "ntnagrawal146@gmail.com",
+    "role": "superadmin",
+    "displayName": "System Superadministrator",
+    "assignedBy": "System Bootstrap",
+    "assignedAt": "2025-01-01T00:00:00.000Z",
+    "notes": "Verified System Superadministrator"
+  },
+  {
+    "email": "sachin.itig@gmail.com",
+    "role": "admin",
+    "displayName": "Faculty Administrator",
+    "assignedBy": "System Provisioning",
+    "assignedAt": "2025-01-01T00:00:00.000Z",
+    "notes": "Verified Faculty Admin"
+  },
+  {
+    "email": "2026vivekkushwah@gmail.com",
+    "role": "admin",
+    "displayName": "Faculty Administrator",
+    "assignedBy": "System Provisioning",
+    "assignedAt": "2025-01-01T00:00:00.000Z",
+    "notes": "Verified Faculty Admin"
+  },
+  {
+    "email": "vivekkushwah@gmail.com",
+    "role": "admin",
+    "displayName": "Faculty Administrator",
+    "assignedBy": "System Provisioning",
+    "assignedAt": "2025-01-01T00:00:00.000Z",
+    "notes": "Verified Faculty Admin"
+  },
+  {
+    "email": "admin@mathsatyourfingertips.com",
+    "role": "admin",
+    "displayName": "Portal Administrator",
+    "assignedBy": "System Provisioning",
+    "assignedAt": "2025-01-01T00:00:00.000Z",
+    "notes": "System Administrator Account"
+  }
+]
