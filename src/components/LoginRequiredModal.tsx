@@ -5,6 +5,7 @@ interface LoginRequiredModalProps {
   onClose: () => void;
   onGoogleSignIn: () => void;
   onQuickDemoSignIn: (email: string, name: string) => void;
+  onOpenManualRegister?: () => void;
   pendingResourceTitle?: string;
   pendingResourceGrade?: string;
 }
@@ -14,6 +15,7 @@ export const LoginRequiredModal: React.FC<LoginRequiredModalProps> = ({
   onClose,
   onGoogleSignIn,
   onQuickDemoSignIn,
+  onOpenManualRegister,
   pendingResourceTitle,
   pendingResourceGrade,
 }) => {
@@ -158,6 +160,21 @@ export const LoginRequiredModal: React.FC<LoginRequiredModalProps> = ({
               <span className="text-[10px] text-emerald-700 block">Class 9 Student</span>
             </button>
           </div>
+
+          {/* Manual Student Registration Option */}
+          {onOpenManualRegister && (
+            <button
+              type="button"
+              onClick={() => {
+                onClose();
+                onOpenManualRegister();
+              }}
+              className="w-full flex items-center justify-center gap-1.5 bg-blue-50/80 hover:bg-blue-100 text-[#004ac6] border border-blue-200 font-bold text-xs py-2 px-3 rounded-xl transition-colors cursor-pointer"
+            >
+              <span className="material-symbols-outlined text-[16px]">person_add</span>
+              <span>Register New Student Account Manually</span>
+            </button>
+          )}
 
           {/* Toggle Custom Direct Login */}
           {!showDirectForm ? (

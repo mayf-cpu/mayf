@@ -38,6 +38,7 @@ import { downloadResourceToSystem, printResourceInA4 } from './services/fileDown
 import { attemptAutoLaunchExternalBrowser } from './services/externalBrowser';
 import { AdminControlPanelPage } from './components/AdminControlPanelPage';
 import { StudentMobileRegisterModal } from './components/StudentMobileRegisterModal';
+import { StudentManualRegisterModal } from './components/StudentManualRegisterModal';
 import { SocialMediaJoinBlock } from './components/SocialMediaJoinBlock';
 import { DownloadCaptchaModal } from './components/DownloadCaptchaModal';
 import { SocialFloatingJoinBar } from './components/SocialFloatingJoinBar';
@@ -238,6 +239,7 @@ export default function App() {
   const [isDownloadsOpen, setIsDownloadsOpen] = useState(false);
   const [isAdminPanelOpen, setIsAdminPanelOpen] = useState(false);
   const [showMobileRegisterModal, setShowMobileRegisterModal] = useState(false);
+  const [showManualRegisterModal, setShowManualRegisterModal] = useState(false);
   const [showDomainModal, setShowDomainModal] = useState(false);
   const [shareModalData, setShareModalData] = useState<{
     isOpen: boolean;
@@ -338,6 +340,21 @@ export default function App() {
         if (user.email) {
           checkIsUserAdminLive(user.email).catch(() => {});
         }
+        // Immediately record base profile to local cache & server database
+        const baseProfile: UserProfile = {
+          userId: user.uid,
+          email: user.email || '',
+          displayName: user.displayName || 'Learner',
+          photoURL: user.photoURL || '',
+          grade: selectedClass,
+          isPro: false,
+          bookmarks: ['res-quad-class10'],
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+        recordLocalUser(baseProfile);
+        syncUserProfileToServer(baseProfile).catch(() => {});
+
         const unsubscribeProfile = subscribeToUserProfile(user.uid, (profile) => {
           if (profile) {
             setUserProfile(profile);
@@ -1199,6 +1216,7 @@ export default function App() {
           onOpenProPass={() => setIsProPassModalOpen(true)}
           onOpenFormulaDeck={handleNavigateToFormulaDeck}
           onGoogleSignIn={handleGoogleSignIn}
+          onOpenManualRegister={() => setShowManualRegisterModal(true)}
           onSignOut={handleSignOut}
           onToast={showToast}
         />
@@ -1485,6 +1503,7 @@ export default function App() {
         onOpenProPass={() => setIsProPassModalOpen(true)}
         onOpenDashboard={handleOpenDashboard}
         onOpenMobileRegister={() => setShowMobileRegisterModal(true)}
+        onOpenManualRegister={() => setShowManualRegisterModal(true)}
         onShareWebsite={() => openShare(branding.siteTitle, window.location.origin)}
         onSearchChange={(q) => {
           setSearchQuery(q);
@@ -3154,6 +3173,32 @@ export default function App() {
         onToast={showToast}
       />
 
+      <StudentManualRegisterModal
+        isOpen={showManualRegisterModal}
+        onClose={() => setShowManualRegisterModal(false)}
+        onRegistered={(created) => {
+          setUserProfile(created);
+          setCurrentUser({
+            uid: created.userId,
+            email: created.email,
+            displayName: created.displayName,
+            photoURL: created.photoURL,
+            emailVerified: true,
+            isAnonymous: false,
+          } as any);
+          if (pendingDownloadItem) {
+            setIsLoginRequiredOpen(false);
+            setIsCaptchaModalOpen(true);
+            showToast(`✓ Account created! Resuming download for "${pendingDownloadItem.title}"...`);
+          }
+        }}
+        onToast={showToast}
+        onSwitchToGoogle={() => {
+          setShowManualRegisterModal(false);
+          handleGoogleSignIn();
+        }}
+      />
+
       {/* Floating Ask Teacher Action Button */}
       <div className="fixed bottom-6 right-6 z-40">
         <button
@@ -3203,6 +3248,7 @@ export default function App() {
         }}
         onGoogleSignIn={handleGoogleSignIn}
         onQuickDemoSignIn={handleQuickDemoSignIn}
+        onOpenManualRegister={() => setShowManualRegisterModal(true)}
         pendingResourceTitle={pendingDownloadItem?.title}
         pendingResourceGrade={pendingDownloadItem?.resource?.grade}
       />

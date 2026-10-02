@@ -1,9 +1,11 @@
-import React, { useState } from 'react';
+import React, { useState, useRef } from 'react';
 import {
   UserProfile,
   grantProStatusManually,
   toggleUserProStatus,
   deleteStudentAccount,
+  registerStudentManually,
+  bulkImportStudents,
 } from '../../firebase';
 import { formatPrice } from '../../services/currency';
 
@@ -21,6 +23,29 @@ const AVAILABLE_COURSES = [
   { id: 'olympiad-pass', title: 'IMO & National Math Olympiad Bootcamp', price: 699 },
 ];
 
+const GRADES = ['Class 5', 'Class 6', 'Class 7', 'Class 8', 'Class 9', 'Class 10'];
+
+const TARGET_EXAMS = [
+  'CBSE Board Examinations',
+  'ICSE Board Examinations',
+  'National Math Olympiad (IMO / SOF)',
+  'NTSE & Foundation Math',
+  'State Board Curriculum',
+];
+
+interface ParsedBulkRow {
+  name: string;
+  email: string;
+  mobile: string;
+  grade: string;
+  isPro: boolean;
+  school: string;
+  targetExam: string;
+  notes: string;
+  isValid: boolean;
+  error?: string;
+}
+
 export const AdminStudentsTab: React.FC<AdminStudentsTabProps> = ({
   users,
   onRefresh,
@@ -30,14 +55,40 @@ export const AdminStudentsTab: React.FC<AdminStudentsTabProps> = ({
   const [gradeFilter, setGradeFilter] = useState('All');
   const [statusFilter, setStatusFilter] = useState<'All' | 'Pro' | 'Free'>('All');
 
-  // Manual Assign Form State
+  // Manual Course Assign Form State
   const [selectedStudentId, setSelectedStudentId] = useState('');
   const [selectedCourse, setSelectedCourse] = useState(AVAILABLE_COURSES[0].title);
   const [accessDuration, setAccessDuration] = useState('1 Year');
   const [grantReason, setGrantReason] = useState('Merit Scholarship / Top Performer');
   const [isAssigning, setIsAssigning] = useState(false);
 
-  // Actual registered students only (no dummy data)
+  // Single Student Registration Modal State
+  const [isAddModalOpen, setIsAddModalOpen] = useState(false);
+  const [isSubmittingSingle, setIsSubmittingSingle] = useState(false);
+  const [singleName, setSingleName] = useState('');
+  const [singleEmail, setSingleEmail] = useState('');
+  const [singleCountryCode, setSingleCountryCode] = useState('+91');
+  const [singleMobile, setSingleMobile] = useState('');
+  const [singleGrade, setSingleGrade] = useState('Class 10');
+  const [singleTargetExam, setSingleTargetExam] = useState(TARGET_EXAMS[0]);
+  const [singleSchool, setSingleSchool] = useState('');
+  const [singleIsPro, setSingleIsPro] = useState(false);
+  const [singleProPlan, setSingleProPlan] = useState(AVAILABLE_COURSES[0].title);
+  const [singleNotes, setSingleNotes] = useState('');
+  const [singleWhatsappAlerts, setSingleWhatsappAlerts] = useState(true);
+  const [singleError, setSingleError] = useState('');
+
+  // Bulk Students Registration Modal State
+  const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
+  const [bulkMode, setBulkMode] = useState<'csv' | 'paste'>('csv');
+  const [pastedText, setPastedText] = useState('');
+  const [parsedRows, setParsedRows] = useState<ParsedBulkRow[]>([]);
+  const [isImportingBulk, setIsImportingBulk] = useState(false);
+  const [bulkMakeAllPro, setBulkMakeAllPro] = useState(false);
+  const [bulkDefaultGrade, setBulkDefaultGrade] = useState('Class 10');
+  const fileInputRef = useRef<HTMLInputElement>(null);
+
+  // Actual registered students only
   const displayUsers: UserProfile[] = users;
 
   const filteredStudents = displayUsers.filter((u) => {
@@ -48,12 +99,18 @@ export const AdminStudentsTab: React.FC<AdminStudentsTabProps> = ({
       (u.email || '').toLowerCase().includes(q) ||
       (u.userId || '').toLowerCase().includes(q) ||
       (u.mobileNumber || '').includes(q) ||
-      (u.phoneNumber || '').includes(q);
+      (u.phoneNumber || '').includes(q) ||
+      (u.schoolName || '').toLowerCase().includes(q);
     const matchGrade = gradeFilter === 'All' || u.grade === gradeFilter;
     const matchStatus =
       statusFilter === 'All' || (statusFilter === 'Pro' ? u.isPro : !u.isPro);
     return matchSearch && matchGrade && matchStatus;
   });
+
+  // Calculate statistics
+  const totalStudents = displayUsers.length;
+  const proStudentsCount = displayUsers.filter((u) => u.isPro).length;
+  const withMobileCount = displayUsers.filter((u) => Boolean(u.mobileNumber || u.phoneNumber)).length;
 
   const handleManualGrantCourse = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -68,7 +125,7 @@ export const AdminStudentsTab: React.FC<AdminStudentsTabProps> = ({
       onToast(`🎉 Assigned "${selectedCourse}" to student successfully!`);
       setSelectedStudentId('');
       onRefresh();
-    } catch (err) {
+    } catch (_err) {
       onToast('Error assigning course. Check student ID.');
     } finally {
       setIsAssigning(false);
@@ -81,7 +138,7 @@ export const AdminStudentsTab: React.FC<AdminStudentsTabProps> = ({
       await toggleUserProStatus(user.userId, nextStatus, nextStatus ? 'Admin Assigned Pro Pass' : '');
       onToast(`Updated ${user.displayName || user.email} to ${nextStatus ? '⭐ PRO' : 'FREE'}`);
       onRefresh();
-    } catch (e) {
+    } catch (_e) {
       onToast('Failed to update student Pro status.');
     }
   };
@@ -92,13 +149,26 @@ export const AdminStudentsTab: React.FC<AdminStudentsTabProps> = ({
       await deleteStudentAccount(userId);
       onToast(`Student ${name} removed from registry.`);
       onRefresh();
-    } catch (e) {
+    } catch (_e) {
       onToast('Failed to delete student.');
     }
   };
 
   const handleExportCSV = () => {
-    const headers = ['User ID', 'Full Name', 'Email', 'Mobile Number', 'WhatsApp Alerts', 'Grade', 'Pro Status', 'Subscribed Plan', 'Registered Date'];
+    const headers = [
+      'User ID',
+      'Full Name',
+      'Email',
+      'Mobile Number',
+      'WhatsApp Alerts',
+      'Grade',
+      'School / Institute',
+      'Target Exam',
+      'Pro Status',
+      'Subscribed Plan',
+      'Notes',
+      'Registered Date',
+    ];
     const rows = filteredStudents.map((u) => [
       `"${u.userId}"`,
       `"${u.displayName || 'Learner'}"`,
@@ -106,8 +176,11 @@ export const AdminStudentsTab: React.FC<AdminStudentsTabProps> = ({
       `"${u.phoneNumber || u.mobileNumber || 'N/A'}"`,
       u.whatsappAlerts ? 'Yes' : 'No',
       `"${u.grade || 'Class 9'}"`,
+      `"${u.schoolName || ''}"`,
+      `"${u.targetExam || ''}"`,
       u.isPro ? 'PRO' : 'FREE',
       `"${u.proPlan || 'N/A'}"`,
+      `"${u.notes || ''}"`,
       `"${u.createdAt || u.mobileRegisteredAt || new Date().toISOString()}"`,
     ]);
     const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
@@ -121,8 +194,268 @@ export const AdminStudentsTab: React.FC<AdminStudentsTabProps> = ({
     onToast('📥 Students directory exported to CSV!');
   };
 
+  // Submit Single Student
+  const handleSubmitSingleStudent = async (e: React.FormEvent) => {
+    e.preventDefault();
+    setSingleError('');
+
+    const cleanName = singleName.trim();
+    const cleanEmail = singleEmail.toLowerCase().trim();
+    const cleanMobile = singleMobile.replace(/\D/g, '').trim();
+
+    if (!cleanName) {
+      setSingleError('Student full name is required');
+      return;
+    }
+    if (!cleanEmail || !cleanEmail.includes('@') || !cleanEmail.includes('.')) {
+      setSingleError('A valid email address is required');
+      return;
+    }
+    if (cleanMobile && singleCountryCode === '+91' && cleanMobile.length !== 10) {
+      setSingleError('Indian mobile number must be 10 digits');
+      return;
+    }
+
+    setIsSubmittingSingle(true);
+    try {
+      await registerStudentManually({
+        displayName: cleanName,
+        email: cleanEmail,
+        countryCode: singleCountryCode.trim(),
+        mobileNumber: cleanMobile,
+        grade: singleGrade,
+        targetExam: singleTargetExam,
+        schoolName: singleSchool.trim(),
+        isPro: singleIsPro,
+        proPlan: singleIsPro ? singleProPlan : '',
+        notes: singleNotes.trim(),
+        whatsappAlerts: singleWhatsappAlerts,
+      });
+
+      onToast(`✓ Student "${cleanName}" registered successfully in database!`);
+      // Reset form
+      setSingleName('');
+      setSingleEmail('');
+      setSingleMobile('');
+      setSingleSchool('');
+      setSingleNotes('');
+      setSingleIsPro(false);
+      setIsAddModalOpen(false);
+      onRefresh();
+    } catch (err: any) {
+      setSingleError(err?.message || 'Failed to register student.');
+    } finally {
+      setIsSubmittingSingle(false);
+    }
+  };
+
+  // Parse Text / CSV Rows
+  const parseRawStudentData = (rawText: string): ParsedBulkRow[] => {
+    const lines = rawText.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+    if (lines.length === 0) return [];
+
+    const results: ParsedBulkRow[] = [];
+    // Check if line 0 is a header line
+    let startIndex = 0;
+    const firstLineLower = lines[0].toLowerCase();
+    if (firstLineLower.includes('email') || firstLineLower.includes('name')) {
+      startIndex = 1;
+    }
+
+    for (let i = startIndex; i < lines.length; i++) {
+      const line = lines[i];
+      // Split by tab or comma (handling simple quotes)
+      const delimiter = line.includes('\t') ? '\t' : ',';
+      const cols = line.split(delimiter).map((c) => c.replace(/^["']|["']$/g, '').trim());
+
+      const name = cols[0] || '';
+      const email = (cols[1] || '').toLowerCase();
+      const mobile = (cols[2] || '').replace(/\D/g, '');
+      const grade = cols[3] || bulkDefaultGrade;
+      const isPro = cols[4] ? ['true', 'yes', 'pro', '1'].includes(cols[4].toLowerCase()) || bulkMakeAllPro : bulkMakeAllPro;
+      const school = cols[5] || '';
+      const targetExam = cols[6] || TARGET_EXAMS[0];
+      const notes = cols[7] || '';
+
+      const isValid = Boolean(email && email.includes('@') && email.includes('.'));
+      const error = !email ? 'Missing email' : !isValid ? 'Invalid email format' : undefined;
+
+      results.push({
+        name: name || (email ? email.split('@')[0] : `Student ${i + 1}`),
+        email,
+        mobile,
+        grade,
+        isPro,
+        school,
+        targetExam,
+        notes,
+        isValid,
+        error,
+      });
+    }
+
+    return results;
+  };
+
+  // Handle File Upload for Bulk
+  const handleFileUpload = (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+
+    const reader = new FileReader();
+    reader.onload = (event) => {
+      const content = event.target?.result as string;
+      if (content) {
+        setPastedText(content);
+        const parsed = parseRawStudentData(content);
+        setParsedRows(parsed);
+      }
+    };
+    reader.readAsText(file);
+  };
+
+  // Download Sample CSV Template
+  const handleDownloadSampleCSV = () => {
+    const headers = ['Name', 'Email', 'Mobile', 'Grade', 'Pro', 'School', 'TargetExam', 'Notes'];
+    const sampleRows = [
+      ['Aarav Sharma', 'aarav.sharma@example.com', '9876543210', 'Class 10', 'Pro', 'DPS R.K. Puram', 'CBSE Board Examinations', 'Scholarship Student'],
+      ['Diya Patel', 'diya.patel@example.com', '9812345678', 'Class 9', 'Free', 'St. Xavier School', 'National Math Olympiad (IMO / SOF)', 'Batch A'],
+      ['Kabir Mehta', 'kabir.math@example.com', '9890123456', 'Class 10', 'Pro', 'Modern School', 'CBSE Board Examinations', 'Cash Paid'],
+    ];
+    const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...sampleRows.map((r) => r.join(','))].join('\n');
+    const encodedUri = encodeURI(csvContent);
+    const link = document.createElement('a');
+    link.setAttribute('href', encodedUri);
+    link.setAttribute('download', 'sample_students_import_template.csv');
+    document.body.appendChild(link);
+    link.click();
+    document.body.removeChild(link);
+    onToast('📄 Downloaded sample CSV template!');
+  };
+
+  // Submit Bulk Import
+  const handleExecuteBulkImport = async () => {
+    const validStudents = parsedRows.filter((r) => r.isValid);
+    if (validStudents.length === 0) {
+      onToast('⚠️ No valid student rows to import. Please check email addresses.');
+      return;
+    }
+
+    setIsImportingBulk(true);
+    try {
+      const payload = validStudents.map((r) => ({
+        displayName: r.name,
+        email: r.email,
+        mobileNumber: r.mobile,
+        countryCode: '+91',
+        grade: r.grade || bulkDefaultGrade,
+        schoolName: r.school,
+        targetExam: r.targetExam,
+        isPro: r.isPro,
+        proPlan: r.isPro ? 'Admin Bulk Import' : '',
+        notes: r.notes,
+        whatsappAlerts: true,
+      }));
+
+      const res = await bulkImportStudents(payload);
+      onToast(`🎉 Successfully imported ${res.count} students into database!`);
+      setIsBulkModalOpen(false);
+      setParsedRows([]);
+      setPastedText('');
+      onRefresh();
+    } catch (_err) {
+      onToast('Failed to import bulk students. Please retry.');
+    } finally {
+      setIsImportingBulk(false);
+    }
+  };
+
   return (
-    <div className="max-w-6xl mx-auto space-y-6">
+    <div className="max-w-6xl mx-auto space-y-6 font-['Plus_Jakarta_Sans',sans-serif]">
+      {/* TOP HEADER: Key Metrics & Primary Actions */}
+      <div className="bg-white rounded-3xl p-5 sm:p-6 shadow-sm border border-blue-50 flex flex-col lg:flex-row items-start lg:items-center justify-between gap-4">
+        <div>
+          <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-blue-50 text-blue-800 text-xs font-bold mb-1 border border-blue-100">
+            <span className="material-symbols-outlined text-[15px]">group</span>
+            Student Database &amp; Enrolments
+          </div>
+          <h2 className="text-xl sm:text-2xl font-black text-[#111c2d]">
+            Registered Students Directory
+          </h2>
+          <p className="text-xs text-[#737686] mt-0.5">
+            Real registered student accounts, contact info, WhatsApp alert records &amp; course passes.
+          </p>
+        </div>
+
+        {/* Action Buttons: Add Single / Bulk Import / Export CSV */}
+        <div className="flex flex-wrap items-center gap-2.5 w-full sm:w-auto">
+          <button
+            type="button"
+            onClick={() => setIsAddModalOpen(true)}
+            className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 bg-[#004ac6] hover:bg-blue-700 text-white text-xs font-bold px-4 py-2.5 rounded-xl shadow-xs transition-all active:scale-95 cursor-pointer"
+          >
+            <span className="material-symbols-outlined text-[17px]">person_add</span>
+            <span>Add Single Student</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={() => {
+              setIsBulkModalOpen(true);
+              setParsedRows([]);
+              setPastedText('');
+            }}
+            className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 text-xs font-bold px-4 py-2.5 rounded-xl transition-all cursor-pointer"
+          >
+            <span className="material-symbols-outlined text-[17px]">upload_file</span>
+            <span>Bulk Add Students</span>
+          </button>
+
+          <button
+            type="button"
+            onClick={handleExportCSV}
+            className="inline-flex items-center justify-center gap-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold px-3.5 py-2.5 rounded-xl transition-all cursor-pointer"
+            title="Export filtered students as CSV"
+          >
+            <span className="material-symbols-outlined text-[17px]">download</span>
+            <span className="hidden sm:inline">Export CSV</span>
+          </button>
+        </div>
+      </div>
+
+      {/* METRIC PILLS */}
+      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
+        <div className="bg-white rounded-2xl p-4 border border-blue-50 shadow-xs flex items-center gap-3">
+          <div className="w-11 h-11 rounded-xl bg-blue-50 text-blue-700 flex items-center justify-center shrink-0">
+            <span className="material-symbols-outlined text-[24px]">school</span>
+          </div>
+          <div>
+            <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">Total Students</span>
+            <span className="text-xl font-black text-[#111c2d]">{totalStudents}</span>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-2xl p-4 border border-blue-50 shadow-xs flex items-center gap-3">
+          <div className="w-11 h-11 rounded-xl bg-amber-50 text-amber-700 flex items-center justify-center shrink-0">
+            <span className="material-symbols-outlined text-[24px]">workspace_premium</span>
+          </div>
+          <div>
+            <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">Pro Active Pass</span>
+            <span className="text-xl font-black text-[#111c2d]">{proStudentsCount}</span>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-2xl p-4 border border-blue-50 shadow-xs flex items-center gap-3">
+          <div className="w-11 h-11 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center shrink-0">
+            <span className="material-symbols-outlined text-[24px]">phone_iphone</span>
+          </div>
+          <div>
+            <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">Verified Phone / WhatsApp</span>
+            <span className="text-xl font-black text-[#111c2d]">{withMobileCount}</span>
+          </div>
+        </div>
+      </div>
+
       {/* CARD 1: Manually Assign Paid Courses Without Payment */}
       <div className="bg-gradient-to-r from-blue-900 to-indigo-900 text-white rounded-2xl p-5 sm:p-6 shadow-sm border border-blue-800">
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 mb-4">
@@ -181,26 +514,29 @@ export const AdminStudentsTab: React.FC<AdminStudentsTabProps> = ({
           {/* 3. Duration & Reason */}
           <div>
             <label className="text-[11px] font-bold text-blue-200 block mb-1">
-              Access Duration &amp; Reason:
+              Duration &amp; Reason:
             </label>
             <div className="flex gap-2">
               <select
                 value={accessDuration}
                 onChange={(e) => setAccessDuration(e.target.value)}
-                className="w-28 px-2 py-2 bg-white text-slate-800 text-xs font-semibold rounded-xl border border-blue-300 focus:outline-none"
+                className="w-1/2 px-2 py-2 bg-white text-slate-800 text-xs font-semibold rounded-xl border border-blue-300 focus:outline-none"
               >
-                <option value="3 Months">3 Months</option>
+                <option value="1 Month">1 Month</option>
                 <option value="6 Months">6 Months</option>
                 <option value="1 Year">1 Year</option>
                 <option value="Lifetime">Lifetime</option>
               </select>
-              <input
-                type="text"
+              <select
                 value={grantReason}
                 onChange={(e) => setGrantReason(e.target.value)}
-                placeholder="Reason (e.g. Scholarship)"
-                className="flex-1 px-2.5 py-2 bg-white text-slate-800 text-xs rounded-xl border border-blue-300 focus:outline-none"
-              />
+                className="w-1/2 px-2 py-2 bg-white text-slate-800 text-xs font-semibold rounded-xl border border-blue-300 focus:outline-none"
+              >
+                <option value="Scholarship">Scholarship</option>
+                <option value="Offline Cash">Offline Cash</option>
+                <option value="Top Performer">Top Ranker</option>
+                <option value="Trial Access">Trial Access</option>
+              </select>
             </div>
           </div>
 
@@ -208,141 +544,137 @@ export const AdminStudentsTab: React.FC<AdminStudentsTabProps> = ({
           <div className="flex items-end">
             <button
               type="submit"
-              disabled={isAssigning || !selectedStudentId}
-              className="w-full py-2.5 px-4 bg-amber-400 hover:bg-amber-300 text-slate-900 text-xs font-extrabold rounded-xl cursor-pointer transition-colors shadow-sm flex items-center justify-center gap-1.5 disabled:opacity-50"
+              disabled={isAssigning}
+              className="w-full h-[38px] bg-amber-400 hover:bg-amber-300 text-slate-900 font-extrabold text-xs rounded-xl shadow transition-all active:scale-95 cursor-pointer disabled:opacity-50 flex items-center justify-center gap-1.5"
             >
-              <span className="material-symbols-outlined text-[18px]">verified_user</span>
-              <span>{isAssigning ? 'Upgrading...' : 'Assign Course Free'}</span>
+              <span className="material-symbols-outlined text-[18px]">verified</span>
+              <span>{isAssigning ? 'Granting...' : 'Grant Pro Course'}</span>
             </button>
           </div>
         </form>
       </div>
 
-      {/* CARD 2: Registered Students Table & Directory */}
-      <div className="bg-white rounded-2xl border border-slate-200 overflow-hidden shadow-xs">
-        {/* Header with Search and Filters */}
-        <div className="p-4 sm:p-5 border-b border-slate-100 flex flex-col md:flex-row md:items-center justify-between gap-3">
-          <div>
-            <h4 className="text-sm font-bold text-slate-900 flex items-center gap-2">
-              <span>All Registered Students Directory</span>
-              <span className="text-xs font-mono bg-blue-100 text-blue-800 font-bold px-2 py-0.5 rounded-full">
-                {displayUsers.length} Students
-              </span>
-            </h4>
-            <p className="text-xs text-slate-500">Live profiles from Firebase Firestore database collection <code className="text-blue-600 font-mono">/users</code> &amp; persistent student registration store</p>
+      {/* CARD 2: Student Registry Table with Search & Filters */}
+      <div className="bg-white rounded-3xl p-5 sm:p-6 shadow-sm border border-blue-50 space-y-4">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3">
+          <div className="flex items-center gap-2">
+            <span className="material-symbols-outlined text-[#004ac6] text-[22px]">contacts</span>
+            <h3 className="text-base font-bold text-[#111c2d]">Student Accounts Directory</h3>
+            <span className="text-xs font-bold text-slate-500 bg-slate-100 px-2 py-0.5 rounded-full">
+              {filteredStudents.length} / {totalStudents}
+            </span>
           </div>
 
+          {/* Filters & Search */}
           <div className="flex flex-wrap items-center gap-2">
-            {/* Search */}
             <div className="relative">
+              <span className="material-symbols-outlined absolute left-3 top-2.5 text-slate-400 text-[18px]">search</span>
               <input
                 type="text"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search name, email, mobile..."
-                className="pl-8 pr-3 py-1.5 text-xs bg-slate-50 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 w-48"
+                placeholder="Search name, email, phone..."
+                className="pl-9 pr-3 py-1.5 text-xs font-medium rounded-xl border border-slate-200 focus:outline-none focus:border-blue-500 w-48 sm:w-60 bg-slate-50 focus:bg-white"
               />
-              <span className="material-symbols-outlined absolute left-2 top-2 text-[16px] text-slate-400">
-                search
-              </span>
             </div>
 
-            {/* Grade Filter */}
             <select
               value={gradeFilter}
               onChange={(e) => setGradeFilter(e.target.value)}
-              className="py-1.5 px-2 text-xs bg-slate-50 border border-slate-300 rounded-xl focus:outline-none text-slate-700 font-semibold"
+              className="px-2.5 py-1.5 text-xs font-semibold rounded-xl border border-slate-200 bg-slate-50 focus:bg-white text-slate-700 outline-none cursor-pointer"
             >
               <option value="All">All Grades</option>
-              <option value="Class 10">Class 10</option>
-              <option value="Class 9">Class 9</option>
-              <option value="Class 8">Class 8</option>
-              <option value="Class 7">Class 7</option>
-              <option value="Class 6">Class 6</option>
-              <option value="Class 5">Class 5</option>
+              {GRADES.map((g) => (
+                <option key={g} value={g}>{g}</option>
+              ))}
             </select>
 
-            {/* Status Filter */}
             <select
               value={statusFilter}
               onChange={(e) => setStatusFilter(e.target.value as any)}
-              className="py-1.5 px-2 text-xs bg-slate-50 border border-slate-300 rounded-xl focus:outline-none text-slate-700 font-semibold"
+              className="px-2.5 py-1.5 text-xs font-semibold rounded-xl border border-slate-200 bg-slate-50 focus:bg-white text-slate-700 outline-none cursor-pointer"
             >
-              <option value="All">All Status</option>
-              <option value="Pro">Pro Members</option>
-              <option value="Free">Free Users</option>
+              <option value="All">All Statuses</option>
+              <option value="Pro">Pro Only</option>
+              <option value="Free">Free Only</option>
             </select>
-
-            {/* Export CSV */}
-            <button
-              type="button"
-              onClick={handleExportCSV}
-              className="px-3 py-1.5 bg-slate-100 hover:bg-slate-200 text-slate-700 text-xs font-bold rounded-xl cursor-pointer transition-colors flex items-center gap-1"
-            >
-              <span className="material-symbols-outlined text-[16px]">download</span>
-              <span>CSV</span>
-            </button>
           </div>
         </div>
 
         {/* Table */}
-        <div className="overflow-x-auto">
-          <table className="w-full text-left text-xs">
-            <thead className="bg-slate-50 text-slate-600 font-bold uppercase border-b border-slate-200">
-              <tr>
-                <th className="py-3 px-4">Student Profile</th>
-                <th className="py-3 px-4">Email Address</th>
-                <th className="py-3 px-4">Mobile &amp; WhatsApp</th>
-                <th className="py-3 px-4">Grade</th>
+        <div className="overflow-x-auto border border-slate-100 rounded-2xl">
+          <table className="w-full text-left text-xs border-collapse">
+            <thead>
+              <tr className="bg-slate-50/80 text-slate-500 font-bold uppercase text-[10px] tracking-wider border-b border-slate-100">
+                <th className="py-3 px-4">Student</th>
+                <th className="py-3 px-4">Mobile / WhatsApp</th>
+                <th className="py-3 px-4">Class</th>
+                <th className="py-3 px-4">School / Exam</th>
                 <th className="py-3 px-4">Joined Date</th>
-                <th className="py-3 px-4">Downloads</th>
-                <th className="py-3 px-4">Subscription Status</th>
-                <th className="py-3 px-4">Assigned Plan</th>
-                <th className="py-3 px-4 text-right">Quick Actions</th>
+                <th className="py-3 px-4">Status</th>
+                <th className="py-3 px-4">Pro Plan / Notes</th>
+                <th className="py-3 px-4 text-right">Actions</th>
               </tr>
             </thead>
-            <tbody className="divide-y divide-slate-100 text-slate-700">
+            <tbody className="divide-y divide-slate-100">
               {filteredStudents.length === 0 ? (
                 <tr>
-                  <td colSpan={9} className="py-8 text-center text-slate-400">
-                    No matching students found for this search criteria.
+                  <td colSpan={8} className="py-12 text-center text-slate-400">
+                    <span className="material-symbols-outlined text-[36px] text-slate-300 block mb-1">person_search</span>
+                    No registered students found matching your filters.
                   </td>
                 </tr>
               ) : (
                 filteredStudents.map((u) => {
+                  const joinedDate = u.createdAt
+                    ? new Date(u.createdAt).toLocaleDateString('en-IN', {
+                        day: 'numeric',
+                        month: 'short',
+                        year: 'numeric',
+                      })
+                    : 'Active';
+
                   const hasMobile = Boolean(u.mobileNumber || u.phoneNumber);
                   const displayPhone = u.phoneNumber || (u.countryCode ? `${u.countryCode} ${u.mobileNumber}` : u.mobileNumber);
-                  const joinedDate = u.createdAt ? new Date(u.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'Recently';
 
                   return (
-                    <tr key={u.userId || u.email} className="hover:bg-slate-50/80 transition-colors">
+                    <tr key={u.userId} className="hover:bg-blue-50/30 transition-colors">
+                      {/* Name & Email */}
                       <td className="py-3 px-4">
                         <div className="flex items-center gap-2.5">
-                          {u.photoURL ? (
-                            <img
-                              src={u.photoURL}
-                              alt={u.displayName || 'Student'}
-                              className="w-8 h-8 rounded-full border border-slate-200 object-cover shrink-0"
-                            />
-                          ) : (
-                            <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-700 font-bold flex items-center justify-center text-xs shrink-0">
-                              {(u.displayName || u.email || 'S')[0].toUpperCase()}
-                            </div>
-                          )}
-                          <div>
-                            <div className="font-bold text-slate-900">{u.displayName || 'Registered Student'}</div>
-                            <div className="text-[10px] text-slate-400 font-mono">ID: {u.userId ? u.userId.slice(0, 14) : '—'}...</div>
+                          <img
+                            src={
+                              u.photoURL ||
+                              `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(u.displayName || u.email)}`
+                            }
+                            alt={u.displayName || 'Student'}
+                            className="w-8 h-8 rounded-full border border-blue-100 shrink-0 bg-blue-50 object-cover"
+                          />
+                          <div className="min-w-0">
+                            <span className="font-bold text-[#111c2d] block truncate max-w-[170px]">
+                              {u.displayName || 'Math Student'}
+                            </span>
+                            <span className="text-[11px] text-slate-400 font-mono block truncate max-w-[170px]">
+                              {u.email}
+                            </span>
                           </div>
                         </div>
                       </td>
-                      <td className="py-3 px-4 font-mono text-slate-600">{u.email || '—'}</td>
+
+                      {/* Mobile / WhatsApp Number */}
                       <td className="py-3 px-4 whitespace-nowrap">
                         {hasMobile ? (
                           <div className="flex items-center gap-1.5">
-                            <span className="font-mono text-xs font-semibold text-slate-800">{displayPhone}</span>
+                            <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-800 bg-emerald-50 px-2 py-0.5 rounded-lg border border-emerald-200">
+                              <span className="material-symbols-outlined text-[13px] text-emerald-600">phone</span>
+                              <span>{displayPhone}</span>
+                            </span>
                             {u.whatsappAlerts && (
-                              <span className="material-symbols-outlined text-[15px] text-emerald-600" title="WhatsApp Alerts Enabled">
-                                check_circle
+                              <span
+                                className="w-5 h-5 rounded-full bg-emerald-100 text-emerald-800 flex items-center justify-center shrink-0"
+                                title="WhatsApp alerts enabled"
+                              >
+                                <span className="material-symbols-outlined text-[13px]">chat</span>
                               </span>
                             )}
                           </div>
@@ -352,21 +684,27 @@ export const AdminStudentsTab: React.FC<AdminStudentsTabProps> = ({
                           </span>
                         )}
                       </td>
-                      <td className="py-3 px-4">
-                        <span className="font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded-md">
+
+                      {/* Class */}
+                      <td className="py-3 px-4 whitespace-nowrap">
+                        <span className="font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded-md border border-blue-100">
                           {u.grade || 'Class 9'}
                         </span>
                       </td>
+
+                      {/* School / Target Exam */}
+                      <td className="py-3 px-4 max-w-[140px] truncate text-[11px] text-slate-600">
+                        <span className="block truncate font-medium text-slate-700">{u.schoolName || '—'}</span>
+                        <span className="block truncate text-[10px] text-slate-400">{u.targetExam || ''}</span>
+                      </td>
+
+                      {/* Joined Date */}
                       <td className="py-3 px-4 text-slate-500 whitespace-nowrap text-[11px]">
                         {joinedDate}
                       </td>
+
+                      {/* Status */}
                       <td className="py-3 px-4 whitespace-nowrap">
-                        <span className="inline-flex items-center gap-1 font-mono text-[11px] font-bold text-blue-700 bg-blue-50 px-2.5 py-0.5 rounded-lg border border-blue-100">
-                          <span className="material-symbols-outlined text-[13px]">file_download</span>
-                          <span>{u.downloads?.length || 0}</span>
-                        </span>
-                      </td>
-                      <td className="py-3 px-4">
                         {u.isPro ? (
                           <span className="inline-flex items-center gap-1 bg-amber-100 text-amber-900 text-[10px] font-extrabold px-2.5 py-0.5 rounded-full border border-amber-200">
                             <span className="material-symbols-outlined text-[12px]">workspace_premium</span>
@@ -378,10 +716,15 @@ export const AdminStudentsTab: React.FC<AdminStudentsTabProps> = ({
                           </span>
                         )}
                       </td>
+
+                      {/* Plan / Notes */}
                       <td className="py-3 px-4 max-w-xs truncate text-[11px] font-medium text-slate-600">
-                        {u.proPlan || '—'}
+                        <span className="block truncate text-slate-800">{u.proPlan || '—'}</span>
+                        {u.notes && <span className="block truncate text-[10px] text-slate-400">{u.notes}</span>}
                       </td>
-                      <td className="py-3 px-4 text-right">
+
+                      {/* Actions */}
+                      <td className="py-3 px-4 text-right whitespace-nowrap">
                         <div className="flex items-center justify-end gap-1.5">
                           <button
                             type="button"
@@ -413,6 +756,457 @@ export const AdminStudentsTab: React.FC<AdminStudentsTabProps> = ({
           </table>
         </div>
       </div>
+
+      {/* MODAL 1: ADD SINGLE STUDENT */}
+      {isAddModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/70 backdrop-blur-sm animate-fadeIn">
+          <div className="bg-white w-full max-w-lg rounded-3xl shadow-2xl border border-blue-100 overflow-hidden flex flex-col max-h-[92vh]">
+            <div className="bg-gradient-to-r from-blue-700 to-indigo-800 p-5 sm:p-6 text-white relative shrink-0">
+              <button
+                type="button"
+                onClick={() => setIsAddModalOpen(false)}
+                className="absolute top-4 right-4 w-8 h-8 rounded-full bg-white/20 hover:bg-white/30 text-white flex items-center justify-center cursor-pointer transition-colors"
+              >
+                <span className="material-symbols-outlined text-[18px]">close</span>
+              </button>
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/20 text-white text-xs font-bold mb-2 border border-white/20">
+                <span className="material-symbols-outlined text-[15px]">person_add</span>
+                Admin Registration
+              </div>
+              <h3 className="text-xl font-black">Add New Student to Registry</h3>
+              <p className="text-xs text-blue-100 mt-0.5">
+                Register a single student account directly with custom access and contact details.
+              </p>
+            </div>
+
+            <form onSubmit={handleSubmitSingleStudent} className="p-5 sm:p-6 overflow-y-auto space-y-4">
+              {singleError && (
+                <div className="p-3 bg-red-50 border border-red-200 text-red-700 text-xs rounded-xl flex items-center gap-2">
+                  <span className="material-symbols-outlined text-[18px] shrink-0">error</span>
+                  <span className="font-semibold">{singleError}</span>
+                </div>
+              )}
+
+              {/* Full Name & Email */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-bold text-slate-800 block mb-1">
+                    Student Full Name <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="text"
+                    required
+                    value={singleName}
+                    onChange={(e) => setSingleName(e.target.value)}
+                    placeholder="e.g. Diya Sharma"
+                    className="w-full bg-[#f0f3ff] border border-blue-100 rounded-xl px-3.5 py-2 text-xs font-semibold outline-none focus:bg-white focus:border-blue-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold text-slate-800 block mb-1">
+                    Email Address <span className="text-red-500">*</span>
+                  </label>
+                  <input
+                    type="email"
+                    required
+                    value={singleEmail}
+                    onChange={(e) => setSingleEmail(e.target.value)}
+                    placeholder="student@example.com"
+                    className="w-full bg-[#f0f3ff] border border-blue-100 rounded-xl px-3.5 py-2 text-xs font-semibold outline-none focus:bg-white focus:border-blue-500"
+                  />
+                </div>
+              </div>
+
+              {/* Mobile Number & Grade */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-bold text-slate-800 block mb-1">
+                    Mobile / WhatsApp:
+                  </label>
+                  <div className="flex gap-2">
+                    <input
+                      type="text"
+                      value={singleCountryCode}
+                      onChange={(e) => setSingleCountryCode(e.target.value)}
+                      className="w-16 bg-[#f0f3ff] border border-blue-100 rounded-xl px-2 py-2 text-xs font-bold text-center outline-none"
+                    />
+                    <input
+                      type="tel"
+                      value={singleMobile}
+                      onChange={(e) => setSingleMobile(e.target.value)}
+                      maxLength={10}
+                      placeholder="9876543210"
+                      className="flex-1 bg-[#f0f3ff] border border-blue-100 rounded-xl px-3 py-2 text-xs font-semibold outline-none focus:bg-white focus:border-blue-500"
+                    />
+                  </div>
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold text-slate-800 block mb-1">Class / Grade:</label>
+                  <select
+                    value={singleGrade}
+                    onChange={(e) => setSingleGrade(e.target.value)}
+                    className="w-full bg-[#f0f3ff] border border-blue-100 rounded-xl px-3 py-2 text-xs font-semibold outline-none cursor-pointer"
+                  >
+                    {GRADES.map((g) => (
+                      <option key={g} value={g}>{g}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* School & Target Exam */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3">
+                <div>
+                  <label className="text-xs font-bold text-slate-800 block mb-1">School / Institute:</label>
+                  <input
+                    type="text"
+                    value={singleSchool}
+                    onChange={(e) => setSingleSchool(e.target.value)}
+                    placeholder="e.g. Modern School"
+                    className="w-full bg-[#f0f3ff] border border-blue-100 rounded-xl px-3 py-2 text-xs font-semibold outline-none focus:bg-white focus:border-blue-500"
+                  />
+                </div>
+
+                <div>
+                  <label className="text-xs font-bold text-slate-800 block mb-1">Target Exam:</label>
+                  <select
+                    value={singleTargetExam}
+                    onChange={(e) => setSingleTargetExam(e.target.value)}
+                    className="w-full bg-[#f0f3ff] border border-blue-100 rounded-xl px-3 py-2 text-xs font-semibold outline-none cursor-pointer"
+                  >
+                    {TARGET_EXAMS.map((te) => (
+                      <option key={te} value={te}>{te}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Pro Membership Option */}
+              <div className="p-3.5 bg-amber-50/70 border border-amber-200 rounded-2xl space-y-2.5">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={singleIsPro}
+                    onChange={(e) => setSingleIsPro(e.target.checked)}
+                    className="w-4 h-4 text-amber-600 rounded cursor-pointer"
+                  />
+                  <span className="text-xs font-bold text-amber-950">
+                    Grant Immediate ⭐ Pro Membership Pass
+                  </span>
+                </label>
+
+                {singleIsPro && (
+                  <div>
+                    <label className="text-[11px] font-bold text-amber-900 block mb-1">Select Pro Pass Plan:</label>
+                    <select
+                      value={singleProPlan}
+                      onChange={(e) => setSingleProPlan(e.target.value)}
+                      className="w-full bg-white border border-amber-300 rounded-xl px-3 py-1.5 text-xs font-semibold text-slate-800 outline-none"
+                    >
+                      {AVAILABLE_COURSES.map((c) => (
+                        <option key={c.id} value={c.title}>
+                          {c.title} ({formatPrice(c.price)})
+                        </option>
+                      ))}
+                    </select>
+                  </div>
+                )}
+              </div>
+
+              {/* Notes */}
+              <div>
+                <label className="text-xs font-bold text-slate-800 block mb-1">Admin Notes / Remarks:</label>
+                <input
+                  type="text"
+                  value={singleNotes}
+                  onChange={(e) => setSingleNotes(e.target.value)}
+                  placeholder="e.g. Offline scholarship admission, parent contact verified"
+                  className="w-full bg-[#f0f3ff] border border-blue-100 rounded-xl px-3 py-2 text-xs font-medium outline-none focus:bg-white focus:border-blue-500"
+                />
+              </div>
+
+              {/* WhatsApp alerts */}
+              <label className="flex items-center gap-2 text-xs font-semibold text-slate-700 cursor-pointer">
+                <input
+                  type="checkbox"
+                  checked={singleWhatsappAlerts}
+                  onChange={(e) => setSingleWhatsappAlerts(e.target.checked)}
+                  className="w-4 h-4 text-emerald-600 rounded cursor-pointer"
+                />
+                <span>Enable WhatsApp formula alerts &amp; exam notification reminders</span>
+              </label>
+
+              {/* Footer */}
+              <div className="pt-2 flex items-center justify-end gap-2">
+                <button
+                  type="button"
+                  onClick={() => setIsAddModalOpen(false)}
+                  className="px-4 py-2.5 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="submit"
+                  disabled={isSubmittingSingle}
+                  className="inline-flex items-center gap-2 bg-[#004ac6] hover:bg-blue-700 text-white font-bold text-xs px-5 py-2.5 rounded-xl shadow-md transition-all active:scale-95 cursor-pointer disabled:opacity-60"
+                >
+                  <span className="material-symbols-outlined text-[18px]">
+                    {isSubmittingSingle ? 'sync' : 'person_add'}
+                  </span>
+                  <span>{isSubmittingSingle ? 'Registering...' : 'Register Student'}</span>
+                </button>
+              </div>
+            </form>
+          </div>
+        </div>
+      )}
+
+      {/* MODAL 2: BULK ADD STUDENTS (CSV / TEXT) */}
+      {isBulkModalOpen && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center p-3 sm:p-4 bg-slate-900/70 backdrop-blur-sm animate-fadeIn">
+          <div className="bg-white w-full max-w-3xl rounded-3xl shadow-2xl border border-blue-100 overflow-hidden flex flex-col max-h-[92vh]">
+            <div className="bg-gradient-to-r from-indigo-700 via-blue-700 to-indigo-900 p-5 sm:p-6 text-white relative shrink-0">
+              <button
+                type="button"
+                onClick={() => setIsBulkModalOpen(false)}
+                className="absolute top-4 right-4 w-8 h-8 rounded-full bg-white/20 hover:bg-white/30 text-white flex items-center justify-center cursor-pointer transition-colors"
+              >
+                <span className="material-symbols-outlined text-[18px]">close</span>
+              </button>
+              <div className="inline-flex items-center gap-1.5 px-3 py-1 rounded-full bg-white/20 text-white text-xs font-bold mb-2 border border-white/20">
+                <span className="material-symbols-outlined text-[15px]">upload_file</span>
+                Batch Registration &amp; Enrolment
+              </div>
+              <h3 className="text-xl font-black">Bulk Add Students</h3>
+              <p className="text-xs text-blue-100 mt-0.5">
+                Upload a CSV spreadsheet or paste student rosters from Excel to register multiple students in one click.
+              </p>
+            </div>
+
+            <div className="p-5 sm:p-6 overflow-y-auto space-y-4">
+              {/* Mode Switcher & Download Sample */}
+              <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
+                <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl">
+                  <button
+                    type="button"
+                    onClick={() => setBulkMode('csv')}
+                    className={`px-3 py-1.5 text-xs font-bold rounded-lg cursor-pointer transition-colors ${
+                      bulkMode === 'csv'
+                        ? 'bg-white text-blue-700 shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    CSV File Upload
+                  </button>
+                  <button
+                    type="button"
+                    onClick={() => setBulkMode('paste')}
+                    className={`px-3 py-1.5 text-xs font-bold rounded-lg cursor-pointer transition-colors ${
+                      bulkMode === 'paste'
+                        ? 'bg-white text-blue-700 shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    Copy-Paste Text
+                  </button>
+                </div>
+
+                <button
+                  type="button"
+                  onClick={handleDownloadSampleCSV}
+                  className="inline-flex items-center gap-1 text-xs font-bold text-blue-600 hover:text-blue-800 cursor-pointer self-start sm:self-auto"
+                >
+                  <span className="material-symbols-outlined text-[16px]">download</span>
+                  <span>Download Sample CSV Template</span>
+                </button>
+              </div>
+
+              {/* Mode 1: File Drop Area */}
+              {bulkMode === 'csv' && (
+                <div>
+                  <input
+                    ref={fileInputRef}
+                    type="file"
+                    accept=".csv,.txt"
+                    onChange={handleFileUpload}
+                    className="hidden"
+                  />
+                  <div
+                    onClick={() => fileInputRef.current?.click()}
+                    className="border-2 border-dashed border-blue-200 hover:border-blue-400 bg-blue-50/40 hover:bg-blue-50/70 p-6 rounded-2xl text-center cursor-pointer transition-colors space-y-2"
+                  >
+                    <div className="w-12 h-12 rounded-xl bg-blue-100 text-blue-700 flex items-center justify-center mx-auto">
+                      <span className="material-symbols-outlined text-[28px]">file_upload</span>
+                    </div>
+                    <p className="text-xs font-bold text-slate-800">
+                      Click to choose CSV file or drag and drop here
+                    </p>
+                    <p className="text-[11px] text-slate-500">
+                      Supports standard columns: <span className="font-mono font-semibold">Name, Email, Mobile, Grade, Pro, School</span>
+                    </p>
+                  </div>
+                </div>
+              )}
+
+              {/* Mode 2: Paste Area */}
+              {bulkMode === 'paste' && (
+                <div className="space-y-2">
+                  <label className="text-xs font-bold text-slate-800 block">
+                    Paste Student Data (Comma or Tab separated lines):
+                  </label>
+                  <textarea
+                    rows={4}
+                    value={pastedText}
+                    onChange={(e) => {
+                      setPastedText(e.target.value);
+                      const parsed = parseRawStudentData(e.target.value);
+                      setParsedRows(parsed);
+                    }}
+                    placeholder={`Name, Email, Mobile, Grade, Pro\nAarav Sharma, aarav@example.com, 9876543210, Class 10, Pro\nDiya Patel, diya@example.com, 9812345678, Class 9, Free`}
+                    className="w-full bg-[#f0f3ff] border border-blue-100 rounded-xl p-3 text-xs font-mono outline-none focus:bg-white focus:border-blue-500"
+                  />
+                </div>
+              )}
+
+              {/* Bulk Options */}
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-3 p-3 bg-slate-50 rounded-2xl border border-slate-100">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="checkbox"
+                    checked={bulkMakeAllPro}
+                    onChange={(e) => {
+                      setBulkMakeAllPro(e.target.checked);
+                      if (parsedRows.length > 0) {
+                        setParsedRows((prev) =>
+                          prev.map((r) => ({ ...r, isPro: e.target.checked }))
+                        );
+                      }
+                    }}
+                    className="w-4 h-4 text-amber-600 rounded cursor-pointer"
+                  />
+                  <span className="text-xs font-bold text-slate-800">
+                    Grant all imported students ⭐ Pro Pass
+                  </span>
+                </label>
+
+                <div className="flex items-center gap-2">
+                  <label className="text-xs font-bold text-slate-700 whitespace-nowrap">Default Grade:</label>
+                  <select
+                    value={bulkDefaultGrade}
+                    onChange={(e) => {
+                      setBulkDefaultGrade(e.target.value);
+                      if (parsedRows.length > 0) {
+                        setParsedRows((prev) =>
+                          prev.map((r) => ({ ...r, grade: r.grade || e.target.value }))
+                        );
+                      }
+                    }}
+                    className="flex-1 bg-white border border-slate-200 rounded-xl px-2.5 py-1 text-xs font-semibold outline-none"
+                  >
+                    {GRADES.map((g) => (
+                      <option key={g} value={g}>{g}</option>
+                    ))}
+                  </select>
+                </div>
+              </div>
+
+              {/* Parsed Preview Table */}
+              {parsedRows.length > 0 && (
+                <div className="space-y-2">
+                  <div className="flex items-center justify-between text-xs">
+                    <span className="font-bold text-slate-800">
+                      Parsed Preview ({parsedRows.filter((r) => r.isValid).length} Valid Students, {parsedRows.filter((r) => !r.isValid).length} Errors)
+                    </span>
+                    <button
+                      type="button"
+                      onClick={() => {
+                        setParsedRows([]);
+                        setPastedText('');
+                      }}
+                      className="text-slate-400 hover:text-slate-600 text-[11px] font-semibold"
+                    >
+                      Clear
+                    </button>
+                  </div>
+
+                  <div className="max-h-56 overflow-y-auto border border-slate-200 rounded-xl text-xs">
+                    <table className="w-full text-left border-collapse">
+                      <thead>
+                        <tr className="bg-slate-100 text-slate-600 font-bold text-[10px] uppercase">
+                          <th className="py-2 px-3">Status</th>
+                          <th className="py-2 px-3">Name</th>
+                          <th className="py-2 px-3">Email</th>
+                          <th className="py-2 px-3">Mobile</th>
+                          <th className="py-2 px-3">Grade</th>
+                          <th className="py-2 px-3">Tier</th>
+                        </tr>
+                      </thead>
+                      <tbody className="divide-y divide-slate-100">
+                        {parsedRows.map((row, idx) => (
+                          <tr key={idx} className={row.isValid ? 'bg-white' : 'bg-red-50/50'}>
+                            <td className="py-2 px-3">
+                              {row.isValid ? (
+                                <span className="text-[10px] font-bold text-emerald-700 bg-emerald-100 px-1.5 py-0.5 rounded">
+                                  Valid
+                                </span>
+                              ) : (
+                                <span className="text-[10px] font-bold text-red-700 bg-red-100 px-1.5 py-0.5 rounded">
+                                  {row.error || 'Error'}
+                                </span>
+                              )}
+                            </td>
+                            <td className="py-2 px-3 font-semibold text-slate-800">{row.name}</td>
+                            <td className="py-2 px-3 font-mono text-[11px] text-slate-600">{row.email || '—'}</td>
+                            <td className="py-2 px-3 font-mono text-[11px]">{row.mobile || '—'}</td>
+                            <td className="py-2 px-3 font-bold text-blue-700">{row.grade}</td>
+                            <td className="py-2 px-3">
+                              {row.isPro ? (
+                                <span className="text-[10px] font-bold text-amber-800 bg-amber-100 px-1.5 py-0.5 rounded">
+                                  PRO
+                                </span>
+                              ) : (
+                                <span className="text-[10px] text-slate-500">Free</span>
+                              )}
+                            </td>
+                          </tr>
+                        ))}
+                      </tbody>
+                    </table>
+                  </div>
+                </div>
+              )}
+
+              {/* Action Buttons */}
+              <div className="pt-3 flex items-center justify-end gap-2 border-t border-slate-100">
+                <button
+                  type="button"
+                  onClick={() => setIsBulkModalOpen(false)}
+                  className="px-4 py-2.5 text-xs font-bold text-slate-600 hover:bg-slate-100 rounded-xl cursor-pointer"
+                >
+                  Cancel
+                </button>
+                <button
+                  type="button"
+                  disabled={isImportingBulk || parsedRows.filter((r) => r.isValid).length === 0}
+                  onClick={handleExecuteBulkImport}
+                  className="inline-flex items-center gap-2 bg-[#004ac6] hover:bg-blue-700 text-white font-bold text-xs px-5 py-2.5 rounded-xl shadow-md transition-all active:scale-95 cursor-pointer disabled:opacity-50"
+                >
+                  <span className="material-symbols-outlined text-[18px]">
+                    {isImportingBulk ? 'sync' : 'group_add'}
+                  </span>
+                  <span>
+                    {isImportingBulk
+                      ? 'Importing...'
+                      : `Import ${parsedRows.filter((r) => r.isValid).length} Students`}
+                  </span>
+                </button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 };

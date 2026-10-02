@@ -112,6 +112,7 @@ export interface UserProfile {
   role?: 'admin' | 'superadmin' | 'faculty' | 'student';
   isPro: boolean;
   proPlan?: string;
+  notes?: string;
   bookmarks?: string[];
   downloads?: StudentDownloadItem[];
   preferredCurrency?: string;
@@ -170,13 +171,7 @@ export async function updateUserProfile(
     updatedAt: new Date().toISOString(),
   };
 
-  try {
-    await setDoc(userRef, dataToSave, { merge: true });
-  } catch (error) {
-    handleFirestoreError(error, OperationType.UPDATE, `users/${userId}`);
-  }
-
-  // Update local storage
+  // 1. Update local storage immediately
   try {
     const localUsers = getLocalUsers();
     const existingIndex = localUsers.findIndex((u) => u.userId === userId);
@@ -188,8 +183,24 @@ export async function updateUserProfile(
     saveLocalUsers(localUsers);
   } catch {}
 
-  // Sync to persistent server storage
-  syncUserProfileToServer(dataToSave).catch(() => {});
+  // 2. Sync to persistent server storage immediately (guarantees cross-device persistence)
+  try {
+    await syncUserProfileToServer(dataToSave);
+  } catch (_srvErr) {
+    // Non-blocking
+  }
+
+  // 3. Dispatch global profile updated event so all UI components update instantly
+  try {
+    window.dispatchEvent(new CustomEvent('student-profile-updated', { detail: dataToSave }));
+  } catch {}
+
+  // 4. Sync to Firestore in background without throwing fatal unhandled errors
+  try {
+    await setDoc(userRef, dataToSave, { merge: true });
+  } catch (error) {
+    console.warn('Firestore update sync notice (local & server persistence active):', error);
+  }
 }
 
 // Update Student Mobile Number
@@ -203,7 +214,7 @@ export async function updateUserMobileNumber(
   const userRef = doc(db, 'users', userId);
   const cleanMobile = mobileNumber.trim();
   const cleanCode = countryCode.trim();
-  const fullPhone = `${cleanCode} ${cleanMobile}`.trim();
+  const fullPhone = cleanMobile ? `${cleanCode} ${cleanMobile}`.trim() : '';
   
   const updateData: Partial<UserProfile> = {
     userId,
@@ -219,24 +230,184 @@ export async function updateUserMobileNumber(
     updateData.grade = grade;
   }
 
-  try {
-    await setDoc(userRef, updateData, { merge: true });
-  } catch (error) {
-    handleFirestoreError(error, OperationType.UPDATE, `users/${userId}`);
-  }
-
-  // Update local storage
+  // 1. Update local storage immediately
   try {
     const localUsers = getLocalUsers();
     const existing = localUsers.find((u) => u.userId === userId);
     if (existing) {
       Object.assign(existing, updateData);
       saveLocalUsers(localUsers);
+    } else {
+      localUsers.unshift(updateData as UserProfile);
+      saveLocalUsers(localUsers);
     }
   } catch {}
 
-  // Sync to persistent server storage
-  syncUserProfileToServer(updateData).catch(() => {});
+  // 2. Sync to persistent server storage immediately
+  try {
+    await syncUserProfileToServer(updateData);
+  } catch (_srvErr) {
+    // Non-blocking
+  }
+
+  // 3. Dispatch event so Header, Dashboard & Admin refresh automatically
+  try {
+    window.dispatchEvent(new CustomEvent('student-profile-updated', { detail: updateData }));
+  } catch {}
+
+  // 4. Try Firestore sync without crashing the caller
+  try {
+    await setDoc(userRef, updateData, { merge: true });
+  } catch (error) {
+    console.warn('Firestore mobile sync notice (local & server persistence active):', error);
+  }
+}
+
+// Register Student Manually (Single Student via Admin or Direct Registration)
+export async function registerStudentManually(
+  data: {
+    displayName: string;
+    email: string;
+    mobileNumber?: string;
+    countryCode?: string;
+    grade?: string;
+    targetExam?: string;
+    schoolName?: string;
+    isPro?: boolean;
+    proPlan?: string;
+    notes?: string;
+    whatsappAlerts?: boolean;
+  }
+): Promise<UserProfile> {
+  const cleanEmail = (data.email || '').toLowerCase().trim();
+  const cleanId = `manual_stu_${Date.now()}_${Math.random().toString(36).slice(2, 7)}`;
+  const cleanCode = (data.countryCode || '+91').trim();
+  const cleanMobile = (data.mobileNumber || '').trim();
+  const fullPhone = cleanMobile ? `${cleanCode} ${cleanMobile}`.trim() : '';
+
+  const newStudent: UserProfile = {
+    userId: cleanId,
+    email: cleanEmail,
+    displayName: (data.displayName || '').trim() || cleanEmail.split('@')[0] || 'Student',
+    photoURL: `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(data.displayName || cleanEmail)}`,
+    grade: data.grade || 'Class 9',
+    targetExam: data.targetExam || 'CBSE Board',
+    schoolName: data.schoolName || '',
+    countryCode: cleanCode,
+    mobileNumber: cleanMobile,
+    phoneNumber: fullPhone,
+    whatsappAlerts: data.whatsappAlerts !== undefined ? data.whatsappAlerts : true,
+    isPro: Boolean(data.isPro),
+    proPlan: data.proPlan || (data.isPro ? 'Admin Manual Registration' : ''),
+    notes: data.notes || '',
+    bookmarks: ['res-quad-class10'],
+    downloads: [],
+    createdAt: new Date().toISOString(),
+    updatedAt: new Date().toISOString(),
+  };
+
+  // 1. Record in local storage
+  recordLocalUser(newStudent);
+
+  // 2. Persist to server API
+  try {
+    const res = await fetch('/api/users', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(newStudent),
+    });
+    if (res.ok) {
+      const resJson = await res.json();
+      if (resJson.user) {
+        Object.assign(newStudent, resJson.user);
+      }
+    }
+  } catch (err) {
+    console.warn('Server sync error on manual register:', err);
+  }
+
+  // 3. Try Firestore setDoc in background
+  try {
+    await setDoc(doc(db, 'users', newStudent.userId), newStudent, { merge: true });
+  } catch (err) {
+    console.warn('Firestore setDoc notice (persisted to server):', err);
+  }
+
+  return newStudent;
+}
+
+// Bulk Import Students (CSV or Multi-Row Text)
+export async function bulkImportStudents(
+  studentsList: Partial<UserProfile>[]
+): Promise<{ count: number; users: UserProfile[] }> {
+  const preparedList = studentsList.map((s, idx) => {
+    const cleanEmail = (s.email || '').toLowerCase().trim();
+    const cleanId = s.userId || `bulk_stu_${Date.now()}_${idx}_${Math.random().toString(36).slice(2, 6)}`;
+    const cleanCode = (s.countryCode || '+91').trim();
+    const cleanMobile = (s.mobileNumber || '').trim();
+    const fullPhone = s.phoneNumber || (cleanMobile ? `${cleanCode} ${cleanMobile}`.trim() : '');
+
+    return {
+      userId: cleanId,
+      email: cleanEmail,
+      displayName: (s.displayName || '').trim() || cleanEmail.split('@')[0] || `Student ${idx + 1}`,
+      photoURL: s.photoURL || `https://api.dicebear.com/7.x/bottts/svg?seed=${encodeURIComponent(s.displayName || cleanEmail)}`,
+      grade: s.grade || 'Class 9',
+      targetExam: s.targetExam || 'CBSE Board',
+      schoolName: s.schoolName || '',
+      countryCode: cleanCode,
+      mobileNumber: cleanMobile,
+      phoneNumber: fullPhone,
+      whatsappAlerts: s.whatsappAlerts !== undefined ? s.whatsappAlerts : true,
+      isPro: Boolean(s.isPro),
+      proPlan: s.proPlan || (s.isPro ? 'Admin Bulk Upload' : ''),
+      notes: s.notes || '',
+      bookmarks: ['res-quad-class10'],
+      downloads: [],
+      createdAt: s.createdAt || new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    } as UserProfile;
+  });
+
+  // 1. Record all to local storage
+  const currentLocal = getLocalUsers();
+  const mergedMap = new Map<string, UserProfile>();
+  currentLocal.forEach((u) => {
+    if (u.userId) mergedMap.set(u.userId, u);
+    if (u.email) mergedMap.set(u.email.toLowerCase().trim(), u);
+  });
+  preparedList.forEach((u) => {
+    mergedMap.set(u.userId, u);
+    if (u.email) mergedMap.set(u.email.toLowerCase().trim(), u);
+  });
+  saveLocalUsers(Array.from(mergedMap.values()));
+
+  // 2. Call server /api/users/batch
+  let serverUsers: UserProfile[] = preparedList;
+  let count = preparedList.length;
+  try {
+    const res = await fetch('/api/users/batch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ users: preparedList }),
+    });
+    if (res.ok) {
+      const data = await res.json();
+      if (Array.isArray(data.users)) {
+        serverUsers = data.users;
+        count = data.count || data.users.length;
+      }
+    }
+  } catch (err) {
+    console.warn('Server batch error:', err);
+  }
+
+  // 3. Try Firestore batch/setDoc in background
+  preparedList.forEach((u) => {
+    setDoc(doc(db, 'users', u.userId), u, { merge: true }).catch(() => {});
+  });
+
+  return { count, users: serverUsers };
 }
 
 // Update Student Joined Social State
@@ -251,7 +422,7 @@ export async function updateUserJoinedSocial(
       updatedAt: new Date().toISOString(),
     }, { merge: true });
   } catch (error) {
-    handleFirestoreError(error, OperationType.UPDATE, `users/${userId}`);
+    // Graceful
   }
 }
 
@@ -264,100 +435,89 @@ export async function signInWithGoogle(): Promise<User> {
     // Clear any temporary local dev session when real Google Sign-In succeeds
     clearDemoSession();
 
-    // Check if user document already exists or create new
-    const userRef = doc(db, 'users', user.uid);
-    try {
-      const cleanEmail = (user.email || '').toLowerCase().trim();
-      let assignedRole: 'superadmin' | 'admin' | 'faculty' | undefined;
+    const cleanEmail = (user.email || '').toLowerCase().trim();
+    let assignedRole: 'superadmin' | 'admin' | 'faculty' | undefined;
 
-      // 1. Check if user is in hardcoded initial admin list
-      if (INITIAL_ADMIN_EMAILS.some((e) => e.toLowerCase().trim() === cleanEmail)) {
-        assignedRole = cleanEmail === PRIMARY_SUPERADMIN_EMAIL ? 'superadmin' : 'admin';
-      }
-
-      // 2. Check cached assigned admins
-      const cachedAdmins = getCachedAssignedAdmins();
-      const foundInCache = cachedAdmins.find((a) => a.email.toLowerCase().trim() === cleanEmail);
-      if (foundInCache) {
-        assignedRole = foundInCache.role;
-      }
-
-      // 3. Verify with server API live (guarantees cross-device admin recognition)
-      if (!assignedRole && cleanEmail) {
-        try {
-          const res = await fetch('/api/admin/roles/verify', {
-            method: 'POST',
-            headers: { 'Content-Type': 'application/json' },
-            body: JSON.stringify({ email: cleanEmail }),
-          });
-          if (res.ok) {
-            const data = await res.json();
-            if (data.isAdmin) {
-              assignedRole = data.role || 'admin';
-              const newRec: AdminUserRecord = {
-                email: cleanEmail,
-                role: assignedRole || 'admin',
-                displayName: user.displayName || cleanEmail.split('@')[0],
-                assignedBy: data.admin?.assignedBy || 'Live Check',
-                assignedAt: data.admin?.assignedAt || new Date().toISOString(),
-                notes: data.admin?.notes || '',
-              };
-              saveCachedAssignedAdmins([...cachedAdmins.filter((a) => a.email.toLowerCase().trim() !== cleanEmail), newRec]);
-            }
-          }
-        } catch (_apiErr) {}
-      }
-
-      // 4. Query Firestore admins live if still not determined
-      if (!assignedRole && cleanEmail) {
-        try {
-          const adminDoc = await getDoc(doc(db, 'admins', cleanEmail));
-          if (adminDoc.exists()) {
-            const data = adminDoc.data();
-            assignedRole = data.role || 'admin';
-            saveCachedAssignedAdmins([
-              ...cachedAdmins.filter((a) => a.email.toLowerCase().trim() !== cleanEmail),
-              {
-                email: cleanEmail,
-                role: assignedRole || 'admin',
-                displayName: user.displayName || cleanEmail.split('@')[0],
-                assignedBy: 'Live Check',
-                assignedAt: new Date().toISOString(),
-              },
-            ]);
-          }
-        } catch {}
-      }
-
-      const snap = await getDoc(userRef);
-      if (!snap.exists()) {
-        const initialProfile: UserProfile = {
-          userId: user.uid,
-          email: user.email || '',
-          displayName: user.displayName || 'Math Student',
-          photoURL: user.photoURL || '',
-          grade: 'Class 9',
-          isPro: false,
-          role: assignedRole,
-          bookmarks: ['res-quad-class10'],
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        };
-        await setDoc(userRef, initialProfile, { merge: true });
-        recordLocalUser(initialProfile);
-        syncUserProfileToServer(initialProfile).catch(() => {});
-      } else {
-        const existing = snap.data() as UserProfile;
-        if (assignedRole && existing.role !== assignedRole) {
-          existing.role = assignedRole;
-          await setDoc(userRef, { role: assignedRole, updatedAt: new Date().toISOString() }, { merge: true });
-        }
-        recordLocalUser(existing);
-        syncUserProfileToServer(existing).catch(() => {});
-      }
-    } catch (dbErr) {
-      console.warn('Initial profile sync: ', dbErr);
+    // 1. Check if user is in hardcoded initial admin list
+    if (INITIAL_ADMIN_EMAILS.some((e) => e.toLowerCase().trim() === cleanEmail)) {
+      assignedRole = cleanEmail === PRIMARY_SUPERADMIN_EMAIL ? 'superadmin' : 'admin';
     }
+
+    // 2. Check cached assigned admins
+    const cachedAdmins = getCachedAssignedAdmins();
+    const foundInCache = cachedAdmins.find((a) => a.email.toLowerCase().trim() === cleanEmail);
+    if (foundInCache) {
+      assignedRole = foundInCache.role;
+    }
+
+    // 3. Construct base profile IMMEDIATELY so student registration is never lost
+    const initialProfile: UserProfile = {
+      userId: user.uid,
+      email: user.email || '',
+      displayName: user.displayName || 'Math Student',
+      photoURL: user.photoURL || '',
+      grade: 'Class 9',
+      isPro: false,
+      role: assignedRole,
+      bookmarks: ['res-quad-class10'],
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+
+    // 4. GUARANTEE instant persistence to local storage and server database FIRST!
+    recordLocalUser(initialProfile);
+    try {
+      await syncUserProfileToServer(initialProfile);
+    } catch (_syncErr) {}
+
+    // 5. Verify admin role with server API live (guarantees cross-device admin recognition)
+    if (!assignedRole && cleanEmail) {
+      try {
+        const res = await fetch('/api/admin/roles/verify', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json' },
+          body: JSON.stringify({ email: cleanEmail }),
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.isAdmin) {
+            assignedRole = data.role || 'admin';
+            initialProfile.role = assignedRole;
+            const newRec: AdminUserRecord = {
+              email: cleanEmail,
+              role: assignedRole || 'admin',
+              displayName: user.displayName || cleanEmail.split('@')[0],
+              assignedBy: data.admin?.assignedBy || 'Live Check',
+              assignedAt: data.admin?.assignedAt || new Date().toISOString(),
+              notes: data.admin?.notes || '',
+            };
+            saveCachedAssignedAdmins([...cachedAdmins.filter((a) => a.email.toLowerCase().trim() !== cleanEmail), newRec]);
+            recordLocalUser(initialProfile);
+            syncUserProfileToServer(initialProfile).catch(() => {});
+          }
+        }
+      } catch (_apiErr) {}
+    }
+
+    // 6. Sync to Firestore in background without breaking login if security rules or network fails
+    const userRef = doc(db, 'users', user.uid);
+    getDoc(userRef)
+      .then(async (snap) => {
+        if (!snap.exists()) {
+          await setDoc(userRef, initialProfile, { merge: true });
+        } else {
+          const existing = snap.data() as UserProfile;
+          if (assignedRole && existing.role !== assignedRole) {
+            existing.role = assignedRole;
+            await setDoc(userRef, { role: assignedRole, updatedAt: new Date().toISOString() }, { merge: true });
+          }
+          recordLocalUser(existing);
+          syncUserProfileToServer(existing).catch(() => {});
+        }
+      })
+      .catch((dbErr) => {
+        console.warn('Firestore profile sync notice (local & server persistence active):', dbErr);
+      });
 
     return user;
   } catch (error: any) {
@@ -473,7 +633,8 @@ export function subscribeToUserProfile(
       }
     },
     (_err) => {
-      // Graceful fallback without noisy console warnings
+      // Graceful fallback: notify caller with null so fallback profile is set & synced
+      onProfile(null);
     }
   );
 }

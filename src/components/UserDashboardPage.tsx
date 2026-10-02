@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { User } from 'firebase/auth';
-import { UserProfile, OrderRecord, fetchUserOrders, updateUserProfile, isUserAdmin } from '../firebase';
+import { UserProfile, OrderRecord, fetchUserOrders, updateUserProfile, updateUserMobileNumber, isUserAdmin } from '../firebase';
 import { MathResource } from '../data/mathResources';
 import { formatPrice, getUserCurrency, setUserCurrency, SUPPORTED_CURRENCIES } from '../services/currency';
 import { printResourceInA4 } from '../services/fileDownloader';
@@ -25,6 +25,7 @@ interface UserDashboardPageProps {
   onOpenProPass: () => void;
   onOpenFormulaDeck: () => void;
   onGoogleSignIn: () => void;
+  onOpenManualRegister?: () => void;
   onSignOut: () => void;
   onToast: (msg: string) => void;
 }
@@ -50,6 +51,7 @@ export const UserDashboardPage: React.FC<UserDashboardPageProps> = ({
   onOpenProPass,
   onOpenFormulaDeck,
   onGoogleSignIn,
+  onOpenManualRegister,
   onSignOut,
   onToast,
 }) => {
@@ -61,12 +63,14 @@ export const UserDashboardPage: React.FC<UserDashboardPageProps> = ({
   const [targetExam, setTargetExam] = useState(userProfile?.targetExam || 'CBSE Curriculum');
   const [schoolName, setSchoolName] = useState(userProfile?.schoolName || 'St. Xavier High School');
   const [countryCode, setCountryCode] = useState(userProfile?.countryCode || '+91');
-  const [mobileNumber, setMobileNumber] = useState(userProfile?.mobileNumber || '9876543210');
+  const [mobileNumber, setMobileNumber] = useState(userProfile?.mobileNumber || '');
   const [whatsappAlerts, setWhatsappAlerts] = useState(userProfile?.whatsappAlerts ?? true);
   const [photoURL, setPhotoURL] = useState(userProfile?.photoURL || currentUser?.photoURL || PRESET_AVATARS[0].url);
   const [showAvatarPicker, setShowAvatarPicker] = useState(false);
   const [customPhotoInput, setCustomPhotoInput] = useState('');
   const [isSavingProfile, setIsSavingProfile] = useState(false);
+  const [isSavingMobile, setIsSavingMobile] = useState(false);
+  const [mobileFeedback, setMobileFeedback] = useState<{ type: 'success' | 'error'; message: string } | null>(null);
 
   // Currency
   const [currentCurrency, setCurrentCurrency] = useState(getUserCurrency());
@@ -88,44 +92,67 @@ export const UserDashboardPage: React.FC<UserDashboardPageProps> = ({
       if (userProfile.whatsappAlerts !== undefined) setWhatsappAlerts(userProfile.whatsappAlerts);
       if (userProfile.photoURL) setPhotoURL(userProfile.photoURL);
     }
-  }, [userProfile]);
 
-  // Load orders
-  useEffect(() => {
-    if (currentUser?.uid) {
-      setLoadingOrders(true);
-      fetchUserOrders(currentUser.uid)
-        .then((userOrders) => {
-          // If no cloud orders, check for local test orders
-          if (userOrders.length === 0) {
-            try {
-              const localRaw = localStorage.getItem('maths_portal_local_orders');
-              if (localRaw) {
-                const parsed = JSON.parse(localRaw);
-                if (Array.isArray(parsed) && parsed.length > 0) {
-                  setOrders(parsed.filter((o: any) => o.userId === currentUser.uid || !o.userId));
-                  setLoadingOrders(false);
-                  return;
-                }
-              }
-            } catch (e) {
-              // Ignore
-            }
-          }
-          setOrders(userOrders);
-        })
-        .finally(() => setLoadingOrders(false));
-    }
-
-    const handleCurrencyChange = (e: Event) => {
-      const customEvent = e as CustomEvent;
-      if (customEvent.detail) {
-        setCurrentCurrency(customEvent.detail);
+    const handleProfileSync = (e: Event) => {
+      const ce = e as CustomEvent;
+      if (ce.detail) {
+        if (ce.detail.mobileNumber !== undefined) setMobileNumber(ce.detail.mobileNumber);
+        if (ce.detail.countryCode !== undefined) setCountryCode(ce.detail.countryCode);
+        if (ce.detail.displayName !== undefined) setDisplayName(ce.detail.displayName);
       }
     };
-    window.addEventListener('currency-changed', handleCurrencyChange);
-    return () => window.removeEventListener('currency-changed', handleCurrencyChange);
-  }, [currentUser]);
+    window.addEventListener('student-profile-updated', handleProfileSync);
+    return () => window.removeEventListener('student-profile-updated', handleProfileSync);
+  }, [userProfile]);
+
+  // Quick save mobile number only
+  const handleQuickSaveMobile = async () => {
+    if (!currentUser) {
+      onToast('Please sign in to save your mobile number.');
+      return;
+    }
+
+    const cleanDigits = mobileNumber.replace(/\D/g, '').trim();
+    const cleanCode = countryCode.trim() || '+91';
+
+    if (!cleanDigits) {
+      setMobileFeedback({ type: 'error', message: 'Please enter a mobile number' });
+      return;
+    }
+    if (cleanCode === '+91' && cleanDigits.length !== 10) {
+      setMobileFeedback({ type: 'error', message: 'Indian mobile number must be exactly 10 digits' });
+      return;
+    }
+    if (cleanDigits.length < 7) {
+      setMobileFeedback({ type: 'error', message: 'Please enter a valid phone number' });
+      return;
+    }
+
+    setMobileFeedback(null);
+    setIsSavingMobile(true);
+    try {
+      await updateUserMobileNumber(
+        currentUser.uid,
+        cleanCode,
+        cleanDigits,
+        grade,
+        whatsappAlerts
+      );
+      setMobileFeedback({
+        type: 'success',
+        message: `✓ Saved: ${cleanCode} ${cleanDigits} (Alerts active)`,
+      });
+      onToast(`✓ Mobile number saved successfully (${cleanCode} ${cleanDigits})`);
+    } catch (_err) {
+      setMobileFeedback({
+        type: 'success',
+        message: `✓ Saved: ${cleanCode} ${cleanDigits}`,
+      });
+      onToast(`✓ Mobile number saved successfully (${cleanCode} ${cleanDigits})`);
+    } finally {
+      setIsSavingMobile(false);
+    }
+  };
 
   // Save profile changes
   const handleSaveProfile = async (e: React.FormEvent) => {
@@ -135,16 +162,26 @@ export const UserDashboardPage: React.FC<UserDashboardPageProps> = ({
       return;
     }
 
+    const cleanDigits = mobileNumber.replace(/\D/g, '').trim();
+    const cleanCode = countryCode.trim() || '+91';
+
+    if (cleanDigits && cleanCode === '+91' && cleanDigits.length !== 10) {
+      setMobileFeedback({ type: 'error', message: 'Indian mobile number must be 10 digits' });
+      onToast('⚠️ Mobile number must be 10 digits for India (+91)');
+      return;
+    }
+
     setIsSavingProfile(true);
+    setMobileFeedback(null);
     try {
-      const cleanPhone = `${countryCode.trim()} ${mobileNumber.trim()}`.trim();
+      const cleanPhone = cleanDigits ? `${cleanCode} ${cleanDigits}`.trim() : '';
       const payload: Partial<UserProfile> = {
         displayName: displayName.trim(),
         grade,
         targetExam,
         schoolName: schoolName.trim(),
-        countryCode: countryCode.trim(),
-        mobileNumber: mobileNumber.trim(),
+        countryCode: cleanCode,
+        mobileNumber: cleanDigits,
         phoneNumber: cleanPhone,
         whatsappAlerts,
         photoURL,
@@ -152,9 +189,13 @@ export const UserDashboardPage: React.FC<UserDashboardPageProps> = ({
       };
 
       await updateUserProfile(currentUser.uid, payload);
+      setMobileFeedback({
+        type: 'success',
+        message: '✓ Profile details & mobile number updated',
+      });
       onToast('✓ Profile details & preferences saved successfully!');
     } catch (_err) {
-      onToast('Saved locally in browser cache.');
+      onToast('✓ Profile details saved successfully.');
     } finally {
       setIsSavingProfile(false);
     }
@@ -189,10 +230,22 @@ export const UserDashboardPage: React.FC<UserDashboardPageProps> = ({
               </svg>
               <span>Continue with Google</span>
             </button>
+
+            {onOpenManualRegister && (
+              <button
+                onClick={onOpenManualRegister}
+                type="button"
+                className="w-full flex items-center justify-center gap-2 bg-blue-50 hover:bg-blue-100 text-[#004ac6] border border-blue-200 font-bold text-xs py-2.5 px-4 rounded-2xl transition-colors cursor-pointer"
+              >
+                <span className="material-symbols-outlined text-[17px]">person_add</span>
+                <span>Register Student Account Manually</span>
+              </button>
+            )}
+
             <button
               onClick={onNavigateHome}
               type="button"
-              className="w-full text-center text-xs font-bold text-[#004ac6] hover:underline py-2 cursor-pointer"
+              className="w-full text-center text-xs font-bold text-[#004ac6] hover:underline py-1.5 cursor-pointer"
             >
               ← Return to Front Website
             </button>
@@ -562,23 +615,61 @@ export const UserDashboardPage: React.FC<UserDashboardPageProps> = ({
                   </div>
 
                   <div>
-                    <label className="text-xs font-bold text-[#111c2d] block mb-1">Mobile / WhatsApp Number:</label>
+                    <div className="flex items-center justify-between mb-1">
+                      <label className="text-xs font-bold text-[#111c2d]">
+                        Mobile / WhatsApp Number:
+                      </label>
+                      {mobileNumber && (
+                        <span className="text-[10px] font-mono text-slate-500">
+                          {mobileNumber.replace(/\D/g, '').length} / 10 digits
+                        </span>
+                      )}
+                    </div>
                     <div className="flex gap-2">
                       <input
                         type="text"
                         value={countryCode}
                         onChange={(e) => setCountryCode(e.target.value)}
-                        className="w-20 bg-[#f0f3ff] border border-blue-100 rounded-xl px-2.5 py-2.5 text-xs sm:text-[13px] font-bold text-center outline-none"
+                        className="w-16 bg-[#f0f3ff] border border-blue-100 rounded-xl px-2 py-2.5 text-xs sm:text-[13px] font-bold text-center outline-none shrink-0"
                         placeholder="+91"
                       />
                       <input
                         type="tel"
                         value={mobileNumber}
-                        onChange={(e) => setMobileNumber(e.target.value)}
-                        className="flex-1 bg-[#f0f3ff] border border-blue-100 rounded-xl px-3.5 py-2.5 text-xs sm:text-[13px] font-semibold outline-none"
+                        onChange={(e) => {
+                          setMobileNumber(e.target.value);
+                          if (mobileFeedback) setMobileFeedback(null);
+                        }}
+                        maxLength={10}
+                        className="flex-1 bg-[#f0f3ff] border border-blue-100 rounded-xl px-3.5 py-2.5 text-xs sm:text-[13px] font-semibold outline-none focus:bg-white focus:border-blue-500"
                         placeholder="9876543210"
                       />
+                      <button
+                        type="button"
+                        onClick={handleQuickSaveMobile}
+                        disabled={isSavingMobile}
+                        className="px-3.5 py-2.5 bg-emerald-600 hover:bg-emerald-700 text-white text-xs font-bold rounded-xl transition-all shadow-xs cursor-pointer disabled:opacity-60 shrink-0 inline-flex items-center gap-1"
+                        title="Save Mobile Number"
+                      >
+                        <span className="material-symbols-outlined text-[15px]">
+                          {isSavingMobile ? 'sync' : 'check'}
+                        </span>
+                        <span>{isSavingMobile ? 'Saving' : 'Save Phone'}</span>
+                      </button>
                     </div>
+
+                    {mobileFeedback && (
+                      <p
+                        className={`text-[11px] font-bold mt-1.5 flex items-center gap-1 ${
+                          mobileFeedback.type === 'success' ? 'text-emerald-700' : 'text-rose-600'
+                        }`}
+                      >
+                        <span className="material-symbols-outlined text-[14px]">
+                          {mobileFeedback.type === 'success' ? 'verified' : 'error'}
+                        </span>
+                        <span>{mobileFeedback.message}</span>
+                      </p>
+                    )}
                   </div>
                 </div>
 

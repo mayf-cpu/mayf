@@ -1,1 +1,85 @@
-[]
+[
+  {
+    "userId": "test_aarav_1",
+    "email": "aarav.test@example.com",
+    "displayName": "Aarav Sharma",
+    "photoURL": "",
+    "grade": "Class 10",
+    "mobileNumber": "9876543210",
+    "countryCode": "+91",
+    "phoneNumber": "",
+    "whatsappAlerts": true,
+    "isPro": true,
+    "proPlan": "",
+    "bookmarks": [
+      "res-quad-class10"
+    ],
+    "downloads": [],
+    "createdAt": "2026-10-02T18:17:26.829Z",
+    "updatedAt": "2026-10-02T18:17:26.829Z"
+  },
+  {
+    "userId": "test_uid_123",
+    "email": "test_student@gmail.com",
+    "displayName": "Test Student",
+    "photoURL": "",
+    "grade": "Class 9",
+    "mobileNumber": "9876543210",
+    "countryCode": "+91",
+    "phoneNumber": "",
+    "whatsappAlerts": true,
+    "isPro": false,
+    "proPlan": "",
+    "bookmarks": [
+      "res-quad-class10"
+    ],
+    "downloads": [],
+    "createdAt": "2026-10-02T18:07:41.230Z",
+    "updatedAt": "2026-10-02T18:07:41.230Z"
+  },
+  {
+    "userId": "demo_c2fjagluywdyyxdhbde2qgdtywlslmnvbq",
+    "email": "sachinagrawal16@gmail.com",
+    "displayName": "Sachin Agrawal (Admin)",
+    "photoURL": "https://api.dicebear.com/7.x/bottts/svg?seed=Sachin%20Agrawal%20(Admin)",
+    "grade": "Class 9",
+    "mobileNumber": "",
+    "countryCode": "+91",
+    "phoneNumber": "",
+    "whatsappAlerts": true,
+    "isPro": true,
+    "proPlan": "",
+    "bookmarks": [
+      "res-quad-class10"
+    ],
+    "downloads": [],
+    "createdAt": "2026-10-02T18:00:23.752Z",
+    "updatedAt": "2026-10-02T18:00:24.275Z"
+  },
+  {
+    "userId": "test_diya_2",
+    "email": "diya.test@example.com",
+    "displayName": "Diya Patel",
+    "mobileNumber": "9812345678",
+    "countryCode": "+91",
+    "grade": "Class 9",
+    "isPro": false,
+    "schoolName": "St. Xavier",
+    "phoneNumber": "",
+    "proPlan": "",
+    "updatedAt": "2026-10-02T18:17:33.055Z"
+  },
+  {
+    "userId": "test_kabir_3",
+    "email": "kabir.test@example.com",
+    "displayName": "Kabir Mehta",
+    "mobileNumber": "9890123456",
+    "countryCode": "+91",
+    "grade": "Class 10",
+    "isPro": true,
+    "schoolName": "Modern School",
+    "phoneNumber": "",
+    "proPlan": "",
+    "updatedAt": "2026-10-02T18:17:33.055Z"
+  }
+]
