@@ -54,9 +54,7 @@ service cloud.firestore {
     match /users/{userId} {
       allow get: if isOwner(userId) || isAdmin();
       allow list: if isAdmin();
-      allow create: if (isOwner(userId) && request.resource.data.userId == userId) || isAdmin();
-      allow update: if (isOwner(userId) && request.resource.data.userId == userId) || isAdmin();
-      allow delete: if isOwner(userId) || isAdmin();
+      allow create, update, delete: if isOwner(userId) || isAdmin();
     }
 
     // Orders Collection (Razorpay payments)

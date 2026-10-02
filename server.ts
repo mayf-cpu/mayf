@@ -122,6 +122,7 @@ app.get('/api/health', (req, res) => {
 
 // Persistent Admin Roles Storage & API Endpoints
 const ADMINS_FILE_PATH = path.resolve(__dirname, 'src', 'data', 'assignedAdmins.json');
+const STUDENTS_FILE_PATH = path.resolve(__dirname, 'src', 'data', 'registeredStudents.json');
 
 function getStoredAdmins(): any[] {
   try {
@@ -148,41 +149,89 @@ function saveStoredAdmins(admins: any[]): void {
   }
 }
 
+// Student User Profiles Storage Helpers
+function getStoredStudents(): any[] {
+  try {
+    if (fs.existsSync(STUDENTS_FILE_PATH)) {
+      const content = fs.readFileSync(STUDENTS_FILE_PATH, 'utf-8');
+      const parsed = JSON.parse(content);
+      if (Array.isArray(parsed)) return parsed;
+    }
+  } catch (err) {
+    console.error('Error reading students file:', err);
+  }
+  return [];
+}
+
+function saveStoredStudents(students: any[]): void {
+  try {
+    const dir = path.dirname(STUDENTS_FILE_PATH);
+    if (!fs.existsSync(dir)) {
+      fs.mkdirSync(dir, { recursive: true });
+    }
+    fs.writeFileSync(STUDENTS_FILE_PATH, JSON.stringify(students, null, 2), 'utf-8');
+  } catch (err) {
+    console.error('Error writing students file:', err);
+  }
+}
+
 // 1. Get all assigned admins
 app.get('/api/admin/roles', (req, res) => {
   const admins = getStoredAdmins();
   res.json({ success: true, admins });
 });
 
-// 2. Assign / update admin
+// 2. Assign / update admin (supports single object, array, or { admins: [...] } / { items: [...] })
 app.post('/api/admin/roles', (req, res) => {
-  const newAdmin = req.body;
-  if (!newAdmin || !newAdmin.email) {
-    return res.status(400).json({ success: false, error: 'Email is required' });
+  const body = req.body;
+  const currentAdmins = getStoredAdmins();
+  const adminMap = new Map<string, any>();
+  currentAdmins.forEach((a) => {
+    if (a?.email) adminMap.set(String(a.email).toLowerCase().trim(), a);
+  });
+
+  const itemsToProcess = Array.isArray(body)
+    ? body
+    : Array.isArray(body?.admins)
+    ? body.admins
+    : Array.isArray(body?.items)
+    ? body.items
+    : body && body.email
+    ? [body]
+    : [];
+
+  if (itemsToProcess.length === 0) {
+    return res.status(400).json({ success: false, error: 'Valid admin data with email is required' });
   }
 
-  const cleanEmail = String(newAdmin.email).toLowerCase().trim();
-  const currentAdmins = getStoredAdmins();
-  const filtered = currentAdmins.filter((a) => a.email.toLowerCase().trim() !== cleanEmail);
-  const record = {
-    email: cleanEmail,
-    role: newAdmin.role || 'admin',
-    displayName: newAdmin.displayName || cleanEmail.split('@')[0],
-    assignedBy: newAdmin.assignedBy || 'Admin Management Panel',
-    assignedAt: newAdmin.assignedAt || new Date().toISOString(),
-    notes: newAdmin.notes || '',
-  };
+  let lastProcessedRecord: any = null;
+  itemsToProcess.forEach((item: any) => {
+    if (item && item.email) {
+      const cleanEmail = String(item.email).toLowerCase().trim();
+      const existing = adminMap.get(cleanEmail) || {};
+      const record = {
+        email: cleanEmail,
+        role: item.role || existing.role || 'admin',
+        displayName: item.displayName || existing.displayName || cleanEmail.split('@')[0],
+        assignedBy: item.assignedBy || existing.assignedBy || 'Admin Management Panel',
+        assignedAt: item.assignedAt || existing.assignedAt || new Date().toISOString(),
+        notes: item.notes !== undefined ? item.notes : (existing.notes || ''),
+      };
+      adminMap.set(cleanEmail, record);
+      lastProcessedRecord = record;
+    }
+  });
 
-  filtered.push(record);
-  saveStoredAdmins(filtered);
-  return res.json({ success: true, admin: record, admins: filtered });
+  const updated = Array.from(adminMap.values());
+  saveStoredAdmins(updated);
+  return res.json({ success: true, admin: lastProcessedRecord, admins: updated });
 });
 
 // 3. Delete / revoke admin
 app.delete('/api/admin/roles/:email', (req, res) => {
   const emailToDelete = decodeURIComponent(req.params.email || '').toLowerCase().trim();
   const currentAdmins = getStoredAdmins();
-  const updated = currentAdmins.filter((a) => a.email.toLowerCase().trim() !== emailToDelete);
+  const updated = currentAdmins.filter((a) => String(a.email || '').toLowerCase().trim() !== emailToDelete);
   saveStoredAdmins(updated);
   return res.json({ success: true, admins: updated });
 });
@@ -207,16 +256,187 @@ app.post('/api/admin/roles/verify', (req, res) => {
     return res.json({
       isAdmin: true,
       role: cleanEmail === 'sachinagrawal16@gmail.com' || cleanEmail === 'ntnagrawal146@gmail.com' ? 'superadmin' : 'admin',
+      admin: {
+        email: cleanEmail,
+        role: cleanEmail === 'sachinagrawal16@gmail.com' || cleanEmail === 'ntnagrawal146@gmail.com' ? 'superadmin' : 'admin',
+        displayName: cleanEmail.split('@')[0],
+        assignedBy: 'System Bootstrap',
+        assignedAt: '2025-01-01T00:00:00.000Z',
+      },
     });
   }
 
   const currentAdmins = getStoredAdmins();
-  const found = currentAdmins.find((a) => a.email.toLowerCase().trim() === cleanEmail);
+  const found = currentAdmins.find((a) => String(a.email || '').toLowerCase().trim() === cleanEmail);
   if (found) {
-    return res.json({ isAdmin: true, role: found.role, admin: found });
+    return res.json({ isAdmin: true, role: found.role || 'admin', admin: found });
   }
 
   return res.json({ isAdmin: false });
+});
+
+// -------------------------------------------------------------
+// STUDENT USER REGISTRATION & AUDIT PERSISTENCE API ENDPOINTS
+// -------------------------------------------------------------
+
+// 5. Get all registered students
+app.get('/api/users', (req, res) => {
+  const students = getStoredStudents();
+  return res.json({ success: true, users: students, count: students.length });
+});
+
+// 6. Record / update student profile (called on Google sign-in, phone registration, or profile update)
+app.post('/api/users', (req, res) => {
+  const user = req.body;
+  if (!user || (!user.userId && !user.email)) {
+    return res.status(400).json({ success: false, error: 'userId or email is required' });
+  }
+
+  const students = getStoredStudents();
+  const cleanId = String(user.userId || '').trim();
+  const cleanEmail = String(user.email || '').toLowerCase().trim();
+
+  // Find existing record by userId or email
+  const existingIndex = students.findIndex((s) => {
+    const sId = String(s.userId || '').trim();
+    const sEmail = String(s.email || '').toLowerCase().trim();
+    return (cleanId && sId === cleanId) || (cleanEmail && sEmail === cleanEmail);
+  });
+
+  const now = new Date().toISOString();
+  let updatedRecord: any = null;
+
+  if (existingIndex >= 0) {
+    const existing = students[existingIndex];
+    updatedRecord = {
+      ...existing,
+      ...user,
+      userId: cleanId || existing.userId,
+      email: cleanEmail || existing.email,
+      displayName: user.displayName || existing.displayName || 'Student',
+      photoURL: user.photoURL || existing.photoURL || '',
+      grade: user.grade || existing.grade || 'Class 9',
+      mobileNumber: user.mobileNumber || existing.mobileNumber || '',
+      countryCode: user.countryCode || existing.countryCode || '+91',
+      phoneNumber: user.phoneNumber || existing.phoneNumber || '',
+      whatsappAlerts: user.whatsappAlerts !== undefined ? user.whatsappAlerts : (existing.whatsappAlerts ?? true),
+      isPro: user.isPro !== undefined ? user.isPro : existing.isPro,
+      proPlan: user.proPlan || existing.proPlan || '',
+      updatedAt: now,
+    };
+    students[existingIndex] = updatedRecord;
+  } else {
+    updatedRecord = {
+      userId: cleanId || `user_${Date.now()}`,
+      email: cleanEmail,
+      displayName: user.displayName || 'Student',
+      photoURL: user.photoURL || '',
+      grade: user.grade || 'Class 9',
+      mobileNumber: user.mobileNumber || '',
+      countryCode: user.countryCode || '+91',
+      phoneNumber: user.phoneNumber || '',
+      whatsappAlerts: user.whatsappAlerts !== undefined ? user.whatsappAlerts : true,
+      isPro: Boolean(user.isPro),
+      proPlan: user.proPlan || '',
+      bookmarks: Array.isArray(user.bookmarks) ? user.bookmarks : ['res-quad-class10'],
+      downloads: Array.isArray(user.downloads) ? user.downloads : [],
+      createdAt: user.createdAt || now,
+      updatedAt: now,
+    };
+    students.unshift(updatedRecord);
+  }
+
+  saveStoredStudents(students);
+  return res.json({ success: true, user: updatedRecord, total: students.length });
+});
+
+// 7. Bulk import / merge students
+app.post('/api/users/batch', (req, res) => {
+  const { users } = req.body || {};
+  if (!Array.isArray(users) || users.length === 0) {
+    return res.status(400).json({ success: false, error: 'users array required' });
+  }
+
+  const students = getStoredStudents();
+  const map = new Map<string, any>();
+
+  // Seed with existing
+  students.forEach((s) => {
+    const key = (s.userId || s.email || '').toLowerCase().trim();
+    if (key) map.set(key, s);
+    if (s.email) map.set(s.email.toLowerCase().trim(), s);
+  });
+
+  // Merge new
+  users.forEach((u) => {
+    if (u && (u.userId || u.email)) {
+      const uId = String(u.userId || '').trim();
+      const uEmail = String(u.email || '').toLowerCase().trim();
+      const existing = (uId && map.get(uId)) || (uEmail && map.get(uEmail)) || {};
+      const merged = {
+        ...existing,
+        ...u,
+        userId: uId || existing.userId || `user_${Date.now()}`,
+        email: uEmail || existing.email || '',
+        displayName: u.displayName || existing.displayName || 'Student',
+        grade: u.grade || existing.grade || 'Class 9',
+        mobileNumber: u.mobileNumber || existing.mobileNumber || '',
+        countryCode: u.countryCode || existing.countryCode || '+91',
+        phoneNumber: u.phoneNumber || existing.phoneNumber || '',
+        isPro: u.isPro !== undefined ? u.isPro : existing.isPro,
+        proPlan: u.proPlan || existing.proPlan || '',
+        updatedAt: new Date().toISOString(),
+      };
+      if (uId) map.set(uId, merged);
+      if (uEmail) map.set(uEmail, merged);
+    }
+  });
+
+  const deduplicated: any[] = [];
+  const seenIds = new Set<string>();
+  Array.from(map.values()).forEach((item) => {
+    const idKey = item.userId || item.email;
+    if (idKey && !seenIds.has(idKey)) {
+      seenIds.add(idKey);
+      if (item.email) seenIds.add(item.email.toLowerCase().trim());
+      deduplicated.push(item);
+    }
+  });
+
+  saveStoredStudents(deduplicated);
+  return res.json({ success: true, count: deduplicated.length, users: deduplicated });
+});
+
+// 8. Delete student account
+app.delete('/api/users/:userId', (req, res) => {
+  const idToDelete = decodeURIComponent(req.params.userId || '').trim();
+  const students = getStoredStudents();
+  const updated = students.filter((s) => String(s.userId || '').trim() !== idToDelete && String(s.email || '').toLowerCase().trim() !== idToDelete.toLowerCase());
+  saveStoredStudents(updated);
+  return res.json({ success: true, count: updated.length });
+});
+
+// 9. Toggle Pro status for student
+app.patch('/api/users/:userId/pro', (req, res) => {
+  const id = decodeURIComponent(req.params.userId || '').trim();
+  const { isPro, proPlan } = req.body || {};
+  const students = getStoredStudents();
+  let found = false;
+
+  students.forEach((s) => {
+    if (String(s.userId || '').trim() === id || String(s.email || '').toLowerCase().trim() === id.toLowerCase()) {
+      s.isPro = Boolean(isPro);
+      if (proPlan) s.proPlan = proPlan;
+      s.updatedAt = new Date().toISOString();
+      found = true;
+    }
+  });
+
+  if (found) {
+    saveStoredStudents(students);
+    return res.json({ success: true });
+  }
+  return res.status(404).json({ success: false, error: 'Student not found' });
 });
 
 // Live Domain Redirection Check Endpoint

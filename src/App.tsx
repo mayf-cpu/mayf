@@ -19,6 +19,7 @@ import {
   loadAssignedAdminsFromFirestore,
   checkIsUserAdminLive,
   recordLocalUser,
+  syncUserProfileToServer,
 } from './firebase';
 import { UnauthorizedDomainModal } from './components/UnauthorizedDomainModal';
 import { LoginRequiredModal } from './components/LoginRequiredModal';
@@ -341,12 +342,28 @@ export default function App() {
           if (profile) {
             setUserProfile(profile);
             recordLocalUser(profile);
+            syncUserProfileToServer(profile).catch(() => {});
             if (profile.grade && profile.grade !== selectedClass) {
               setSelectedClass(profile.grade);
             }
             if (profile.bookmarks) {
               setBookmarkedIds(profile.bookmarks);
             }
+          } else {
+            const fallbackProfile: UserProfile = {
+              userId: user.uid,
+              email: user.email || '',
+              displayName: user.displayName || 'Learner',
+              photoURL: user.photoURL || '',
+              grade: selectedClass,
+              isPro: false,
+              bookmarks: ['res-quad-class10'],
+              createdAt: new Date().toISOString(),
+              updatedAt: new Date().toISOString(),
+            };
+            setUserProfile(fallbackProfile);
+            recordLocalUser(fallbackProfile);
+            syncUserProfileToServer(fallbackProfile).catch(() => {});
           }
         });
         return () => unsubscribeProfile();
@@ -355,7 +372,7 @@ export default function App() {
         const localSession = getLocalDemoSession();
         if (localSession) {
           setCurrentUser(localSession);
-          setUserProfile({
+          const demoProfile: UserProfile = {
             userId: localSession.uid,
             email: localSession.email,
             displayName: localSession.displayName,
@@ -364,7 +381,11 @@ export default function App() {
             isPro: true,
             bookmarks: ['res-quad-class10'],
             createdAt: new Date().toISOString(),
-          });
+            updatedAt: new Date().toISOString(),
+          };
+          setUserProfile(demoProfile);
+          recordLocalUser(demoProfile);
+          syncUserProfileToServer(demoProfile).catch(() => {});
         } else {
           setCurrentUser(null);
           setUserProfile(null);
@@ -755,7 +776,7 @@ export default function App() {
   const handleQuickDemoSignIn = (email: string, name: string) => {
     const mockUser = createDemoStudentSession(email, name, selectedClass);
     setCurrentUser(mockUser);
-    setUserProfile({
+    const demoProf: UserProfile = {
       userId: mockUser.uid,
       email: mockUser.email,
       displayName: mockUser.displayName,
@@ -764,7 +785,11 @@ export default function App() {
       isPro: true,
       bookmarks: ['res-quad-class10'],
       createdAt: new Date().toISOString(),
-    });
+      updatedAt: new Date().toISOString(),
+    };
+    setUserProfile(demoProf);
+    recordLocalUser(demoProf);
+    syncUserProfileToServer(demoProf).catch(() => {});
     setShowDomainModal(false);
     setIsLoginRequiredOpen(false);
     showToast(`Signed in as ${mockUser.displayName}! All features active.`);

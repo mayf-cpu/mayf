@@ -41,10 +41,14 @@ export const AdminStudentsTab: React.FC<AdminStudentsTabProps> = ({
   const displayUsers: UserProfile[] = users;
 
   const filteredStudents = displayUsers.filter((u) => {
+    const q = search.toLowerCase().trim();
     const matchSearch =
-      (u.displayName || '').toLowerCase().includes(search.toLowerCase()) ||
-      (u.email || '').toLowerCase().includes(search.toLowerCase()) ||
-      (u.userId || '').toLowerCase().includes(search.toLowerCase());
+      !q ||
+      (u.displayName || '').toLowerCase().includes(q) ||
+      (u.email || '').toLowerCase().includes(q) ||
+      (u.userId || '').toLowerCase().includes(q) ||
+      (u.mobileNumber || '').includes(q) ||
+      (u.phoneNumber || '').includes(q);
     const matchGrade = gradeFilter === 'All' || u.grade === gradeFilter;
     const matchStatus =
       statusFilter === 'All' || (statusFilter === 'Pro' ? u.isPro : !u.isPro);
@@ -94,15 +98,17 @@ export const AdminStudentsTab: React.FC<AdminStudentsTabProps> = ({
   };
 
   const handleExportCSV = () => {
-    const headers = ['User ID', 'Full Name', 'Email', 'Grade', 'Pro Status', 'Subscribed Plan', 'Joined Date'];
+    const headers = ['User ID', 'Full Name', 'Email', 'Mobile Number', 'WhatsApp Alerts', 'Grade', 'Pro Status', 'Subscribed Plan', 'Registered Date'];
     const rows = filteredStudents.map((u) => [
       `"${u.userId}"`,
       `"${u.displayName || 'Learner'}"`,
       `"${u.email}"`,
+      `"${u.phoneNumber || u.mobileNumber || 'N/A'}"`,
+      u.whatsappAlerts ? 'Yes' : 'No',
       `"${u.grade || 'Class 9'}"`,
       u.isPro ? 'PRO' : 'FREE',
       `"${u.proPlan || 'N/A'}"`,
-      `"${u.createdAt || new Date().toISOString()}"`,
+      `"${u.createdAt || u.mobileRegisteredAt || new Date().toISOString()}"`,
     ]);
     const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...rows.map((r) => r.join(','))].join('\n');
     const encodedUri = encodeURI(csvContent);
@@ -223,7 +229,7 @@ export const AdminStudentsTab: React.FC<AdminStudentsTabProps> = ({
                 {displayUsers.length} Students
               </span>
             </h4>
-            <p className="text-xs text-slate-500">Live profiles from Firebase Firestore database collection <code className="text-blue-600 font-mono">/users</code></p>
+            <p className="text-xs text-slate-500">Live profiles from Firebase Firestore database collection <code className="text-blue-600 font-mono">/users</code> &amp; persistent student registration store</p>
           </div>
 
           <div className="flex flex-wrap items-center gap-2">
@@ -233,8 +239,8 @@ export const AdminStudentsTab: React.FC<AdminStudentsTabProps> = ({
                 type="text"
                 value={search}
                 onChange={(e) => setSearch(e.target.value)}
-                placeholder="Search name, email, UID..."
-                className="pl-8 pr-3 py-1.5 text-xs bg-slate-50 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 w-44"
+                placeholder="Search name, email, mobile..."
+                className="pl-8 pr-3 py-1.5 text-xs bg-slate-50 border border-slate-300 rounded-xl focus:outline-none focus:ring-2 focus:ring-blue-500 w-48"
               />
               <span className="material-symbols-outlined absolute left-2 top-2 text-[16px] text-slate-400">
                 search
@@ -286,7 +292,9 @@ export const AdminStudentsTab: React.FC<AdminStudentsTabProps> = ({
               <tr>
                 <th className="py-3 px-4">Student Profile</th>
                 <th className="py-3 px-4">Email Address</th>
+                <th className="py-3 px-4">Mobile &amp; WhatsApp</th>
                 <th className="py-3 px-4">Grade</th>
+                <th className="py-3 px-4">Joined Date</th>
                 <th className="py-3 px-4">Downloads</th>
                 <th className="py-3 px-4">Subscription Status</th>
                 <th className="py-3 px-4">Assigned Plan</th>
@@ -296,77 +304,110 @@ export const AdminStudentsTab: React.FC<AdminStudentsTabProps> = ({
             <tbody className="divide-y divide-slate-100 text-slate-700">
               {filteredStudents.length === 0 ? (
                 <tr>
-                  <td colSpan={7} className="py-8 text-center text-slate-400">
+                  <td colSpan={9} className="py-8 text-center text-slate-400">
                     No matching students found for this search criteria.
                   </td>
                 </tr>
               ) : (
-                filteredStudents.map((u) => (
-                  <tr key={u.userId} className="hover:bg-slate-50/80 transition-colors">
-                    <td className="py-3 px-4">
-                      <div className="flex items-center gap-2.5">
-                        <div className="w-7 h-7 rounded-full bg-blue-100 text-blue-700 font-bold flex items-center justify-center text-xs shrink-0">
-                          {(u.displayName || u.email || 'S')[0].toUpperCase()}
-                        </div>
-                        <div>
-                          <div className="font-bold text-slate-900">{u.displayName || 'Registered Student'}</div>
-                          <div className="text-[10px] text-slate-400 font-mono">ID: {u.userId.slice(0, 14)}...</div>
-                        </div>
-                      </div>
-                    </td>
-                    <td className="py-3 px-4 font-mono text-slate-600">{u.email}</td>
-                    <td className="py-3 px-4">
-                      <span className="font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded-md">
-                        {u.grade || 'Class 9'}
-                      </span>
-                    </td>
-                    <td className="py-3 px-4 whitespace-nowrap">
-                      <span className="inline-flex items-center gap-1 font-mono text-[11px] font-bold text-blue-700 bg-blue-50 px-2.5 py-0.5 rounded-lg border border-blue-100">
-                        <span className="material-symbols-outlined text-[13px]">file_download</span>
-                        <span>{u.downloads?.length || 0}</span>
-                      </span>
-                    </td>
-                    <td className="py-3 px-4">
-                      {u.isPro ? (
-                        <span className="inline-flex items-center gap-1 bg-amber-100 text-amber-900 text-[10px] font-extrabold px-2.5 py-0.5 rounded-full border border-amber-200">
-                          <span className="material-symbols-outlined text-[12px]">workspace_premium</span>
-                          <span>PRO ACTIVE</span>
-                        </span>
-                      ) : (
-                        <span className="inline-flex items-center gap-1 bg-slate-100 text-slate-600 text-[10px] font-semibold px-2 py-0.5 rounded-full">
-                          <span>Free Learner</span>
-                        </span>
-                      )}
-                    </td>
-                    <td className="py-3 px-4 max-w-xs truncate text-[11px] font-medium text-slate-600">
-                      {u.proPlan || '—'}
-                    </td>
-                    <td className="py-3 px-4 text-right">
-                      <div className="flex items-center justify-end gap-1.5">
-                        <button
-                          type="button"
-                          onClick={() => handleTogglePro(u)}
-                          className={`px-2.5 py-1 text-[11px] font-bold rounded-lg cursor-pointer transition-colors ${
-                            u.isPro
-                              ? 'bg-slate-100 text-slate-600 hover:bg-slate-200'
-                              : 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200'
-                          }`}
-                        >
-                          {u.isPro ? 'Revoke Pro' : 'Make Pro'}
-                        </button>
+                filteredStudents.map((u) => {
+                  const hasMobile = Boolean(u.mobileNumber || u.phoneNumber);
+                  const displayPhone = u.phoneNumber || (u.countryCode ? `${u.countryCode} ${u.mobileNumber}` : u.mobileNumber);
+                  const joinedDate = u.createdAt ? new Date(u.createdAt).toLocaleDateString('en-US', { month: 'short', day: 'numeric', year: 'numeric' }) : 'Recently';
 
-                        <button
-                          type="button"
-                          onClick={() => handleDeleteUser(u.userId, u.displayName || u.email)}
-                          className="p-1 text-slate-400 hover:text-rose-600 cursor-pointer transition-colors"
-                          title="Delete Student"
-                        >
-                          <span className="material-symbols-outlined text-[16px]">delete</span>
-                        </button>
-                      </div>
-                    </td>
-                  </tr>
-                ))
+                  return (
+                    <tr key={u.userId || u.email} className="hover:bg-slate-50/80 transition-colors">
+                      <td className="py-3 px-4">
+                        <div className="flex items-center gap-2.5">
+                          {u.photoURL ? (
+                            <img
+                              src={u.photoURL}
+                              alt={u.displayName || 'Student'}
+                              className="w-8 h-8 rounded-full border border-slate-200 object-cover shrink-0"
+                            />
+                          ) : (
+                            <div className="w-8 h-8 rounded-full bg-blue-100 text-blue-700 font-bold flex items-center justify-center text-xs shrink-0">
+                              {(u.displayName || u.email || 'S')[0].toUpperCase()}
+                            </div>
+                          )}
+                          <div>
+                            <div className="font-bold text-slate-900">{u.displayName || 'Registered Student'}</div>
+                            <div className="text-[10px] text-slate-400 font-mono">ID: {u.userId ? u.userId.slice(0, 14) : '—'}...</div>
+                          </div>
+                        </div>
+                      </td>
+                      <td className="py-3 px-4 font-mono text-slate-600">{u.email || '—'}</td>
+                      <td className="py-3 px-4 whitespace-nowrap">
+                        {hasMobile ? (
+                          <div className="flex items-center gap-1.5">
+                            <span className="font-mono text-xs font-semibold text-slate-800">{displayPhone}</span>
+                            {u.whatsappAlerts && (
+                              <span className="material-symbols-outlined text-[15px] text-emerald-600" title="WhatsApp Alerts Enabled">
+                                check_circle
+                              </span>
+                            )}
+                          </div>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 text-[10px] text-slate-400 bg-slate-100 px-2 py-0.5 rounded-md">
+                            <span>Pending Phone</span>
+                          </span>
+                        )}
+                      </td>
+                      <td className="py-3 px-4">
+                        <span className="font-bold text-blue-700 bg-blue-50 px-2 py-0.5 rounded-md">
+                          {u.grade || 'Class 9'}
+                        </span>
+                      </td>
+                      <td className="py-3 px-4 text-slate-500 whitespace-nowrap text-[11px]">
+                        {joinedDate}
+                      </td>
+                      <td className="py-3 px-4 whitespace-nowrap">
+                        <span className="inline-flex items-center gap-1 font-mono text-[11px] font-bold text-blue-700 bg-blue-50 px-2.5 py-0.5 rounded-lg border border-blue-100">
+                          <span className="material-symbols-outlined text-[13px]">file_download</span>
+                          <span>{u.downloads?.length || 0}</span>
+                        </span>
+                      </td>
+                      <td className="py-3 px-4">
+                        {u.isPro ? (
+                          <span className="inline-flex items-center gap-1 bg-amber-100 text-amber-900 text-[10px] font-extrabold px-2.5 py-0.5 rounded-full border border-amber-200">
+                            <span className="material-symbols-outlined text-[12px]">workspace_premium</span>
+                            <span>PRO ACTIVE</span>
+                          </span>
+                        ) : (
+                          <span className="inline-flex items-center gap-1 bg-slate-100 text-slate-600 text-[10px] font-semibold px-2 py-0.5 rounded-full">
+                            <span>Free Learner</span>
+                          </span>
+                        )}
+                      </td>
+                      <td className="py-3 px-4 max-w-xs truncate text-[11px] font-medium text-slate-600">
+                        {u.proPlan || '—'}
+                      </td>
+                      <td className="py-3 px-4 text-right">
+                        <div className="flex items-center justify-end gap-1.5">
+                          <button
+                            type="button"
+                            onClick={() => handleTogglePro(u)}
+                            className={`px-2.5 py-1 text-[11px] font-bold rounded-lg cursor-pointer transition-colors ${
+                              u.isPro
+                                ? 'bg-slate-100 text-slate-600 hover:bg-slate-200'
+                                : 'bg-emerald-100 text-emerald-800 hover:bg-emerald-200'
+                            }`}
+                          >
+                            {u.isPro ? 'Revoke Pro' : 'Make Pro'}
+                          </button>
+
+                          <button
+                            type="button"
+                            onClick={() => handleDeleteUser(u.userId, u.displayName || u.email)}
+                            className="p-1 text-slate-400 hover:text-rose-600 cursor-pointer transition-colors"
+                            title="Delete Student"
+                          >
+                            <span className="material-symbols-outlined text-[16px]">delete</span>
+                          </button>
+                        </div>
+                      </td>
+                    </tr>
+                  );
+                })
               )}
             </tbody>
           </table>

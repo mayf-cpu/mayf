@@ -46,5 +46,13 @@
     "assignedBy": "System Provisioning",
     "assignedAt": "2025-01-01T00:00:00.000Z",
     "notes": "System Administrator Account"
+  },
+  {
+    "email": "test_admin@example.com",
+    "role": "admin",
+    "displayName": "Test Admin",
+    "assignedBy": "Admin Management Panel",
+    "assignedAt": "2026-10-02T17:46:19.829Z",
+    "notes": ""
   }
 ]

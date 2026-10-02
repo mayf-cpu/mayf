@@ -142,20 +142,54 @@ export interface StudentDownloadRecord extends StudentDownloadItem {
   device?: string;
 }
 
+// Synchronize Student Profile with Persistent Server Storage
+export async function syncUserProfileToServer(
+  profile: Partial<UserProfile> & { userId?: string; email?: string }
+): Promise<void> {
+  if (!profile || (!profile.userId && !profile.email)) return;
+  try {
+    await fetch('/api/users', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(profile),
+    });
+  } catch (_e) {
+    // Non-blocking server sync
+  }
+}
+
 // Update complete User Profile details
 export async function updateUserProfile(
   userId: string,
   profileData: Partial<UserProfile>
 ): Promise<void> {
   const userRef = doc(db, 'users', userId);
+  const dataToSave = {
+    ...profileData,
+    userId,
+    updatedAt: new Date().toISOString(),
+  };
+
   try {
-    await setDoc(userRef, {
-      ...profileData,
-      updatedAt: new Date().toISOString(),
-    }, { merge: true });
+    await setDoc(userRef, dataToSave, { merge: true });
   } catch (error) {
     handleFirestoreError(error, OperationType.UPDATE, `users/${userId}`);
   }
+
+  // Update local storage
+  try {
+    const localUsers = getLocalUsers();
+    const existingIndex = localUsers.findIndex((u) => u.userId === userId);
+    if (existingIndex >= 0) {
+      localUsers[existingIndex] = { ...localUsers[existingIndex], ...dataToSave } as UserProfile;
+    } else {
+      localUsers.unshift(dataToSave as UserProfile);
+    }
+    saveLocalUsers(localUsers);
+  } catch {}
+
+  // Sync to persistent server storage
+  syncUserProfileToServer(dataToSave).catch(() => {});
 }
 
 // Update Student Mobile Number
@@ -172,6 +206,7 @@ export async function updateUserMobileNumber(
   const fullPhone = `${cleanCode} ${cleanMobile}`.trim();
   
   const updateData: Partial<UserProfile> = {
+    userId,
     countryCode: cleanCode,
     mobileNumber: cleanMobile,
     phoneNumber: fullPhone,
@@ -185,10 +220,23 @@ export async function updateUserMobileNumber(
   }
 
   try {
-    await updateDoc(userRef, updateData);
+    await setDoc(userRef, updateData, { merge: true });
   } catch (error) {
     handleFirestoreError(error, OperationType.UPDATE, `users/${userId}`);
   }
+
+  // Update local storage
+  try {
+    const localUsers = getLocalUsers();
+    const existing = localUsers.find((u) => u.userId === userId);
+    if (existing) {
+      Object.assign(existing, updateData);
+      saveLocalUsers(localUsers);
+    }
+  } catch {}
+
+  // Sync to persistent server storage
+  syncUserProfileToServer(updateData).catch(() => {});
 }
 
 // Update Student Joined Social State
@@ -198,10 +246,10 @@ export async function updateUserJoinedSocial(
 ): Promise<void> {
   const userRef = doc(db, 'users', userId);
   try {
-    await updateDoc(userRef, {
+    await setDoc(userRef, {
       hasJoinedSocial: joined,
       updatedAt: new Date().toISOString(),
-    });
+    }, { merge: true });
   } catch (error) {
     handleFirestoreError(error, OperationType.UPDATE, `users/${userId}`);
   }
@@ -222,18 +270,46 @@ export async function signInWithGoogle(): Promise<User> {
       const cleanEmail = (user.email || '').toLowerCase().trim();
       let assignedRole: 'superadmin' | 'admin' | 'faculty' | undefined;
 
-      // Check if user is in hardcoded list
+      // 1. Check if user is in hardcoded initial admin list
       if (INITIAL_ADMIN_EMAILS.some((e) => e.toLowerCase().trim() === cleanEmail)) {
         assignedRole = cleanEmail === PRIMARY_SUPERADMIN_EMAIL ? 'superadmin' : 'admin';
       }
 
-      // Check cached assigned admins
+      // 2. Check cached assigned admins
       const cachedAdmins = getCachedAssignedAdmins();
       const foundInCache = cachedAdmins.find((a) => a.email.toLowerCase().trim() === cleanEmail);
       if (foundInCache) {
         assignedRole = foundInCache.role;
-      } else if (cleanEmail) {
-        // Query Firestore admins live
+      }
+
+      // 3. Verify with server API live (guarantees cross-device admin recognition)
+      if (!assignedRole && cleanEmail) {
+        try {
+          const res = await fetch('/api/admin/roles/verify', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json' },
+            body: JSON.stringify({ email: cleanEmail }),
+          });
+          if (res.ok) {
+            const data = await res.json();
+            if (data.isAdmin) {
+              assignedRole = data.role || 'admin';
+              const newRec: AdminUserRecord = {
+                email: cleanEmail,
+                role: assignedRole || 'admin',
+                displayName: user.displayName || cleanEmail.split('@')[0],
+                assignedBy: data.admin?.assignedBy || 'Live Check',
+                assignedAt: data.admin?.assignedAt || new Date().toISOString(),
+                notes: data.admin?.notes || '',
+              };
+              saveCachedAssignedAdmins([...cachedAdmins.filter((a) => a.email.toLowerCase().trim() !== cleanEmail), newRec]);
+            }
+          }
+        } catch (_apiErr) {}
+      }
+
+      // 4. Query Firestore admins live if still not determined
+      if (!assignedRole && cleanEmail) {
         try {
           const adminDoc = await getDoc(doc(db, 'admins', cleanEmail));
           if (adminDoc.exists()) {
@@ -267,15 +343,17 @@ export async function signInWithGoogle(): Promise<User> {
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
         };
-        await setDoc(userRef, initialProfile);
+        await setDoc(userRef, initialProfile, { merge: true });
         recordLocalUser(initialProfile);
+        syncUserProfileToServer(initialProfile).catch(() => {});
       } else {
         const existing = snap.data() as UserProfile;
         if (assignedRole && existing.role !== assignedRole) {
           existing.role = assignedRole;
-          await updateDoc(userRef, { role: assignedRole, updatedAt: new Date().toISOString() });
+          await setDoc(userRef, { role: assignedRole, updatedAt: new Date().toISOString() }, { merge: true });
         }
         recordLocalUser(existing);
+        syncUserProfileToServer(existing).catch(() => {});
       }
     } catch (dbErr) {
       console.warn('Initial profile sync: ', dbErr);
@@ -837,7 +915,26 @@ export function recordLocalUser(profile: UserProfile): void {
 export async function fetchAllUsers(): Promise<UserProfile[]> {
   const uMap = new Map<string, UserProfile>();
 
-  // 1. Fetch from Firestore users collection
+  // 1. Fetch from persistent server API /api/users (catches registrations from all devices/browsers)
+  try {
+    const res = await fetch('/api/users');
+    if (res.ok) {
+      const data = await res.json();
+      if (Array.isArray(data.users)) {
+        data.users.forEach((u: UserProfile) => {
+          if (u && (u.userId || u.email)) {
+            const key = (u.userId || u.email || '').trim();
+            uMap.set(key, u);
+            if (u.email) uMap.set(u.email.toLowerCase().trim(), u);
+          }
+        });
+      }
+    }
+  } catch (_srvErr) {
+    // Non-blocking fallback
+  }
+
+  // 2. Fetch from Firestore users collection
   try {
     const usersRef = collection(db, 'users');
     const q = query(usersRef, limit(200));
@@ -845,27 +942,36 @@ export async function fetchAllUsers(): Promise<UserProfile[]> {
     snap.docs.forEach((d) => {
       const u = d.data() as UserProfile;
       if (u && (u.userId || u.email)) {
-        uMap.set(u.userId || u.email, u);
+        const key = (u.userId || u.email || '').trim();
+        const existing = (u.userId && uMap.get(u.userId)) || (u.email && uMap.get(u.email.toLowerCase().trim()));
+        const mergedProfile = { ...existing, ...u };
+        uMap.set(key, mergedProfile);
+        if (u.email) uMap.set(u.email.toLowerCase().trim(), mergedProfile);
       }
     });
   } catch (_err) {
     // Graceful fallback
   }
 
-  // 2. Merge local storage users
+  // 3. Merge local storage users
   const localUsers = getLocalUsers();
   localUsers.forEach((u) => {
-    if (u && (u.userId || u.email) && !uMap.has(u.userId || u.email)) {
-      uMap.set(u.userId || u.email, u);
+    if (u && (u.userId || u.email)) {
+      const key = (u.userId || u.email || '').trim();
+      const existing = (u.userId && uMap.get(u.userId)) || (u.email && uMap.get(u.email.toLowerCase().trim()));
+      const mergedProfile = { ...existing, ...u };
+      uMap.set(key, mergedProfile);
+      if (u.email) uMap.set(u.email.toLowerCase().trim(), mergedProfile);
     }
   });
 
-  // 3. Reconcile students who have completed downloads
+  // 4. Reconcile students who have completed downloads
   try {
     const dlRecords = await fetchAllStudentDownloadRecords();
     dlRecords.forEach((dl) => {
       const key = dl.userId || dl.userEmail;
-      if (key && !uMap.has(key) && !uMap.has(dl.userId) && !uMap.has(dl.userEmail)) {
+      const existing = (dl.userId && uMap.get(dl.userId)) || (dl.userEmail && uMap.get(dl.userEmail.toLowerCase().trim()));
+      if (!existing && key) {
         const studentProfile: UserProfile = {
           userId: dl.userId,
           email: dl.userEmail || '',
@@ -874,17 +980,86 @@ export async function fetchAllUsers(): Promise<UserProfile[]> {
           grade: dl.grade || 'Class 9',
           isPro: dl.tier === 'pro',
           bookmarks: [],
+          downloads: [{
+            id: dl.id,
+            resourceId: dl.resourceId,
+            title: dl.title,
+            size: dl.size,
+            downloadedAt: dl.downloadedAt,
+          }],
           createdAt: dl.downloadedAt || new Date().toISOString(),
           updatedAt: dl.downloadedAt || new Date().toISOString(),
         };
         uMap.set(dl.userId, studentProfile);
+        if (dl.userEmail) uMap.set(dl.userEmail.toLowerCase().trim(), studentProfile);
+      } else if (existing && dl.id) {
+        // Ensure download is tracked in profile
+        if (!Array.isArray(existing.downloads)) existing.downloads = [];
+        if (!existing.downloads.some((d) => d.id === dl.id || d.title === dl.title)) {
+          existing.downloads.push({
+            id: dl.id,
+            resourceId: dl.resourceId,
+            title: dl.title,
+            size: dl.size,
+            downloadedAt: dl.downloadedAt,
+          });
+        }
       }
     });
   } catch (_dlErr) {}
 
-  const merged = Array.from(uMap.values());
+  // 5. Reconcile students from orders collection
+  try {
+    const orders = await fetchAllOrders();
+    orders.forEach((o) => {
+      if (o.userId || o.userEmail) {
+        const existing = (o.userId && uMap.get(o.userId)) || (o.userEmail && uMap.get(o.userEmail.toLowerCase().trim()));
+        if (!existing) {
+          const studentProfile: UserProfile = {
+            userId: o.userId || `user_${Date.now()}`,
+            email: o.userEmail || '',
+            displayName: o.userEmail ? o.userEmail.split('@')[0] : 'Pro Member',
+            photoURL: '',
+            grade: 'Class 10',
+            isPro: true,
+            proPlan: o.plan,
+            bookmarks: [],
+            createdAt: o.createdAt || new Date().toISOString(),
+            updatedAt: o.createdAt || new Date().toISOString(),
+          };
+          uMap.set(studentProfile.userId, studentProfile);
+          if (studentProfile.email) uMap.set(studentProfile.email.toLowerCase().trim(), studentProfile);
+        } else {
+          existing.isPro = true;
+          if (o.plan) existing.proPlan = o.plan;
+        }
+      }
+    });
+  } catch (_ordersErr) {}
+
+  // De-duplicate into final list
+  const seenIds = new Set<string>();
+  const merged: UserProfile[] = [];
+  Array.from(uMap.values()).forEach((u) => {
+    const idKey = u.userId || u.email;
+    if (idKey && !seenIds.has(idKey)) {
+      seenIds.add(idKey);
+      if (u.email) seenIds.add(u.email.toLowerCase().trim());
+      merged.push(u);
+    }
+  });
+
+  // Sort by newest registered first
+  merged.sort((a, b) => new Date(b.createdAt || 0).getTime() - new Date(a.createdAt || 0).getTime());
+
   if (merged.length > 0) {
     saveLocalUsers(merged);
+    // Sync any newly discovered profiles back to server storage in background
+    fetch('/api/users/batch', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ users: merged }),
+    }).catch(() => {});
   }
   return merged;
 }
@@ -974,28 +1149,68 @@ export async function loadPageTextSettingsFromFirestore(): Promise<any | null> {
 export async function grantProStatusManually(userId: string, plan: string = 'Admin All-Access Pass'): Promise<void> {
   try {
     const userRef = doc(db, 'users', userId);
-    await updateDoc(userRef, {
+    await setDoc(userRef, {
       isPro: true,
       proPlan: plan,
       updatedAt: new Date().toISOString(),
-    });
+    }, { merge: true });
   } catch (error) {
     handleFirestoreError(error, OperationType.UPDATE, `users/${userId}`);
   }
+
+  // Update local storage
+  try {
+    const local = getLocalUsers();
+    const target = local.find((u) => u.userId === userId);
+    if (target) {
+      target.isPro = true;
+      target.proPlan = plan;
+      saveLocalUsers(local);
+    }
+  } catch {}
+
+  // Update server storage
+  try {
+    await fetch(`/api/users/${encodeURIComponent(userId)}/pro`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ isPro: true, proPlan: plan }),
+    });
+  } catch {}
 }
 
 // Admin toggle user Pro status
 export async function toggleUserProStatus(userId: string, isPro: boolean, plan: string = 'Class 10 Board Prep'): Promise<void> {
   try {
     const userRef = doc(db, 'users', userId);
-    await updateDoc(userRef, {
+    await setDoc(userRef, {
       isPro,
       proPlan: isPro ? plan : null,
       updatedAt: new Date().toISOString(),
-    });
+    }, { merge: true });
   } catch (error) {
     handleFirestoreError(error, OperationType.UPDATE, `users/${userId}`);
   }
+
+  // Update local storage
+  try {
+    const local = getLocalUsers();
+    const target = local.find((u) => u.userId === userId);
+    if (target) {
+      target.isPro = isPro;
+      target.proPlan = isPro ? plan : undefined;
+      saveLocalUsers(local);
+    }
+  } catch {}
+
+  // Update server storage
+  try {
+    await fetch(`/api/users/${encodeURIComponent(userId)}/pro`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ isPro, proPlan: isPro ? plan : null }),
+    });
+  } catch {}
 }
 
 // Delete student account by Admin
@@ -1006,6 +1221,20 @@ export async function deleteStudentAccount(userId: string): Promise<void> {
   } catch (error) {
     handleFirestoreError(error, OperationType.DELETE, `users/${userId}`);
   }
+
+  // Delete from local storage
+  try {
+    const local = getLocalUsers();
+    const updated = local.filter((u) => u.userId !== userId);
+    saveLocalUsers(updated);
+  } catch {}
+
+  // Delete from server storage
+  try {
+    await fetch(`/api/users/${encodeURIComponent(userId)}`, {
+      method: 'DELETE',
+    });
+  } catch {}
 }
 
 // Coupon / Offers Data & Methods

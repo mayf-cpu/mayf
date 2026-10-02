@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useMemo } from 'react';
 import { User } from 'firebase/auth';
 import {
   isUserAdmin,
@@ -9,6 +9,7 @@ import {
   getCachedAssignedAdmins,
   loadAssignedAdminsFromFirestore,
   saveAssignedAdminsToFirestore,
+  deleteAssignedAdminFromFirestore,
   fetchAllOrders,
   fetchAllUsers,
   OrderRecord,
@@ -198,12 +199,20 @@ export const AdminControlPanelPage: React.FC<AdminControlPanelPageProps> = ({
   const [loadingOrders, setLoadingOrders] = useState(false);
   const [isMigratingLegacy, setIsMigratingLegacy] = useState(false);
   const [liveAdminVerified, setLiveAdminVerified] = useState(false);
-  const [isCheckingAdminStatus, setIsCheckingAdminStatus] = useState(() => {
+  const [verifiedEmail, setVerifiedEmail] = useState<string | null>(null);
+  const [isCheckingAdminStatus, setIsCheckingAdminStatus] = useState(false);
+
+  // Check if current user is directly known as admin without network call
+  const isDirectlyKnownAdmin = useMemo(() => {
     if (!currentUser?.email) return false;
-    const cleanEmail = currentUser.email.toLowerCase().trim();
-    return !INITIAL_ADMIN_EMAILS.some((e) => e.toLowerCase().trim() === cleanEmail) &&
-      !getCachedAssignedAdmins().some((a) => a.email.toLowerCase().trim() === cleanEmail);
-  });
+    const clean = currentUser.email.toLowerCase().trim();
+    return (
+      INITIAL_ADMIN_EMAILS.some((e) => e.toLowerCase().trim() === clean) ||
+      assignedAdmins.some((a) => a.email.toLowerCase().trim() === clean) ||
+      getCachedAssignedAdmins().some((a) => a.email.toLowerCase().trim() === clean) ||
+      (userProfile && (userProfile.role === 'admin' || userProfile.role === 'superadmin' || userProfile.role === 'faculty'))
+    );
+  }, [currentUser?.email, assignedAdmins, userProfile]);
 
   // Verify live admin status for current user
   useEffect(() => {
@@ -211,18 +220,24 @@ export const AdminControlPanelPage: React.FC<AdminControlPanelPageProps> = ({
     if (currentUser?.email) {
       const cleanEmail = currentUser.email.toLowerCase().trim();
       const inInitials = INITIAL_ADMIN_EMAILS.some((e) => e.toLowerCase().trim() === cleanEmail);
+      const inAssigned = assignedAdmins.some((a) => a.email.toLowerCase().trim() === cleanEmail);
       const inCached = getCachedAssignedAdmins().some((a) => a.email.toLowerCase().trim() === cleanEmail);
+      const inProfile = userProfile && (userProfile.role === 'admin' || userProfile.role === 'superadmin' || userProfile.role === 'faculty');
 
-      if (inInitials || inCached) {
+      if (inInitials || inAssigned || inCached || inProfile || verifiedEmail === cleanEmail) {
         setLiveAdminVerified(true);
         setIsCheckingAdminStatus(false);
       } else {
         setIsCheckingAdminStatus(true);
-        checkIsUserAdminLive(currentUser.email)
+        checkIsUserAdminLive(cleanEmail)
           .then((verified) => {
             if (isMounted) {
               if (verified) {
                 setLiveAdminVerified(true);
+                setVerifiedEmail(cleanEmail);
+                loadAssignedAdminsFromFirestore().then((admins) => {
+                  if (admins && admins.length > 0) setAssignedAdmins(admins);
+                });
               }
               setIsCheckingAdminStatus(false);
             }
@@ -234,13 +249,34 @@ export const AdminControlPanelPage: React.FC<AdminControlPanelPageProps> = ({
     } else {
       setIsCheckingAdminStatus(false);
       setLiveAdminVerified(false);
+      setVerifiedEmail(null);
     }
     return () => {
       isMounted = false;
     };
-  }, [currentUser]);
+  }, [currentUser?.email, assignedAdmins.length, userProfile?.role]);
 
-  const isGoogleAdmin = isUserAdmin(currentUser, userProfile) || liveAdminVerified;
+  // Listen for admin role changes across tabs/windows
+  useEffect(() => {
+    const handleAdminsUpdated = (event: Event) => {
+      const customEvent = event as CustomEvent<AdminUserRecord[]>;
+      if (customEvent.detail && Array.isArray(customEvent.detail)) {
+        setAssignedAdmins(customEvent.detail);
+      } else {
+        loadAssignedAdminsFromFirestore().then((admins) => {
+          if (admins && admins.length > 0) setAssignedAdmins(admins);
+        });
+      }
+    };
+    window.addEventListener('admins-updated', handleAdminsUpdated);
+    return () => window.removeEventListener('admins-updated', handleAdminsUpdated);
+  }, []);
+
+  const isGoogleAdmin = Boolean(
+    isDirectlyKnownAdmin ||
+    liveAdminVerified ||
+    (currentUser?.email && verifiedEmail === currentUser.email.toLowerCase().trim())
+  );
   const isAuthorized = isGoogleAdmin || isPasscodeUnlocked;
 
   const handleSyncLegacyData = async () => {
@@ -486,23 +522,27 @@ export const AdminControlPanelPage: React.FC<AdminControlPanelPageProps> = ({
   };
 
   const handleAddAdmin = async (newAdmin: AdminUserRecord) => {
+    const cleanEmail = newAdmin.email.toLowerCase().trim();
+    const cleanRecord = { ...newAdmin, email: cleanEmail };
     const updated = [
-      ...assignedAdmins.filter((a) => a.email.toLowerCase() !== newAdmin.email.toLowerCase()),
-      newAdmin,
+      ...assignedAdmins.filter((a) => a.email.toLowerCase().trim() !== cleanEmail),
+      cleanRecord,
     ];
     setAssignedAdmins(updated);
     await saveAssignedAdminsToFirestore(updated);
   };
 
   const handleRevokeAdmin = async (email: string) => {
-    if (email.toLowerCase() === PRIMARY_SUPERADMIN_EMAIL.toLowerCase()) {
+    const cleanEmail = email.toLowerCase().trim();
+    if (cleanEmail === PRIMARY_SUPERADMIN_EMAIL.toLowerCase().trim()) {
       onToast('⚠️ Primary Superadministrator role cannot be revoked.');
       return;
     }
     const updated = assignedAdmins.filter(
-      (a) => a.email.toLowerCase() !== email.toLowerCase()
+      (a) => a.email.toLowerCase().trim() !== cleanEmail
     );
     setAssignedAdmins(updated);
+    await deleteAssignedAdminFromFirestore(cleanEmail);
     await saveAssignedAdminsToFirestore(updated);
   };
 
