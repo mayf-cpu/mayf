@@ -139,6 +139,21 @@
       },
       "required": ["id", "title", "grade", "topic", "tier"]
     },
+    "adminUser": {
+      "title": "AdminUser",
+      "description": "Authorized administrator or faculty member with assigned role",
+      "type": "object",
+      "properties": {
+        "email": { "type": "string" },
+        "role": { "type": "string" },
+        "displayName": { "type": "string" },
+        "assignedBy": { "type": "string" },
+        "assignedAt": { "type": "string" },
+        "notes": { "type": "string" },
+        "updatedAt": { "type": "string" }
+      },
+      "required": ["email", "role"]
+    },
     "aiQuery": {
       "title": "AiQuery",
       "description": "Student mathematics questions submitted to AI Teacher Assistant and step-by-step solutions",
@@ -160,6 +175,10 @@
     }
   },
   "firestore": {
+    "/admins/{adminId}": {
+      "schema": "adminUser",
+      "description": "Authorized administrator accounts and assigned permission roles"
+    },
     "/users/{userId}": {
       "schema": "userProfile",
       "description": "User account document containing profile and settings"

@@ -17,6 +17,19 @@ interface AdminRolesTabProps {
   onToast: (msg: string) => void;
 }
 
+function cleanFriendlyMessage(err: any): string {
+  if (!err) return 'Operation failed. Please check credentials and try again.';
+  const str = err?.message || String(err);
+  try {
+    const jsonMatch = str.match(/\{[\s\S]*\}/);
+    if (jsonMatch) {
+      const parsed = JSON.parse(jsonMatch[0]);
+      if (parsed.error) return String(parsed.error);
+    }
+  } catch {}
+  return str.replace(/^Error:\s*/i, '').replace(/\{.*\}/g, '').trim() || 'Operation failed. Please try again.';
+}
+
 export const AdminRolesTab: React.FC<AdminRolesTabProps> = ({
   admins,
   onAddAdmin,
@@ -30,18 +43,19 @@ export const AdminRolesTab: React.FC<AdminRolesTabProps> = ({
   const [newNotes, setNewNotes] = useState('');
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [revokingEmail, setRevokingEmail] = useState<string | null>(null);
+  const [successMessage, setSuccessMessage] = useState<string | null>(null);
 
   const handleAddSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     const cleanEmail = newEmail.trim().toLowerCase();
 
     if (!cleanEmail || !cleanEmail.includes('@') || !cleanEmail.includes('.')) {
-      onToast('❌ Please provide a valid Google email address.');
+      onToast('Please provide a valid Google email address.');
       return;
     }
 
     if (admins.some((a) => a.email.toLowerCase().trim() === cleanEmail)) {
-      onToast('⚠️ This email is already assigned an administrator role.');
+      onToast('This email is already assigned an administrator role.');
       return;
     }
 
@@ -60,9 +74,11 @@ export const AdminRolesTab: React.FC<AdminRolesTabProps> = ({
       setNewEmail('');
       setNewDisplayName('');
       setNewNotes('');
-      onToast(`🎉 Administrator role successfully granted to ${cleanEmail}!`);
+      setSuccessMessage(`Administrator access granted to ${cleanEmail} (${newRole.toUpperCase()})`);
+      onToast(`Administrator role granted to ${cleanEmail} successfully!`);
     } catch (err: any) {
-      onToast(err?.message || 'Failed to assign administrator role.');
+      const friendlyError = cleanFriendlyMessage(err);
+      onToast(`Failed to assign role: ${friendlyError}`);
     } finally {
       setIsSubmitting(false);
     }
@@ -70,7 +86,7 @@ export const AdminRolesTab: React.FC<AdminRolesTabProps> = ({
 
   const handleRevoke = async (email: string) => {
     if (email.toLowerCase().trim() === PRIMARY_SUPERADMIN_EMAIL.toLowerCase().trim()) {
-      onToast('🔒 Primary Superadministrator cannot be removed.');
+      onToast('Primary Superadministrator cannot be removed.');
       return;
     }
 
@@ -81,9 +97,10 @@ export const AdminRolesTab: React.FC<AdminRolesTabProps> = ({
     setRevokingEmail(email);
     try {
       await onRevokeAdmin(email);
-      onToast(`✓ Revoked administrator privileges for ${email}.`);
+      onToast(`Revoked administrator privileges for ${email}.`);
     } catch (err: any) {
-      onToast(err?.message || 'Failed to revoke administrator role.');
+      const friendlyError = cleanFriendlyMessage(err);
+      onToast(`Failed to revoke role: ${friendlyError}`);
     } finally {
       setRevokingEmail(null);
     }
@@ -156,6 +173,22 @@ export const AdminRolesTab: React.FC<AdminRolesTabProps> = ({
             <p className="text-xs text-slate-500">Add an educator, faculty member, or assistant to the control panel</p>
           </div>
         </div>
+
+        {successMessage && (
+          <div className="mb-4 p-3.5 rounded-2xl bg-emerald-50 border border-emerald-200 text-emerald-900 flex items-center justify-between text-xs font-bold">
+            <div className="flex items-center gap-2">
+              <span className="material-symbols-outlined text-[18px] text-emerald-600">check_circle</span>
+              <span>{successMessage}</span>
+            </div>
+            <button
+              type="button"
+              onClick={() => setSuccessMessage(null)}
+              className="text-emerald-700 hover:text-emerald-900 text-xs px-2 py-0.5 rounded cursor-pointer"
+            >
+              Dismiss
+            </button>
+          </div>
+        )}
 
         <form onSubmit={handleAddSubmit} className="space-y-4">
           <div className="grid grid-cols-1 md:grid-cols-3 gap-4">

@@ -219,6 +219,40 @@ export async function signInWithGoogle(): Promise<User> {
     // Check if user document already exists or create new
     const userRef = doc(db, 'users', user.uid);
     try {
+      const cleanEmail = (user.email || '').toLowerCase().trim();
+      let assignedRole: 'superadmin' | 'admin' | 'faculty' | undefined;
+
+      // Check if user is in hardcoded list
+      if (INITIAL_ADMIN_EMAILS.some((e) => e.toLowerCase().trim() === cleanEmail)) {
+        assignedRole = cleanEmail === PRIMARY_SUPERADMIN_EMAIL ? 'superadmin' : 'admin';
+      }
+
+      // Check cached assigned admins
+      const cachedAdmins = getCachedAssignedAdmins();
+      const foundInCache = cachedAdmins.find((a) => a.email.toLowerCase().trim() === cleanEmail);
+      if (foundInCache) {
+        assignedRole = foundInCache.role;
+      } else if (cleanEmail) {
+        // Query Firestore admins live
+        try {
+          const adminDoc = await getDoc(doc(db, 'admins', cleanEmail));
+          if (adminDoc.exists()) {
+            const data = adminDoc.data();
+            assignedRole = data.role || 'admin';
+            saveCachedAssignedAdmins([
+              ...cachedAdmins.filter((a) => a.email.toLowerCase().trim() !== cleanEmail),
+              {
+                email: cleanEmail,
+                role: assignedRole || 'admin',
+                displayName: user.displayName || cleanEmail.split('@')[0],
+                assignedBy: 'Live Check',
+                assignedAt: new Date().toISOString(),
+              },
+            ]);
+          }
+        } catch {}
+      }
+
       const snap = await getDoc(userRef);
       if (!snap.exists()) {
         const initialProfile: UserProfile = {
@@ -228,11 +262,20 @@ export async function signInWithGoogle(): Promise<User> {
           photoURL: user.photoURL || '',
           grade: 'Class 9',
           isPro: false,
+          role: assignedRole,
           bookmarks: ['res-quad-class10'],
           createdAt: new Date().toISOString(),
           updatedAt: new Date().toISOString(),
         };
         await setDoc(userRef, initialProfile);
+        recordLocalUser(initialProfile);
+      } else {
+        const existing = snap.data() as UserProfile;
+        if (assignedRole && existing.role !== assignedRole) {
+          existing.role = assignedRole;
+          await updateDoc(userRef, { role: assignedRole, updatedAt: new Date().toISOString() });
+        }
+        recordLocalUser(existing);
       }
     } catch (dbErr) {
       console.warn('Initial profile sync: ', dbErr);
@@ -458,24 +501,55 @@ export function saveCachedAssignedAdmins(admins: AdminUserRecord[]): void {
 }
 
 export async function loadAssignedAdminsFromFirestore(): Promise<AdminUserRecord[]> {
+  const mergedMap = new Map<string, AdminUserRecord>();
+  getCachedAssignedAdmins().forEach((a) => mergedMap.set(a.email.toLowerCase().trim(), a));
+
   try {
     const docRef = doc(db, 'settings', 'admins');
     const snap = await getDoc(docRef);
     if (snap.exists()) {
       const data = snap.data();
       if (Array.isArray(data.items) && data.items.length > 0) {
-        saveCachedAssignedAdmins(data.items);
-        return data.items;
+        data.items.forEach((item: AdminUserRecord) => {
+          if (item?.email) {
+            mergedMap.set(item.email.toLowerCase().trim(), item);
+          }
+        });
       }
     }
   } catch (_e) {
-    // Graceful fallback to cached admins
+    // Graceful fallback
   }
-  return getCachedAssignedAdmins();
+
+  try {
+    const adminsCol = collection(db, 'admins');
+    const snap = await getDocs(adminsCol);
+    snap.forEach((d) => {
+      const data = d.data() as AdminUserRecord;
+      if (data?.email) {
+        mergedMap.set(data.email.toLowerCase().trim(), {
+          email: data.email.toLowerCase().trim(),
+          role: data.role || 'admin',
+          displayName: data.displayName || data.email.split('@')[0],
+          assignedBy: data.assignedBy || 'System',
+          assignedAt: data.assignedAt || new Date().toISOString(),
+          notes: data.notes || '',
+        });
+      }
+    });
+  } catch (_e) {
+    // Graceful fallback
+  }
+
+  const result = Array.from(mergedMap.values());
+  saveCachedAssignedAdmins(result);
+  return result;
 }
 
 export async function saveAssignedAdminsToFirestore(admins: AdminUserRecord[]): Promise<void> {
   saveCachedAssignedAdmins(admins);
+  
+  // 1. Write to settings/admins
   try {
     const docRef = doc(db, 'settings', 'admins');
     await setDoc(
@@ -487,8 +561,98 @@ export async function saveAssignedAdminsToFirestore(admins: AdminUserRecord[]): 
       { merge: true }
     );
   } catch (err) {
-    handleFirestoreError(err, OperationType.WRITE, 'settings/admins');
+    console.warn('saveAssignedAdminsToFirestore settings error:', err);
   }
+
+  // 2. Also write individual documents in admins/{email} so security rules and live checks verify instantaneously
+  for (const admin of admins) {
+    try {
+      const emailDoc = admin.email.toLowerCase().trim();
+      const adminDocRef = doc(db, 'admins', emailDoc);
+      await setDoc(adminDocRef, {
+        email: emailDoc,
+        role: admin.role,
+        displayName: admin.displayName || emailDoc.split('@')[0],
+        assignedBy: admin.assignedBy || 'System',
+        assignedAt: admin.assignedAt || new Date().toISOString(),
+        notes: admin.notes || '',
+        updatedAt: new Date().toISOString(),
+      }, { merge: true });
+    } catch (_docErr) {
+      // non-blocking
+    }
+  }
+
+  // 3. Update existing users with this email to reflect their new assigned role
+  try {
+    const localUsers = getLocalUsers();
+    let hasLocalUpdates = false;
+    for (const admin of admins) {
+      const emailDoc = admin.email.toLowerCase().trim();
+      localUsers.forEach((u) => {
+        if (u.email.toLowerCase().trim() === emailDoc && u.role !== admin.role) {
+          u.role = admin.role;
+          hasLocalUpdates = true;
+          try {
+            updateDoc(doc(db, 'users', u.userId), { role: admin.role, updatedAt: new Date().toISOString() }).catch(() => {});
+          } catch {}
+        }
+      });
+    }
+    if (hasLocalUpdates) {
+      saveLocalUsers(localUsers);
+    }
+  } catch {}
+}
+
+export async function deleteAssignedAdminFromFirestore(email: string): Promise<void> {
+  try {
+    const emailDoc = email.toLowerCase().trim();
+    await deleteDoc(doc(db, 'admins', emailDoc));
+  } catch (_e) {
+    // non-blocking
+  }
+}
+
+export async function checkIsUserAdminLive(email: string | null | undefined): Promise<boolean> {
+  if (!email) return false;
+  const cleanEmail = email.toLowerCase().trim();
+  if (INITIAL_ADMIN_EMAILS.some((e) => e.toLowerCase().trim() === cleanEmail)) return true;
+
+  const cached = getCachedAssignedAdmins();
+  if (cached.some((a) => a.email.toLowerCase().trim() === cleanEmail)) return true;
+
+  try {
+    const adminDoc = await getDoc(doc(db, 'admins', cleanEmail));
+    if (adminDoc.exists()) {
+      const data = adminDoc.data();
+      const newAdmin: AdminUserRecord = {
+        email: cleanEmail,
+        role: data.role || 'admin',
+        displayName: data.displayName || cleanEmail.split('@')[0],
+        assignedBy: data.assignedBy || 'Live Check',
+        assignedAt: data.assignedAt || new Date().toISOString(),
+        notes: data.notes || '',
+      };
+      saveCachedAssignedAdmins([...cached.filter((c) => c.email.toLowerCase().trim() !== cleanEmail), newAdmin]);
+      return true;
+    }
+  } catch (_e) {}
+
+  try {
+    const settingsSnap = await getDoc(doc(db, 'settings', 'admins'));
+    if (settingsSnap.exists()) {
+      const data = settingsSnap.data();
+      if (Array.isArray(data.items)) {
+        if (data.items.some((a: any) => a.email && a.email.toLowerCase().trim() === cleanEmail)) {
+          saveCachedAssignedAdmins(data.items);
+          return true;
+        }
+      }
+    }
+  } catch (_e) {}
+
+  return false;
 }
 
 export function isUserAdmin(user: User | null, profile?: UserProfile | null): boolean {
@@ -496,7 +660,7 @@ export function isUserAdmin(user: User | null, profile?: UserProfile | null): bo
   const cleanEmail = user.email.toLowerCase().trim();
   if (INITIAL_ADMIN_EMAILS.some((e) => e.toLowerCase().trim() === cleanEmail)) return true;
 
-  if (profile && (profile.role === 'admin' || profile.role === 'superadmin')) {
+  if (profile && (profile.role === 'admin' || profile.role === 'superadmin' || profile.role === 'faculty')) {
     return true;
   }
 
@@ -578,16 +742,87 @@ export async function fetchAllOrders(): Promise<OrderRecord[]> {
   return cloudOrders;
 }
 
+const LOCAL_USERS_KEY = 'maths_hub_local_registered_students_v1';
+
+export function getLocalUsers(): UserProfile[] {
+  try {
+    const raw = localStorage.getItem(LOCAL_USERS_KEY);
+    if (raw) {
+      const parsed = JSON.parse(raw);
+      if (Array.isArray(parsed)) return parsed;
+    }
+  } catch {}
+  return [];
+}
+
+export function saveLocalUsers(users: UserProfile[]): void {
+  try {
+    localStorage.setItem(LOCAL_USERS_KEY, JSON.stringify(users));
+  } catch {}
+}
+
+export function recordLocalUser(profile: UserProfile): void {
+  try {
+    const existing = getLocalUsers();
+    const updated = [profile, ...existing.filter((u) => u.userId !== profile.userId && u.email !== profile.email)];
+    saveLocalUsers(updated);
+  } catch {}
+}
+
 // Fetch all registered students
 export async function fetchAllUsers(): Promise<UserProfile[]> {
+  const uMap = new Map<string, UserProfile>();
+
+  // 1. Fetch from Firestore users collection
   try {
     const usersRef = collection(db, 'users');
-    const q = query(usersRef, limit(50));
+    const q = query(usersRef, limit(200));
     const snap = await getDocs(q);
-    return snap.docs.map((d) => d.data() as UserProfile);
+    snap.docs.forEach((d) => {
+      const u = d.data() as UserProfile;
+      if (u && (u.userId || u.email)) {
+        uMap.set(u.userId || u.email, u);
+      }
+    });
   } catch (_err) {
-    return [];
+    // Graceful fallback
   }
+
+  // 2. Merge local storage users
+  const localUsers = getLocalUsers();
+  localUsers.forEach((u) => {
+    if (u && (u.userId || u.email) && !uMap.has(u.userId || u.email)) {
+      uMap.set(u.userId || u.email, u);
+    }
+  });
+
+  // 3. Reconcile students who have completed downloads
+  try {
+    const dlRecords = await fetchAllStudentDownloadRecords();
+    dlRecords.forEach((dl) => {
+      const key = dl.userId || dl.userEmail;
+      if (key && !uMap.has(key) && !uMap.has(dl.userId) && !uMap.has(dl.userEmail)) {
+        const studentProfile: UserProfile = {
+          userId: dl.userId,
+          email: dl.userEmail || '',
+          displayName: dl.userName || 'Student',
+          photoURL: dl.userPhoto || '',
+          grade: dl.grade || 'Class 9',
+          isPro: dl.tier === 'pro',
+          bookmarks: [],
+          createdAt: dl.downloadedAt || new Date().toISOString(),
+          updatedAt: dl.downloadedAt || new Date().toISOString(),
+        };
+        uMap.set(dl.userId, studentProfile);
+      }
+    });
+  } catch (_dlErr) {}
+
+  const merged = Array.from(uMap.values());
+  if (merged.length > 0) {
+    saveLocalUsers(merged);
+  }
+  return merged;
 }
 
 // Save Gateway Config to Firestore Settings
@@ -1206,90 +1441,9 @@ export async function migrateAndRestoreLegacyDatabaseData(): Promise<{ success: 
 // STUDENT DOWNLOADS ACTIVITY & PROFILE HISTORY TRACKING
 // -------------------------------------------------------------
 
-const LOCAL_ADMIN_DOWNLOADS_KEY = 'maths_hub_admin_download_records_v1';
+const LOCAL_ADMIN_DOWNLOADS_KEY = 'maths_hub_admin_download_records_v2';
 
-export const INITIAL_SAMPLE_DOWNLOADS: StudentDownloadRecord[] = [
-  {
-    id: 'dl-sample-1',
-    userId: 'usr_aarav_sharma',
-    userEmail: 'aarav.sharma24@gmail.com',
-    userName: 'Aarav Sharma',
-    userPhoto: 'https://images.unsplash.com/photo-1539571696357-5a69c17a67c6?w=160&auto=format&fit=crop&q=80',
-    resourceId: 'res-quad-class10',
-    title: 'Class 10: Quadratic Equations 2-Min Concept & Derivation Sheet',
-    grade: 'Class 10',
-    topic: 'Quadratic Equations',
-    format: 'Formula Sheets (1-Pager)',
-    tier: 'free',
-    size: '2.4 MB',
-    downloadedAt: new Date(Date.now() - 15 * 60 * 1000).toISOString(),
-    device: 'Chrome on MacOS',
-  },
-  {
-    id: 'dl-sample-2',
-    userId: 'usr_diya_patel',
-    userEmail: 'diya.patel99@gmail.com',
-    userName: 'Diya Patel',
-    userPhoto: 'https://images.unsplash.com/photo-1494790108377-be9c29b29330?w=160&auto=format&fit=crop&q=80',
-    resourceId: 'res-poly-class9',
-    title: 'Class 9: Polynomial Identities & Remainder Theorem Notes',
-    grade: 'Class 9',
-    topic: 'Real Numbers & Polynomials',
-    format: 'Handcrafted Notes (PDF)',
-    tier: 'free',
-    size: '3.1 MB',
-    downloadedAt: new Date(Date.now() - 48 * 60 * 1000).toISOString(),
-    device: 'Mobile Safari on iOS',
-  },
-  {
-    id: 'dl-sample-3',
-    userId: 'usr_ananya_iyer',
-    userEmail: 'ananya.iyer.school@gmail.com',
-    userName: 'Ananya Iyer',
-    userPhoto: 'https://images.unsplash.com/photo-1534528741775-53994a69daeb?w=160&auto=format&fit=crop&q=80',
-    resourceId: 'res-trig-class10',
-    title: 'Class 10: Trigonometric Ratios & Angle Table Rapid Sheet',
-    grade: 'Class 10',
-    topic: 'Trigonometry',
-    format: 'Formula Sheets (1-Pager)',
-    tier: 'free',
-    size: '1.9 MB',
-    downloadedAt: new Date(Date.now() - 2 * 60 * 60 * 1000).toISOString(),
-    device: 'Chrome on Windows 11',
-  },
-  {
-    id: 'dl-sample-4',
-    userId: 'usr_rohan_verma',
-    userEmail: 'rohan.v.maths@gmail.com',
-    userName: 'Rohan Verma',
-    userPhoto: 'https://images.unsplash.com/photo-1507003211169-0a1dd7228f2d?w=160&auto=format&fit=crop&q=80',
-    resourceId: 'res-triangles-pro',
-    title: 'Class 10: Triangles BPT & Similarity Theorem Proofs Masterclass',
-    grade: 'Class 10',
-    topic: 'Triangles & Circles',
-    format: 'Handcrafted Notes (PDF)',
-    tier: 'pro',
-    size: '4.8 MB',
-    downloadedAt: new Date(Date.now() - 5 * 60 * 60 * 1000).toISOString(),
-    device: 'Chrome on Android Phone',
-  },
-  {
-    id: 'dl-sample-5',
-    userId: 'usr_kabir_singh',
-    userEmail: 'kabir.singh.cbse@gmail.com',
-    userName: 'Kabir Singh',
-    userPhoto: 'https://images.unsplash.com/photo-1517841905240-472988babdf9?w=160&auto=format&fit=crop&q=80',
-    resourceId: 'res-mensuration-class8',
-    title: 'Class 8: Surface Area & Volume 3D Models Summary',
-    grade: 'Class 8',
-    topic: 'Surface Areas & Volumes',
-    format: 'Formula Sheets (1-Pager)',
-    tier: 'free',
-    size: '2.2 MB',
-    downloadedAt: new Date(Date.now() - 9 * 60 * 60 * 1000).toISOString(),
-    device: 'Firefox on Linux',
-  },
-];
+export const INITIAL_SAMPLE_DOWNLOADS: StudentDownloadRecord[] = [];
 
 /**
  * Record a student download event in Firestore & Local storage
@@ -1383,8 +1537,12 @@ export async function recordStudentDownload(record: StudentDownloadRecord): Prom
 export async function fetchAllStudentDownloadRecords(): Promise<StudentDownloadRecord[]> {
   const recordsMap = new Map<string, StudentDownloadRecord>();
 
-  // Seed with initial sample records
-  INITIAL_SAMPLE_DOWNLOADS.forEach((r) => recordsMap.set(r.id, r));
+  // Clean out any legacy v1 key with dummy sample records
+  try {
+    if (typeof localStorage !== 'undefined' && localStorage.getItem('maths_hub_admin_download_records_v1')) {
+      localStorage.removeItem('maths_hub_admin_download_records_v1');
+    }
+  } catch (_e) {}
 
   // Load from local storage
   try {

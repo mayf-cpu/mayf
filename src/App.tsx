@@ -16,6 +16,9 @@ import {
   getLocalDemoSession,
   recordStudentDownload,
   fetchStudentProfileDownloads,
+  loadAssignedAdminsFromFirestore,
+  checkIsUserAdminLive,
+  recordLocalUser,
 } from './firebase';
 import { UnauthorizedDomainModal } from './components/UnauthorizedDomainModal';
 import { LoginRequiredModal } from './components/LoginRequiredModal';
@@ -325,12 +328,19 @@ export default function App() {
 
   // Auth state listener
   useEffect(() => {
+    // Load assigned admins from Firestore on startup
+    loadAssignedAdminsFromFirestore().catch(() => {});
+
     const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
       if (user) {
         setCurrentUser(user);
+        if (user.email) {
+          checkIsUserAdminLive(user.email).catch(() => {});
+        }
         const unsubscribeProfile = subscribeToUserProfile(user.uid, (profile) => {
           if (profile) {
             setUserProfile(profile);
+            recordLocalUser(profile);
             if (profile.grade && profile.grade !== selectedClass) {
               setSelectedClass(profile.grade);
             }
@@ -1069,7 +1079,12 @@ export default function App() {
       device: typeof navigator !== 'undefined' && navigator.userAgent.includes('Mobile') ? 'Mobile Device' : 'Desktop Browser',
     }).catch(() => {});
 
-    recordResourceDownloadEvent(title, false);
+    recordResourceDownloadEvent(targetResource?.id || title, targetResource?.tier === 'pro', {
+      title: targetResource?.title || title,
+      grade: targetResource?.grade || selectedClass,
+      topic: targetResource?.topic || 'Mathematics',
+      format: targetResource?.format || 'Formula Sheets (1-Pager)',
+    });
     setDownloads((prev) => [newItem, ...prev.filter((p) => p.title !== title)]);
     showToast(`✓ Verification passed! Downloading "${title}" (saved to your profile).`);
     setPendingDownloadItem(null);

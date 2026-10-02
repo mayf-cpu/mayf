@@ -192,77 +192,49 @@ export const AdminAnalyticsTab: React.FC<AdminAnalyticsTabProps> = ({
   // Dynamic visitors count strictly derived from selected timeframe
   const realVisitorsCount = useMemo(() => {
     const sumFromHistory = filteredHistory.reduce((s, h) => s + (h.visitors || 0), 0);
-    return Math.max(sumFromHistory, filteredUsers.length, 1);
-  }, [filteredHistory, filteredUsers.length]);
+    if (timeframe === 'lifetime') {
+      return Math.max(sumFromHistory, metrics.totalVisitors, filteredUsers.length);
+    }
+    return sumFromHistory;
+  }, [filteredHistory, metrics.totalVisitors, filteredUsers.length, timeframe]);
 
   // Dynamic page views count strictly derived from selected timeframe
   const realPageViewsCount = useMemo(() => {
     const sumFromHistory = filteredHistory.reduce((s, h) => s + (h.pageViews || 0), 0);
-    return Math.max(sumFromHistory, realVisitorsCount * 2, 1);
-  }, [filteredHistory, realVisitorsCount]);
+    if (timeframe === 'lifetime') {
+      return Math.max(sumFromHistory, metrics.totalPageViews);
+    }
+    return sumFromHistory;
+  }, [filteredHistory, metrics.totalPageViews, timeframe]);
 
   // Compute real downloads scaled to the selected timeframe
   const realTotalDownloads = useMemo(() => {
-    const sumFromHistory = filteredHistory.reduce((s, h) => s + (h.downloads || 0), 0);
-    return Math.max(sumFromHistory, filteredDownloads.length, 1);
-  }, [filteredHistory, filteredDownloads.length]);
+    return filteredDownloads.length;
+  }, [filteredDownloads.length]);
 
   const realFreeDownloadsCount = useMemo(() => {
-    const directFree = filteredDownloads.filter((d) => d.tier !== 'pro').length;
-    return Math.max(directFree, Math.round(realTotalDownloads * 0.86));
-  }, [filteredDownloads, realTotalDownloads]);
+    return filteredDownloads.filter((d) => d.tier !== 'pro').length;
+  }, [filteredDownloads]);
 
   const realProDownloadsCount = useMemo(() => {
-    const directPro = filteredDownloads.filter((d) => d.tier === 'pro').length;
-    return Math.max(directPro, realTotalDownloads - realFreeDownloadsCount);
-  }, [filteredDownloads, realTotalDownloads, realFreeDownloadsCount]);
+    return filteredDownloads.filter((d) => d.tier === 'pro').length;
+  }, [filteredDownloads]);
 
-  // Revenue strictly scaled to the selected timeframe
+  // Revenue strictly calculated from actual captured orders
   const totalCapturedRevenue = useMemo(() => {
-    const directRevenue = filteredOrders
+    return filteredOrders
       .filter((o) => o.status === 'captured' || !o.status)
       .reduce((sum, o) => sum + Number(o.amount || 0), 0);
-    if (directRevenue > 0) return directRevenue;
-    
-    // Default baseline calibrated for timeframe
-    switch (timeframe) {
-      case '7d':
-        return 1490;
-      case '30d':
-        return 5980;
-      case '90d':
-        return 17450;
-      case '365d':
-        return 59880;
-      case 'lifetime':
-      default:
-        return 74850;
-    }
-  }, [filteredOrders, timeframe]);
+  }, [filteredOrders]);
 
   const realStudentsCount = useMemo(() => {
-    if (timeframe === '7d') return Math.max(filteredUsers.length, Math.round(realVisitorsCount * 0.25), 1);
-    if (timeframe === '30d') return Math.max(filteredUsers.length, Math.round(realVisitorsCount * 0.35), 1);
-    if (timeframe === '90d') return Math.max(filteredUsers.length, Math.round(realVisitorsCount * 0.45), 1);
-    if (timeframe === '365d') return Math.max(filteredUsers.length, Math.round(realVisitorsCount * 0.55), 1);
-    return Math.max(filteredUsers.length, Math.round(realVisitorsCount * 0.6), 1);
-  }, [filteredUsers, timeframe, realVisitorsCount]);
+    return filteredUsers.length;
+  }, [filteredUsers.length]);
 
-  // Dynamic Page Traffic scaled proportionally to selected timeframe
+  // Dynamic Page Traffic strictly from recorded metrics
   const timeframePages = useMemo(() => {
-    const totalLifetimePV = Math.max(metrics.totalPageViews, 1);
-    const scaleRatio = Math.max(realPageViewsCount / totalLifetimePV, 0.05);
-
-    return metrics.pages.map((p) => {
-      const scaledPV = Math.max(1, Math.round(p.pageViews * scaleRatio));
-      const scaledV = Math.max(1, Math.round(p.visitors * scaleRatio));
-      return {
-        ...p,
-        pageViews: scaledPV,
-        visitors: scaledV,
-      };
-    });
-  }, [metrics.pages, metrics.totalPageViews, realPageViewsCount]);
+    return metrics.pages;
+  }, [metrics.pages]);
 
   // Compute real posts combining core math resources and custom uploaded materials
   const realPosts = useMemo(() => {
@@ -274,9 +246,6 @@ export const AdminAnalyticsTab: React.FC<AdminAnalyticsTabProps> = ({
       }
     });
 
-    // Timeframe multiplier for views
-    const viewMultiplier = timeframe === '7d' ? 1 : timeframe === '30d' ? 3.5 : timeframe === '90d' ? 8.5 : timeframe === '365d' ? 24 : 32;
-
     const combined = [
       ...liveResources.map((res) => ({
         id: res.id,
@@ -285,10 +254,10 @@ export const AdminAnalyticsTab: React.FC<AdminAnalyticsTabProps> = ({
         topic: res.topic,
         tier: res.tier,
         format: res.format,
-        views: Math.max(Math.round((res.views || 4) * (viewMultiplier / 8)), (downloadMap[res.id] || 0) * 2 + 1),
-        downloads: Math.max(res.downloads || 0, downloadMap[res.id] || downloadMap[res.title] || 0),
-        upvotes: Math.floor(((downloadMap[res.id] || 0) + 2) / 2),
-        lastVisited: downloadMap[res.id] ? 'Recent' : 'Today',
+        views: res.views || (downloadMap[res.id] || 0) * 2,
+        downloads: downloadMap[res.id] || downloadMap[res.title] || res.downloads || 0,
+        upvotes: 0,
+        lastVisited: downloadMap[res.id] ? 'Recent' : '—',
       })),
       ...MATH_RESOURCES.map((res) => ({
         id: res.id,
@@ -297,15 +266,15 @@ export const AdminAnalyticsTab: React.FC<AdminAnalyticsTabProps> = ({
         topic: res.topic,
         tier: res.tier,
         format: res.format,
-        views: Math.max(Math.round(8 * viewMultiplier), (downloadMap[res.id] || 0) * 3 + 14),
-        downloads: Math.max(Math.round((downloadMap[res.id] || 1) * (viewMultiplier / 3)), downloadMap[res.id] || 0),
-        upvotes: Math.floor(((downloadMap[res.id] || 0) + 4) / 2),
-        lastVisited: downloadMap[res.id] ? 'Recent' : 'Today',
+        views: (downloadMap[res.id] || 0) * 2,
+        downloads: downloadMap[res.id] || 0,
+        upvotes: 0,
+        lastVisited: downloadMap[res.id] ? 'Recent' : '—',
       })),
     ];
 
     return combined;
-  }, [liveResources, filteredDownloads, timeframe]);
+  }, [liveResources, filteredDownloads]);
 
   const filteredPosts = useMemo(() => {
     return realPosts.filter((p) => {
@@ -343,10 +312,8 @@ export const AdminAnalyticsTab: React.FC<AdminAnalyticsTabProps> = ({
     onToast(`📊 Analytics CSV (${timeframe.toUpperCase()}) exported successfully!`);
   };
 
-  // Dynamic Chart Bars Generator tailored to selected timeframe: 7d, 30d, 90d, 365d, lifetime
+  // Dynamic Chart Bars Generator tailored to selected timeframe using actual data only
   const chartDays = useMemo(() => {
-    const now = new Date();
-
     if (timeframe === '7d') {
       const slice7 = filteredHistory.slice(-7);
       const dayNames = ['Sun', 'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat'];
@@ -356,14 +323,13 @@ export const AdminAnalyticsTab: React.FC<AdminAnalyticsTabProps> = ({
         const dayName = isNaN(d.getTime()) ? entry.date : `${dayNames[d.getDay()]} ${d.getDate()}`;
         return {
           date: dayName,
-          visitors: entry.visitors || 12,
-          downloads: entry.downloads || 4,
+          visitors: entry.visitors || 0,
+          downloads: entry.downloads || 0,
         };
       });
     }
 
     if (timeframe === '30d') {
-      // 10 3-day intervals over the 30-day window
       const slice30 = filteredHistory.slice(-30);
       const result: { date: string; visitors: number; downloads: number }[] = [];
       const bucketSize = 3;
@@ -378,15 +344,14 @@ export const AdminAnalyticsTab: React.FC<AdminAnalyticsTabProps> = ({
         const totalD = chunk.reduce((sum, c) => sum + (c.downloads || 0), 0);
         result.push({
           date: label,
-          visitors: Math.max(totalV, 8),
-          downloads: Math.max(totalD, 2),
+          visitors: totalV,
+          downloads: totalD,
         });
       }
       return result;
     }
 
     if (timeframe === '90d') {
-      // 12 weekly bars over the 90-day window
       const slice90 = filteredHistory.slice(-90);
       const result: { date: string; visitors: number; downloads: number }[] = [];
       const bucketSize = Math.ceil(slice90.length / 12);
@@ -401,15 +366,14 @@ export const AdminAnalyticsTab: React.FC<AdminAnalyticsTabProps> = ({
         const totalD = chunk.reduce((sum, c) => sum + (c.downloads || 0), 0);
         result.push({
           date: label,
-          visitors: Math.max(totalV, 25),
-          downloads: Math.max(totalD, 8),
+          visitors: totalV,
+          downloads: totalD,
         });
       }
       return result;
     }
 
     if (timeframe === '365d') {
-      // 12 monthly bars over the annual window
       const slice365 = filteredHistory.slice(-365);
       const result: { date: string; visitors: number; downloads: number }[] = [];
       const bucketSize = Math.ceil(slice365.length / 12);
@@ -423,14 +387,13 @@ export const AdminAnalyticsTab: React.FC<AdminAnalyticsTabProps> = ({
         const totalD = chunk.reduce((sum, c) => sum + (c.downloads || 0), 0);
         result.push({
           date: label,
-          visitors: Math.max(totalV, 120),
-          downloads: Math.max(totalD, 45),
+          visitors: totalV,
+          downloads: totalD,
         });
       }
       return result;
     }
 
-    // Lifetime: All recorded history across 12 milestone periods
     const allHistory = filteredHistory.length > 0 ? filteredHistory : historyLogs;
     const result: { date: string; visitors: number; downloads: number }[] = [];
     const bucketSize = Math.max(1, Math.ceil(allHistory.length / 12));
@@ -444,8 +407,8 @@ export const AdminAnalyticsTab: React.FC<AdminAnalyticsTabProps> = ({
       const totalD = chunk.reduce((sum, c) => sum + (c.downloads || 0), 0);
       result.push({
         date: label,
-        visitors: Math.max(totalV, 150),
-        downloads: Math.max(totalD, 60),
+        visitors: totalV,
+        downloads: totalD,
       });
     }
     return result;

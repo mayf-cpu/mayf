@@ -13,6 +13,9 @@ import {
   fetchAllUsers,
   OrderRecord,
   UserProfile,
+  getLocalUsers,
+  checkIsUserAdminLive,
+  INITIAL_ADMIN_EMAILS,
   saveRazorpayOrder,
   saveGatewaySettingsToFirestore,
   loadGatewaySettingsFromFirestore,
@@ -187,15 +190,43 @@ export const AdminControlPanelPage: React.FC<AdminControlPanelPageProps> = ({
 
   // Core Data state
   const [orders, setOrders] = useState<OrderRecord[]>([]);
-  const [users, setUsers] = useState<UserProfile[]>([]);
+  const [users, setUsers] = useState<UserProfile[]>(getLocalUsers);
   const [coupons, setCoupons] = useState<CouponRecord[]>(getLocalCoupons);
   const [notifications, setNotifications] = useState<NotificationRecord[]>(getLocalNotifications);
   const [customResources, setCustomResources] = useState<CustomResourceRecord[]>(getLocalCustomResources);
   const [seoSettings, setSeoSettings] = useState<SeoSettings | null>(getSeoSettingsLocally);
   const [loadingOrders, setLoadingOrders] = useState(false);
   const [isMigratingLegacy, setIsMigratingLegacy] = useState(false);
+  const [liveAdminVerified, setLiveAdminVerified] = useState(false);
+  const [isCheckingAdminStatus, setIsCheckingAdminStatus] = useState(Boolean(currentUser));
 
-  const isGoogleAdmin = isUserAdmin(currentUser, userProfile);
+  // Verify live admin status for current user if not already verified
+  useEffect(() => {
+    let isMounted = true;
+    if (currentUser?.email) {
+      setIsCheckingAdminStatus(true);
+      checkIsUserAdminLive(currentUser.email)
+        .then((verified) => {
+          if (isMounted) {
+            if (verified) {
+              setLiveAdminVerified(true);
+            }
+            setIsCheckingAdminStatus(false);
+          }
+        })
+        .catch(() => {
+          if (isMounted) setIsCheckingAdminStatus(false);
+        });
+    } else {
+      setIsCheckingAdminStatus(false);
+      setLiveAdminVerified(false);
+    }
+    return () => {
+      isMounted = false;
+    };
+  }, [currentUser]);
+
+  const isGoogleAdmin = isUserAdmin(currentUser, userProfile) || liveAdminVerified;
   const isAuthorized = isGoogleAdmin || isPasscodeUnlocked;
 
   const handleSyncLegacyData = async () => {
@@ -541,10 +572,90 @@ export const AdminControlPanelPage: React.FC<AdminControlPanelPageProps> = ({
     }
   };
 
-  // If not authorized yet, show a clean, dedicated authentication screen
-  if (!isAuthorized) {
-    const isRegularLoggedInUser = Boolean(currentUser && !isGoogleAdmin);
+  // Determine current administrator's assigned role
+  const currentAssignedRecord = assignedAdmins.find(
+    (a) => a.email.toLowerCase().trim() === (currentUser?.email || '').toLowerCase().trim()
+  );
+  const currentRole: 'superadmin' | 'admin' | 'faculty' =
+    isPasscodeUnlocked ? 'superadmin' :
+    (currentUser?.email && INITIAL_ADMIN_EMAILS.some((e) => e.toLowerCase().trim() === currentUser.email!.toLowerCase().trim())) ? 'superadmin' :
+    currentAssignedRecord?.role || (userProfile?.role as any) || 'admin';
 
+  const studentCount = Math.max(users.length, getLocalUsers().length);
+
+  const allTabs = [
+    { id: 'analytics', label: 'Overview', icon: 'monitoring', minRole: 'faculty' },
+    { id: 'roles', label: `Staff & Roles (${assignedAdmins.length})`, icon: 'admin_panel_settings', minRole: 'superadmin' },
+    { id: 'students', label: `Students (${studentCount})`, icon: 'group', minRole: 'faculty' },
+    { id: 'downloads', label: 'Student Downloads', icon: 'cloud_download', minRole: 'faculty' },
+    { id: 'ai-teacher', label: 'AI Teacher Activity', icon: 'psychology', minRole: 'faculty' },
+    { id: 'content', label: `Upload Material (${customResources.length})`, icon: 'upload_file', minRole: 'faculty' },
+    { id: 'categories', label: `Categories (${categories.length})`, icon: 'category', minRole: 'faculty' },
+    { id: 'theme', label: 'Theme & Layout', icon: 'palette', minRole: 'admin' },
+    { id: 'social', label: 'Social & Groups', icon: 'open_in_new', minRole: 'admin' },
+    { id: 'promos', label: `Promos & Coupons (${coupons.length})`, icon: 'loyalty', minRole: 'admin' },
+    { id: 'notifications', label: `Broadcasts (${notifications.length})`, icon: 'campaign', minRole: 'faculty' },
+    { id: 'gateway', label: 'Payment Gateway', icon: 'credit_card', minRole: 'superadmin' },
+    { id: 'branding', label: 'Branding & Logo', icon: 'palette', minRole: 'admin' },
+    { id: 'ads', label: 'AdSense & Ads', icon: 'ads_click', minRole: 'admin' },
+    { id: 'blocks', label: 'Homepage Blocks', icon: 'view_column', minRole: 'admin' },
+    { id: 'page-text', label: 'Page Text & Copy', icon: 'edit_note', minRole: 'admin' },
+    { id: 'seo', label: 'SEO & Meta', icon: 'travel_explore', minRole: 'admin' },
+    { id: 'subdomain', label: 'Domain & Migration', icon: 'domain', minRole: 'admin' },
+    { id: 'orders', label: `Orders (${orders.length})`, icon: 'receipt_long', minRole: 'admin' },
+  ];
+
+  const allowedTabs = allTabs.filter((tab) => {
+    if (currentRole === 'superadmin') return true;
+    if (currentRole === 'admin') return tab.minRole !== 'superadmin';
+    if (currentRole === 'faculty') return tab.minRole === 'faculty';
+    return false;
+  });
+
+  useEffect(() => {
+    if (!allowedTabs.some((t) => t.id === activeTab)) {
+      setActiveTab('analytics');
+    }
+  }, [activeTab, currentRole]);
+
+  // Requirement 3: If a logged-in user is not an admin, do not display any message on admin login page; throw a page error
+  if (currentUser && !isAuthorized && !isCheckingAdminStatus) {
+    return (
+      <div className="min-h-screen w-full bg-slate-950 text-slate-100 flex flex-col items-center justify-center p-6 text-center font-sans">
+        <div className="max-w-md w-full bg-slate-900 border border-slate-800 rounded-3xl p-8 sm:p-10 shadow-2xl">
+          <div className="w-16 h-16 rounded-2xl bg-rose-500/10 border border-rose-500/20 text-rose-400 flex items-center justify-center mx-auto mb-6">
+            <span className="material-symbols-outlined text-[36px]">error</span>
+          </div>
+          <div className="text-4xl font-black text-rose-500 mb-2 font-mono">403</div>
+          <h1 className="text-xl font-bold text-white mb-2">Access Forbidden</h1>
+          <p className="text-xs text-slate-400 mb-6 leading-relaxed">
+            The server understood the request, but refuses to authorize it. You do not have permission to access the requested resource.
+          </p>
+          <div className="space-y-3">
+            <button
+              type="button"
+              onClick={onNavigateHome}
+              className="w-full py-3 px-4 bg-slate-800 hover:bg-slate-700 text-slate-200 font-bold text-xs rounded-xl transition-all cursor-pointer"
+            >
+              Return to Website
+            </button>
+            {onSignOut && (
+              <button
+                type="button"
+                onClick={onSignOut}
+                className="w-full py-2 px-4 text-slate-500 hover:text-slate-300 font-semibold text-xs rounded-xl transition-all cursor-pointer"
+              >
+                Sign Out
+              </button>
+            )}
+          </div>
+        </div>
+      </div>
+    );
+  }
+
+  // If not authorized yet, show clean administrator gateway
+  if (!isAuthorized) {
     return (
       <div className="min-h-screen w-full bg-slate-950 text-slate-100 flex flex-col justify-between">
         {/* Top Minimal Bar */}
@@ -582,44 +693,12 @@ export const AdminControlPanelPage: React.FC<AdminControlPanelPageProps> = ({
               This administrative portal is restricted exclusively to authorized administrators. Access by unauthorized accounts is strictly prohibited.
             </p>
 
-            {/* Account Mismatch Warning */}
-            {isRegularLoggedInUser && (
-              <div className="mb-6 p-4 rounded-2xl bg-rose-950/60 border border-rose-800/60 text-left space-y-2">
-                <div className="flex items-center gap-2 text-rose-300 font-bold text-xs">
-                  <span className="material-symbols-outlined text-[18px]">error</span>
-                  <span>Access Denied for Current Account</span>
-                </div>
-                <p className="text-xs text-rose-200/80 leading-relaxed">
-                  You are currently signed in as <strong className="text-white font-mono">{currentUser?.email}</strong>. This account has not been assigned an administrator role.
-                </p>
-                <div className="pt-2">
-                  <button
-                    type="button"
-                    onClick={() => {
-                      if (onSignOut) {
-                        onSignOut();
-                      }
-                      setTimeout(() => {
-                        onGoogleSignIn();
-                      }, 250);
-                    }}
-                    className="w-full py-2.5 px-3 bg-rose-600 hover:bg-rose-500 text-white font-bold text-xs rounded-xl shadow-xs cursor-pointer transition-all flex items-center justify-center gap-2"
-                  >
-                    <span className="material-symbols-outlined text-[16px]">switch_account</span>
-                    <span>Sign In with an Assigned Admin Account</span>
-                  </button>
-                </div>
-              </div>
-            )}
-
             <div className="space-y-5">
-              {/* Option 1: Google Admin Sign In (if not signed in) */}
-              {!isRegularLoggedInUser && (
-                <button
-                  type="button"
-                  onClick={onGoogleSignIn}
-                  className="w-full py-3.5 px-4 bg-white hover:bg-slate-100 text-slate-900 font-bold text-sm rounded-2xl border border-slate-300 shadow-md flex items-center justify-center gap-3 transition-all cursor-pointer hover:scale-[1.01]"
-                >
+              <button
+                type="button"
+                onClick={onGoogleSignIn}
+                className="w-full py-3.5 px-4 bg-white hover:bg-slate-100 text-slate-900 font-bold text-sm rounded-2xl border border-slate-300 shadow-md flex items-center justify-center gap-3 transition-all cursor-pointer hover:scale-[1.01]"
+              >
                   <svg className="w-5 h-5" viewBox="0 0 24 24">
                     <path
                       fill="#4285F4"
@@ -640,7 +719,6 @@ export const AdminControlPanelPage: React.FC<AdminControlPanelPageProps> = ({
                   </svg>
                   <span>Sign In with Authorized Google Account</span>
                 </button>
-              )}
 
               <div className="relative flex items-center justify-center">
                 <div className="border-t border-slate-800 w-full"></div>
@@ -753,39 +831,30 @@ export const AdminControlPanelPage: React.FC<AdminControlPanelPageProps> = ({
             </span>
 
             <div className="flex items-center gap-2 bg-slate-800/80 px-2.5 py-1 rounded-xl border border-slate-700 text-xs">
-              <span className="w-2 h-2 rounded-full bg-blue-400"></span>
+              <span className={`w-2 h-2 rounded-full ${
+                currentRole === 'superadmin' ? 'bg-purple-400' : currentRole === 'faculty' ? 'bg-emerald-400' : 'bg-blue-400'
+              }`}></span>
               <span className="text-slate-300 font-mono text-[11px] truncate max-w-[140px] sm:max-w-none">
-                {currentUser?.email || 'sachinagrawal16@gmail.com'}
+                {currentUser?.email || (isPasscodeUnlocked ? 'Passcode Admin' : 'admin@mathsatyourfingertips.com')}
+              </span>
+              <span className={`px-2 py-0.5 rounded text-[10px] font-extrabold uppercase tracking-wider ${
+                currentRole === 'superadmin'
+                  ? 'bg-purple-500/20 text-purple-300 border border-purple-500/30'
+                  : currentRole === 'faculty'
+                  ? 'bg-emerald-500/20 text-emerald-300 border border-emerald-500/30'
+                  : 'bg-blue-500/20 text-blue-300 border border-blue-500/30'
+              }`}>
+                {currentRole === 'superadmin' ? 'Super Admin' : currentRole === 'faculty' ? 'Faculty Admin' : 'Admin'}
               </span>
             </div>
           </div>
         </div>
       </header>
 
-      {/* 2. SUB-NAVIGATION TABS BAR */}
+      {/* 2. SUB-NAVIGATION TABS BAR (Filtered by Assigned Role) */}
       <nav className="bg-slate-900 border-b border-slate-800 px-3 sm:px-6 overflow-x-auto scrollbar-none shrink-0 sticky top-[57px] z-30">
         <div className="max-w-7xl mx-auto flex items-center gap-1 sm:gap-2">
-          {[
-            { id: 'analytics', label: 'Overview', icon: 'monitoring' },
-            { id: 'roles', label: `Staff & Roles (${assignedAdmins.length})`, icon: 'admin_panel_settings' },
-            { id: 'students', label: `Students (${users.length})`, icon: 'group' },
-            { id: 'downloads', label: 'Student Downloads', icon: 'cloud_download' },
-            { id: 'ai-teacher', label: 'AI Teacher Activity', icon: 'psychology' },
-            { id: 'content', label: `Upload Material (${customResources.length})`, icon: 'upload_file' },
-            { id: 'categories', label: `Categories (${categories.length})`, icon: 'category' },
-            { id: 'theme', label: 'Theme & Layout', icon: 'palette' },
-            { id: 'social', label: 'Social & Groups', icon: 'open_in_new' },
-            { id: 'promos', label: `Promos & Coupons (${coupons.length})`, icon: 'loyalty' },
-            { id: 'notifications', label: `Broadcasts (${notifications.length})`, icon: 'campaign' },
-            { id: 'gateway', label: 'Payment Gateway', icon: 'credit_card' },
-            { id: 'branding', label: 'Branding & Logo', icon: 'palette' },
-            { id: 'ads', label: 'AdSense & Ads', icon: 'ads_click' },
-            { id: 'blocks', label: 'Homepage Blocks', icon: 'view_column' },
-            { id: 'page-text', label: 'Page Text & Copy', icon: 'edit_note' },
-            { id: 'seo', label: 'SEO & Meta', icon: 'travel_explore' },
-            { id: 'subdomain', label: 'Domain & Migration', icon: 'domain' },
-            { id: 'orders', label: `Orders (${orders.length})`, icon: 'receipt_long' },
-          ].map((tab) => (
+          {allowedTabs.map((tab) => (
             <button
               key={tab.id}
               onClick={() => setActiveTab(tab.id as any)}

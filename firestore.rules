@@ -31,13 +31,18 @@ service cloud.firestore {
           'admin@mathsatyourfingertips.com',
           'ntnagrawal146@gmail.com'
         ]) ||
-        exists(/databases/$(database)/documents/admins/$(request.auth.uid))
+        exists(/databases/$(database)/documents/admins/$(request.auth.uid)) ||
+        (request.auth.token.email != null && (
+          exists(/databases/$(database)/documents/admins/$(request.auth.token.email)) ||
+          exists(/databases/$(database)/documents/admins/$(request.auth.token.email.lower()))
+        ))
       );
     }
 
     // Admins Collection
     match /admins/{adminId} {
-      allow read, write: if isAdmin();
+      allow read: if isSignedIn();
+      allow write: if isAdmin();
     }
 
     // Connection test document

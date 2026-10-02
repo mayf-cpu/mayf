@@ -37,60 +37,8 @@ export const AdminStudentsTab: React.FC<AdminStudentsTabProps> = ({
   const [grantReason, setGrantReason] = useState('Merit Scholarship / Top Performer');
   const [isAssigning, setIsAssigning] = useState(false);
 
-  // Demo fallback students if database is just initialized
-  const displayUsers: UserProfile[] = users.length > 0 ? users : [
-    {
-      userId: 'usr_sachin_admin',
-      displayName: 'Sachin Kumar',
-      email: 'sachin.itig@gmail.com',
-      grade: 'Class 10',
-      isPro: true,
-      proPlan: 'All-Access 1 Year Pro Pass',
-      createdAt: '2026-09-01T10:00:00Z',
-    },
-    {
-      userId: 'usr_aarav_sharma',
-      displayName: 'Aarav Sharma',
-      email: 'aarav.sharma24@gmail.com',
-      grade: 'Class 10',
-      isPro: true,
-      proPlan: 'Class 10 Board 100/100 Pro Pass',
-      createdAt: '2026-09-12T14:30:00Z',
-    },
-    {
-      userId: 'usr_diya_patel',
-      displayName: 'Diya Patel',
-      email: 'diya.patel99@gmail.com',
-      grade: 'Class 9',
-      isPro: false,
-      createdAt: '2026-09-15T09:12:00Z',
-    },
-    {
-      userId: 'usr_rohan_verma',
-      displayName: 'Rohan Verma',
-      email: 'rohan.v.maths@gmail.com',
-      grade: 'Class 10',
-      isPro: false,
-      createdAt: '2026-09-18T16:45:00Z',
-    },
-    {
-      userId: 'usr_ananya_iyer',
-      displayName: 'Ananya Iyer',
-      email: 'ananya.iyer.school@gmail.com',
-      grade: 'Class 8',
-      isPro: true,
-      proPlan: 'Class 8 High-School Foundation Pass',
-      createdAt: '2026-09-20T11:20:00Z',
-    },
-    {
-      userId: 'usr_kabir_singh',
-      displayName: 'Kabir Singh',
-      email: 'kabir.singh.cbse@gmail.com',
-      grade: 'Class 9',
-      isPro: false,
-      createdAt: '2026-09-22T08:15:00Z',
-    },
-  ];
+  // Actual registered students only (no dummy data)
+  const displayUsers: UserProfile[] = users;
 
   const filteredStudents = displayUsers.filter((u) => {
     const matchSearch =
@@ -375,7 +323,7 @@ export const AdminStudentsTab: React.FC<AdminStudentsTabProps> = ({
                     <td className="py-3 px-4 whitespace-nowrap">
                       <span className="inline-flex items-center gap-1 font-mono text-[11px] font-bold text-blue-700 bg-blue-50 px-2.5 py-0.5 rounded-lg border border-blue-100">
                         <span className="material-symbols-outlined text-[13px]">file_download</span>
-                        <span>{u.downloads?.length || (u.isPro ? 4 : 2)}</span>
+                        <span>{u.downloads?.length || 0}</span>
                       </span>
                     </td>
                     <td className="py-3 px-4">

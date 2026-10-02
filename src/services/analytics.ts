@@ -43,65 +43,40 @@ export interface AnalyticsSummary {
   updatedAt: string;
 }
 
-const STORAGE_KEY = 'maths_hub_analytics_metrics_v4';
-const DAILY_HISTORY_KEY = 'maths_hub_analytics_daily_history_v1';
+const STORAGE_KEY = 'maths_hub_analytics_metrics_v5';
+const DAILY_HISTORY_KEY = 'maths_hub_analytics_daily_history_v2';
 
-// Generate realistic seeded history for past 365 days if none exists
+// Clean out legacy fake data keys if present
+if (typeof localStorage !== 'undefined') {
+  try {
+    localStorage.removeItem('maths_hub_analytics_metrics_v4');
+    localStorage.removeItem('maths_hub_analytics_daily_history_v1');
+  } catch (_e) {}
+}
+
 export function generateDefaultDailyHistory(): DailyLogEntry[] {
-  const result: DailyLogEntry[] = [];
-  const now = new Date();
-  
-  for (let i = 364; i >= 0; i--) {
-    const d = new Date(now.getTime() - i * 24 * 60 * 60 * 1000);
-    const dateStr = d.toISOString().slice(0, 10);
-    const dayOfWeek = d.getDay();
-    const isWeekend = dayOfWeek === 0 || dayOfWeek === 6;
-    
-    // Growth factor over time (higher numbers more recently)
-    const recencyWeight = (365 - i) / 365;
-    const baseVisitors = Math.floor((12 + recencyWeight * 35) * (isWeekend ? 1.35 : 1.0));
-    const variance = (i * 7) % 9 - 4;
-    const visitors = Math.max(4, baseVisitors + variance);
-    const pageViews = Math.max(visitors * 2, Math.floor(visitors * (2.8 + (i % 3) * 0.4)));
-    const downloads = Math.max(1, Math.floor(visitors * 0.45));
-
-    result.push({
-      date: dateStr,
-      visitors,
-      pageViews,
-      downloads,
-    });
-  }
-  return result;
+  return [];
 }
 
 export const INITIAL_ANALYTICS: AnalyticsSummary = {
-  totalVisitors: 8420,
-  totalPageViews: 24650,
-  totalFreeDownloads: 3410,
-  totalPaidDownloads: 480,
-  conversionRate: '5.7%',
-  avgSessionDuration: '3m 24s',
+  totalVisitors: 0,
+  totalPageViews: 0,
+  totalFreeDownloads: 0,
+  totalPaidDownloads: 0,
+  conversionRate: '0%',
+  avgSessionDuration: '0s',
   pages: [
-    { path: '/', name: 'Home / Hero Banner', visitors: 8420, pageViews: 12500, avgTime: '2m 14s', bounceRate: '15%' },
-    { path: '/explore-notes', name: 'Curriculum & Notes Explorer', visitors: 6100, pageViews: 9200, avgTime: '4m 30s', bounceRate: '12%' },
-    { path: '/formula-deck', name: 'Pocket Formula Deck & Printable Sheets', visitors: 4900, pageViews: 7100, avgTime: '3m 45s', bounceRate: '10%' },
-    { path: '/ask-teacher', name: 'Ask Teacher Classroom Board Math Solver', visitors: 3800, pageViews: 6400, avgTime: '5m 40s', bounceRate: '8%' },
-    { path: '/video-lessons', name: 'Concept Animation & Video Masterclasses', visitors: 3200, pageViews: 5100, avgTime: '5m 10s', bounceRate: '18%' },
-    { path: '/free-downloads', name: 'Instant Free Revision PDF Depot', visitors: 4100, pageViews: 6200, avgTime: '3m 50s', bounceRate: '14%' },
-    { path: '/olympiad', name: 'IMO & Science Olympiad Portal', visitors: 2200, pageViews: 3800, avgTime: '4m 02s', bounceRate: '20%' },
-    { path: '/checkout', name: 'Pro Pass Checkout & Payment', visitors: 1100, pageViews: 1900, avgTime: '2m 15s', bounceRate: '25%' },
+    { path: '/', name: 'Home / Hero Banner', visitors: 0, pageViews: 0, avgTime: '0s', bounceRate: '0%' },
+    { path: '/explore-notes', name: 'Curriculum & Notes Explorer', visitors: 0, pageViews: 0, avgTime: '0s', bounceRate: '0%' },
+    { path: '/formula-deck', name: 'Pocket Formula Deck & Printable Sheets', visitors: 0, pageViews: 0, avgTime: '0s', bounceRate: '0%' },
+    { path: '/ask-teacher', name: 'Ask Teacher Classroom Board Math Solver', visitors: 0, pageViews: 0, avgTime: '0s', bounceRate: '0%' },
+    { path: '/video-lessons', name: 'Concept Animation & Video Masterclasses', visitors: 0, pageViews: 0, avgTime: '0s', bounceRate: '0%' },
+    { path: '/free-downloads', name: 'Instant Free Revision PDF Depot', visitors: 0, pageViews: 0, avgTime: '0s', bounceRate: '0%' },
+    { path: '/olympiad', name: 'IMO & Science Olympiad Portal', visitors: 0, pageViews: 0, avgTime: '0s', bounceRate: '0%' },
+    { path: '/checkout', name: 'Pro Pass Checkout & Payment', visitors: 0, pageViews: 0, avgTime: '0s', bounceRate: '0%' },
   ],
   posts: [],
-  dailyViews: [
-    { date: 'Mon', visitors: 42, downloads: 18 },
-    { date: 'Tue', visitors: 48, downloads: 22 },
-    { date: 'Wed', visitors: 55, downloads: 26 },
-    { date: 'Thu', visitors: 51, downloads: 24 },
-    { date: 'Fri', visitors: 62, downloads: 31 },
-    { date: 'Sat', visitors: 78, downloads: 39 },
-    { date: 'Sun', visitors: 84, downloads: 44 },
-  ],
+  dailyViews: [],
   dailyHistory: [],
   updatedAt: new Date().toISOString(),
 };
@@ -111,14 +86,12 @@ export function getDailyHistoryLogs(): DailyLogEntry[] {
     const raw = localStorage.getItem(DAILY_HISTORY_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) {
+      if (Array.isArray(parsed)) {
         return parsed;
       }
     }
   } catch {}
-  const seeded = generateDefaultDailyHistory();
-  saveDailyHistoryLogs(seeded);
-  return seeded;
+  return [];
 }
 
 export function saveDailyHistoryLogs(logs: DailyLogEntry[]): void {
