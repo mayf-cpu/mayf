@@ -13,8 +13,8 @@ export function getLocalCustomResources(): CustomResourceRecord[] {
         return parsed;
       }
     }
-  } catch (e) {
-    console.warn('Error reading local custom resources:', e);
+  } catch (_e) {
+    // Graceful fallback
   }
   return [];
 }
@@ -23,8 +23,8 @@ export function saveLocalCustomResources(resources: CustomResourceRecord[]): voi
   try {
     localStorage.setItem(CUSTOM_RESOURCES_STORAGE_KEY, JSON.stringify(resources));
     window.dispatchEvent(new CustomEvent('resources-changed', { detail: resources }));
-  } catch (e) {
-    console.warn('Error saving local custom resources:', e);
+  } catch (_e) {
+    // Ignore
   }
 }
 
@@ -34,8 +34,8 @@ export function getTierOverrides(): Record<string, 'free' | 'pro'> {
     if (raw) {
       return JSON.parse(raw) || {};
     }
-  } catch (e) {
-    console.warn('Error reading tier overrides:', e);
+  } catch (_e) {
+    // Graceful fallback
   }
   return {};
 }
@@ -44,8 +44,8 @@ export function saveTierOverrides(overrides: Record<string, 'free' | 'pro'>): vo
   try {
     localStorage.setItem(TIER_OVERRIDES_STORAGE_KEY, JSON.stringify(overrides));
     window.dispatchEvent(new CustomEvent('tier-overrides-changed', { detail: overrides }));
-  } catch (e) {
-    console.warn('Error saving tier overrides:', e);
+  } catch (_e) {
+    // Ignore
   }
 }
 
@@ -130,8 +130,8 @@ export async function syncAndLoadAllResources(): Promise<{
       customList = Array.from(mergedMap.values());
       saveLocalCustomResources(customList);
     }
-  } catch (e) {
-    console.warn('Cloud custom resources sync notice:', e);
+  } catch (_e) {
+    // Graceful fallback to local cache
   }
 
   // Convert custom records to MathResource

@@ -101,8 +101,8 @@ export const AdminAnalyticsTab: React.FC<AdminAnalyticsTabProps> = ({
       const updatedMetrics = getAnalyticsMetrics();
       setMetrics(updatedMetrics);
       setLastRefreshedAt(new Date().toLocaleTimeString());
-    } catch (e) {
-      console.warn('Error loading real analytics data:', e);
+    } catch (_e) {
+      // Non-blocking analytics data load fallback
     } finally {
       setIsRefreshing(false);
     }

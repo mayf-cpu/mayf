@@ -87,8 +87,8 @@ export const SocialMediaJoinBlock: React.FC<SocialMediaJoinBlockProps> = ({
     if (currentUser) {
       try {
         await updateUserJoinedSocial(currentUser.uid, true);
-      } catch (e) {
-        console.warn('Could not update joined social in cloud:', e);
+      } catch (_e) {
+        // Non-blocking cloud update fallback
       }
     }
     onToast('🎉 Thank you for joining our community! Enjoy all math resources.');

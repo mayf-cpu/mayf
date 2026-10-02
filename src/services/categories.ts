@@ -335,8 +335,8 @@ export function getCategories(): CategoryItem[] {
         return parsed;
       }
     }
-  } catch (e) {
-    console.warn('Error reading categories from localStorage:', e);
+  } catch (_e) {
+    // Graceful fallback to default categories
   }
   return DEFAULT_CATEGORIES;
 }
@@ -345,8 +345,8 @@ export function saveCategoriesLocally(categories: CategoryItem[]): void {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(categories));
     window.dispatchEvent(new CustomEvent('categories-changed', { detail: categories }));
-  } catch (e) {
-    console.warn('Error saving categories to localStorage:', e);
+  } catch (_e) {
+    // Ignore
   }
 }
 

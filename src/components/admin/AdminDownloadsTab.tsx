@@ -20,8 +20,7 @@ export const AdminDownloadsTab: React.FC<AdminDownloadsTabProps> = ({ onToast })
     try {
       const data = await fetchAllStudentDownloadRecords();
       setRecords(data);
-    } catch (err) {
-      console.warn('Failed to load student download records:', err);
+    } catch (_err) {
       onToast('Could not refresh student download records.');
     } finally {
       setLoading(false);

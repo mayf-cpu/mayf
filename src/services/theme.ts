@@ -140,8 +140,8 @@ export function getThemeConfig(): ThemeConfig {
         return { ...DEFAULT_THEME_CONFIG, ...parsed };
       }
     }
-  } catch (e) {
-    console.warn('Error reading theme config from localStorage:', e);
+  } catch (_e) {
+    // Graceful fallback to default theme
   }
   return DEFAULT_THEME_CONFIG;
 }
@@ -151,8 +151,8 @@ export function saveThemeConfigLocally(cfg: ThemeConfig): void {
     localStorage.setItem(THEME_STORAGE_KEY, JSON.stringify(cfg));
     applyThemeToDocument(cfg);
     window.dispatchEvent(new CustomEvent('theme-changed', { detail: cfg }));
-  } catch (e) {
-    console.warn('Error saving theme config:', e);
+  } catch (_e) {
+    // Ignore
   }
 }
 

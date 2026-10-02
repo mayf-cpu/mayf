@@ -263,8 +263,8 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
         setPageText(cloudPageText);
         savePageTextConfigLocally(cloudPageText);
       }
-    } catch (e) {
-      console.warn('Admin data load notice:', e);
+    } catch (_e) {
+      // Non-blocking admin data load fallback
     } finally {
       setLoadingOrders(false);
     }

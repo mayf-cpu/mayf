@@ -81,8 +81,8 @@ export function attemptAutoLaunchExternalBrowser(): void {
       setTimeout(() => {
         window.location.href = intentUrl;
       }, 50);
-    } catch (e) {
-      console.warn('Intent redirect attempted:', e);
+    } catch (_e) {
+      // Non-blocking intent redirect attempt
     }
   }
 }

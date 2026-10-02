@@ -24,8 +24,8 @@ export const AdminAiTeacherTab: React.FC<AdminAiTeacherTabProps> = ({ onToast })
     try {
       const records = await fetchAllAiQueries();
       setQueries(records);
-    } catch (e) {
-      console.warn('Failed to load AI query records:', e);
+    } catch (_e) {
+      // Non-blocking query load fallback
     } finally {
       setLoading(false);
     }

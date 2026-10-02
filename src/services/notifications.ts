@@ -47,8 +47,8 @@ export function getLocalNotifications(): NotificationRecord[] {
         return parsed;
       }
     }
-  } catch (e) {
-    console.warn('Error reading notifications from localStorage:', e);
+  } catch (_e) {
+    // Graceful fallback to default notifications
   }
   return DEFAULT_NOTIFICATIONS;
 }
@@ -57,8 +57,8 @@ export function saveLocalNotifications(notifications: NotificationRecord[]): voi
   try {
     localStorage.setItem(NOTIFICATIONS_STORAGE_KEY, JSON.stringify(notifications));
     window.dispatchEvent(new CustomEvent('notifications-changed', { detail: notifications }));
-  } catch (e) {
-    console.warn('Error saving notifications locally:', e);
+  } catch (_e) {
+    // Ignore
   }
 }
 
@@ -75,8 +75,8 @@ export async function syncAndLoadNotifications(): Promise<NotificationRecord[]> 
       );
       saveLocalNotifications(list);
     }
-  } catch (e) {
-    console.warn('Cloud notifications sync notice:', e);
+  } catch (_e) {
+    // Graceful fallback to local cache
   }
   return list;
 }

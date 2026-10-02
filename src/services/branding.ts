@@ -43,8 +43,8 @@ export function getBrandingConfig(): BrandingConfig {
         tagline: parsed.tagline !== undefined ? parsed.tagline : '',
       };
     }
-  } catch (e) {
-    console.warn('Failed to parse branding config from localStorage:', e);
+  } catch (_e) {
+    // Graceful fallback to default branding
   }
   return DEFAULT_BRANDING_CONFIG;
 }
@@ -53,6 +53,7 @@ export function getBrandingConfig(): BrandingConfig {
  * Update the favicon in the browser tab live
  */
 export function applyFaviconToDocument(faviconUrl: string): void {
+  if (!faviconUrl || typeof document === 'undefined') return;
   try {
     let link = document.querySelector("link[rel*='icon']") as HTMLLinkElement | null;
     if (!link) {
@@ -67,8 +68,8 @@ export function applyFaviconToDocument(faviconUrl: string): void {
     if (appleLink) {
       appleLink.href = faviconUrl;
     }
-  } catch (e) {
-    console.error('Error applying favicon:', e);
+  } catch (_e) {
+    // Non-blocking DOM update
   }
 }
 
@@ -87,8 +88,8 @@ export function saveBrandingConfigLocally(config: BrandingConfig): void {
     }
     // Broadcast event for live reactivity across components
     window.dispatchEvent(new CustomEvent('branding-changed', { detail: payload }));
-  } catch (e) {
-    console.error('Failed to save branding locally:', e);
+  } catch (_e) {
+    // Non-blocking local storage write
   }
 }
 

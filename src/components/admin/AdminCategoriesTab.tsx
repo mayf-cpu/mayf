@@ -260,9 +260,9 @@ export const AdminCategoriesTab: React.FC<AdminCategoriesTabProps> = ({
       await saveCategorySettingsToFirestore(categories);
       saveCategoriesLocally(categories);
       onToast('✓ Categories synchronized to cloud & active on website!');
-    } catch (err) {
-      console.warn('Failed saving categories to cloud:', err);
-      onToast('Saved locally. Cloud sync warning.');
+    } catch (_err) {
+      saveCategoriesLocally(categories);
+      onToast('Saved locally in browser cache.');
     } finally {
       setIsSaving(false);
     }

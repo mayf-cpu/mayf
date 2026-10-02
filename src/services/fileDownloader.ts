@@ -511,8 +511,8 @@ export async function downloadResourceAsPdf(options: DownloadFileOptions): Promi
       link.click();
       document.body.removeChild(link);
       return true;
-    } catch (e) {
-      console.warn('Proxy download notice:', e);
+    } catch (_e) {
+      // Fallback
     }
   }
 
@@ -564,8 +564,8 @@ export async function downloadResourceAsPdf(options: DownloadFileOptions): Promi
       document.body.removeChild(container);
       return true;
     }
-  } catch (canvasErr) {
-    console.warn('html2canvas rendering fallback to direct jsPDF text:', canvasErr);
+  } catch (_canvasErr) {
+    // Non-blocking fallback to direct jsPDF text document generation
   }
 
   // Fallback direct jsPDF document generation
@@ -710,8 +710,7 @@ export function printResourceInA4(options: DownloadFileOptions): void {
     try {
       iframe.contentWindow?.focus();
       iframe.contentWindow?.print();
-    } catch (e) {
-      console.warn('Iframe print error, falling back to window print:', e);
+    } catch (_e) {
       window.print();
     } finally {
       setTimeout(() => {
@@ -732,8 +731,8 @@ export function printResourceInA4(options: DownloadFileOptions): void {
  * System download entry point - now downloads as real PDF
  */
 export function downloadResourceToSystem(options: DownloadFileOptions): boolean {
-  downloadResourceAsPdf(options).catch((err) => {
-    console.error('Async PDF download error:', err);
+  downloadResourceAsPdf(options).catch((_err) => {
+    // Non-blocking download handling
   });
   return true;
 }

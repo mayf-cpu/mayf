@@ -260,8 +260,8 @@ export function getPageTextConfig(): PageTextConfig {
         updatedAt: parsed.updatedAt,
       };
     }
-  } catch (e) {
-    console.warn('Failed to parse local page text config:', e);
+  } catch (_e) {
+    // Graceful fallback to default page text
   }
   return DEFAULT_PAGE_TEXT;
 }
@@ -281,7 +281,7 @@ export function savePageTextConfigLocally(config: PageTextConfig): void {
         detail: payload,
       })
     );
-  } catch (e) {
-    console.warn('Failed to save page text config locally:', e);
+  } catch (_e) {
+    // Ignore
   }
 }

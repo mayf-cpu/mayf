@@ -124,8 +124,8 @@ export function getDailyHistoryLogs(): DailyLogEntry[] {
 export function saveDailyHistoryLogs(logs: DailyLogEntry[]): void {
   try {
     localStorage.setItem(DAILY_HISTORY_KEY, JSON.stringify(logs));
-  } catch (e) {
-    console.warn('Could not save daily history logs:', e);
+  } catch (_e) {
+    // Non-blocking telemetry
   }
 }
 
@@ -195,8 +195,8 @@ export function getAnalyticsMetrics(): AnalyticsSummary {
 
     base.dailyHistory = getDailyHistoryLogs();
     return base;
-  } catch (e) {
-    console.warn('Analytics parsing error:', e);
+  } catch (_e) {
+    // Non-blocking fallback
   }
   return { ...INITIAL_ANALYTICS, dailyHistory: getDailyHistoryLogs() };
 }
@@ -205,8 +205,8 @@ export function saveAnalyticsMetrics(data: AnalyticsSummary): void {
   try {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(data));
     window.dispatchEvent(new CustomEvent('analytics-updated', { detail: data }));
-  } catch (e) {
-    console.warn('Could not save analytics metrics:', e);
+  } catch (_e) {
+    // Non-blocking telemetry
   }
 }
 
@@ -267,8 +267,8 @@ export function recordPageViewEvent(path: string, pageName?: string): void {
 
     current.updatedAt = new Date().toISOString();
     saveAnalyticsMetrics(current);
-  } catch (e) {
-    console.warn('Page view tracking notice:', e);
+  } catch (_e) {
+    // Non-blocking telemetry
   }
 }
 
@@ -330,8 +330,8 @@ export function recordResourceDownloadEvent(
 
     current.updatedAt = new Date().toISOString();
     saveAnalyticsMetrics(current);
-  } catch (e) {
-    console.warn('Download tracking notice:', e);
+  } catch (_e) {
+    // Non-blocking telemetry
   }
 }
 
@@ -362,7 +362,7 @@ export function recordPostViewEvent(
     }
     current.updatedAt = new Date().toISOString();
     saveAnalyticsMetrics(current);
-  } catch (e) {
-    console.warn('Post view tracking notice:', e);
+  } catch (_e) {
+    // Non-blocking telemetry
   }
 }

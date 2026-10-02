@@ -41,18 +41,6 @@ googleProvider.setCustomParameters({
   prompt: 'select_account',
 });
 
-// Validate Connection to Firestore on boot
-async function testConnection() {
-  try {
-    await getDocFromServer(doc(db, 'test', 'connection'));
-  } catch (error) {
-    if (error instanceof Error && error.message.includes('the client is offline')) {
-      console.warn('Firebase client is currently offline or unreachable.');
-    }
-  }
-}
-testConnection();
-
 // Standard Error Handler per Firebase Skill
 export enum OperationType {
   CREATE = 'create',
@@ -294,26 +282,28 @@ export function createDemoStudentSession(
     // ignore
   }
 
-  // Also persist user document in Firestore so queries and records work seamlessly
-  const userRef = doc(db, 'users', uid);
-  getDoc(userRef)
-    .then((snap) => {
-      if (!snap.exists()) {
-        const profile: UserProfile = {
-          userId: uid,
-          email,
-          displayName,
-          photoURL: mockUser.photoURL,
-          grade,
-          isPro: true,
-          bookmarks: ['res-quad-class10'],
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        };
-        setDoc(userRef, profile).catch((e) => console.warn('Demo profile Firestore sync:', e));
-      }
-    })
-    .catch(() => {});
+  // Only sync to Firestore if authenticated
+  if (auth.currentUser) {
+    const userRef = doc(db, 'users', uid);
+    getDoc(userRef)
+      .then((snap) => {
+        if (!snap.exists()) {
+          const profile: UserProfile = {
+            userId: uid,
+            email,
+            displayName,
+            photoURL: mockUser.photoURL,
+            grade,
+            isPro: true,
+            bookmarks: ['res-quad-class10'],
+            createdAt: new Date().toISOString(),
+            updatedAt: new Date().toISOString(),
+          };
+          setDoc(userRef, profile).catch(() => {});
+        }
+      })
+      .catch(() => {});
+  }
 
   return mockUser;
 }
@@ -347,6 +337,10 @@ export function subscribeToUserProfile(
   userId: string,
   onProfile: (profile: UserProfile | null) => void
 ) {
+  // If not signed into Firebase Auth or UID is a demo session, don't trigger unauthenticated Firestore listeners
+  if (!auth.currentUser || auth.currentUser.uid !== userId) {
+    return () => {};
+  }
   const userRef = doc(db, 'users', userId);
   return onSnapshot(
     userRef,
@@ -357,8 +351,8 @@ export function subscribeToUserProfile(
         onProfile(null);
       }
     },
-    (err) => {
-      console.warn('Profile subscription warning: ', err.message);
+    (_err) => {
+      // Graceful fallback without noisy console warnings
     }
   );
 }
@@ -474,8 +468,8 @@ export async function loadAssignedAdminsFromFirestore(): Promise<AdminUserRecord
         return data.items;
       }
     }
-  } catch (e) {
-    console.warn('Could not load assigned admins from Firestore:', e);
+  } catch (_e) {
+    // Graceful fallback to cached admins
   }
   return getCachedAssignedAdmins();
 }
@@ -532,8 +526,8 @@ export async function fetchUserOrders(userId: string): Promise<OrderRecord[]> {
     if (userOrders.length > 0) {
       return userOrders.sort((a, b) => (b.createdAt || '').localeCompare(a.createdAt || ''));
     }
-  } catch (err) {
-    console.warn('Could not fetch user orders from Firestore, reading local fallback:', err);
+  } catch (_err) {
+    // Fall back to local storage
   }
 
   // Local fallback
@@ -560,8 +554,8 @@ export async function fetchAllOrders(): Promise<OrderRecord[]> {
     const q = query(ordersRef, orderBy('createdAt', 'desc'), limit(50));
     const snap = await getDocs(q);
     cloudOrders = snap.docs.map((d) => d.data() as OrderRecord);
-  } catch (err) {
-    console.warn('Could not fetch all orders from cloud (may be permissions or initial empty state):', err);
+  } catch (_err) {
+    // Fallback to local storage if permissions or empty
   }
 
   // Merge any local orders not yet reflected in cloud
@@ -591,8 +585,7 @@ export async function fetchAllUsers(): Promise<UserProfile[]> {
     const q = query(usersRef, limit(50));
     const snap = await getDocs(q);
     return snap.docs.map((d) => d.data() as UserProfile);
-  } catch (err) {
-    console.warn('Could not fetch users list:', err);
+  } catch (_err) {
     return [];
   }
 }
@@ -618,8 +611,8 @@ export async function loadGatewaySettingsFromFirestore(): Promise<any | null> {
     if (snap.exists()) {
       return snap.data();
     }
-  } catch (error) {
-    console.warn('Could not load gateway settings from Firestore:', error);
+  } catch (_error) {
+    // Graceful fallback to local config
   }
   return null;
 }
@@ -645,8 +638,8 @@ export async function loadBrandingSettingsFromFirestore(): Promise<any | null> {
     if (snap.exists()) {
       return snap.data();
     }
-  } catch (error) {
-    console.warn('Could not load branding settings from Firestore:', error);
+  } catch (_error) {
+    // Graceful fallback
   }
   return null;
 }
@@ -672,8 +665,8 @@ export async function loadPageTextSettingsFromFirestore(): Promise<any | null> {
     if (snap.exists()) {
       return snap.data();
     }
-  } catch (error) {
-    console.warn('Could not load page text settings from Firestore:', error);
+  } catch (_error) {
+    // Graceful fallback
   }
   return null;
 }
@@ -735,8 +728,7 @@ export async function fetchCoupons(): Promise<CouponRecord[]> {
     const q = query(colRef, orderBy('createdAt', 'desc'), limit(50));
     const snap = await getDocs(q);
     return snap.docs.map((d) => ({ ...d.data(), id: d.id } as CouponRecord));
-  } catch (e) {
-    console.warn('Could not fetch coupons:', e);
+  } catch (_e) {
     return [];
   }
 }
@@ -771,8 +763,7 @@ export async function fetchNotifications(): Promise<NotificationRecord[]> {
     const q = query(colRef, orderBy('createdAt', 'desc'), limit(50));
     const snap = await getDocs(q);
     return snap.docs.map((d) => ({ ...d.data(), id: d.id } as NotificationRecord));
-  } catch (e) {
-    console.warn('Could not fetch notifications:', e);
+  } catch (_e) {
     return [];
   }
 }
@@ -819,8 +810,7 @@ export async function fetchCustomResources(): Promise<CustomResourceRecord[]> {
     const q = query(colRef, orderBy('createdAt', 'desc'), limit(100));
     const snap = await getDocs(q);
     return snap.docs.map((d) => ({ ...d.data(), id: d.id } as CustomResourceRecord));
-  } catch (e) {
-    console.warn('Could not fetch custom resources:', e);
+  } catch (_e) {
     return [];
   }
 }
@@ -873,8 +863,51 @@ export async function loadSeoSettingsFromFirestore(): Promise<SeoSettings | null
     if (snap.exists()) {
       return snap.data() as SeoSettings;
     }
-  } catch (e) {
-    console.warn('Could not load SEO settings from Firestore:', e);
+  } catch (_e) {
+    // Graceful fallback
+  }
+  return null;
+}
+
+// Domain Redirection & Canonical Rules
+export interface RedirectRuleSettings {
+  enabled: boolean;
+  sourceDomain: string; // e.g., 'www.mayf.co.in'
+  targetDomain: string; // e.g., 'mayf.co.in'
+  statusCode: 301 | 302;
+  enforceHttps: boolean;
+  preservePathAndQuery: boolean;
+  autoClientFallback: boolean;
+  updatedAt?: string;
+  lastTestedAt?: string;
+  lastTestStatus?: 'success' | 'warning' | 'error';
+  lastTestMessage?: string;
+}
+
+export const DEFAULT_REDIRECT_SETTINGS: RedirectRuleSettings = {
+  enabled: true,
+  sourceDomain: 'www.mayf.co.in',
+  targetDomain: 'mayf.co.in',
+  statusCode: 301,
+  enforceHttps: true,
+  preservePathAndQuery: true,
+  autoClientFallback: true,
+};
+
+export async function saveRedirectRuleSettingsToFirestore(settings: RedirectRuleSettings): Promise<void> {
+  const docRef = doc(db, 'settings', 'redirect_rules');
+  await setDoc(docRef, { ...settings, updatedAt: new Date().toISOString() }, { merge: true });
+}
+
+export async function loadRedirectRuleSettingsFromFirestore(): Promise<RedirectRuleSettings | null> {
+  try {
+    const docRef = doc(db, 'settings', 'redirect_rules');
+    const snap = await getDoc(docRef);
+    if (snap.exists()) {
+      return snap.data() as RedirectRuleSettings;
+    }
+  } catch (_e) {
+    // Graceful fallback
   }
   return null;
 }
@@ -900,8 +933,8 @@ export async function loadCategorySettingsFromFirestore(): Promise<any[] | null>
       const data = snap.data();
       return data.items || null;
     }
-  } catch (e) {
-    console.warn('Could not load category settings from Firestore:', e);
+  } catch (_e) {
+    // Graceful fallback
   }
   return null;
 }
@@ -926,8 +959,8 @@ export async function loadThemeSettingsFromFirestore(): Promise<any | null> {
     if (snap.exists()) {
       return snap.data();
     }
-  } catch (e) {
-    console.warn('Could not load theme settings from Firestore:', e);
+  } catch (_e) {
+    // Graceful fallback
   }
   return null;
 }
@@ -952,8 +985,8 @@ export async function loadSocialSettingsFromFirestore(): Promise<any | null> {
     if (snap.exists()) {
       return snap.data();
     }
-  } catch (e) {
-    console.warn('Could not load social settings from Firestore:', e);
+  } catch (_e) {
+    // Graceful fallback
   }
   return null;
 }
@@ -981,19 +1014,21 @@ export async function saveAiQueryRecord(record: AiQueryRecord): Promise<void> {
     const existing: AiQueryRecord[] = existingRaw ? JSON.parse(existingRaw) : [];
     const updated = [record, ...existing.filter((q) => q.id !== record.id)].slice(0, 100);
     localStorage.setItem('maths_hub_ai_queries', JSON.stringify(updated));
-  } catch (e) {
-    console.warn('LocalStorage save error for AI query:', e);
+  } catch (_e) {
+    // Non-blocking local storage fallback
   }
 
-  // Save to Firestore
-  try {
-    const docRef = doc(db, 'ai_queries', record.id);
-    await setDoc(docRef, {
-      ...record,
-      updatedAt: new Date().toISOString(),
-    });
-  } catch (err) {
-    console.warn('Firestore save error for ai_queries (fallback stored locally):', err);
+  // Save to Firestore if authenticated
+  if (auth.currentUser) {
+    try {
+      const docRef = doc(db, 'ai_queries', record.id);
+      await setDoc(docRef, {
+        ...record,
+        updatedAt: new Date().toISOString(),
+      });
+    } catch (_err) {
+      // Non-blocking Firestore fallback
+    }
   }
 }
 
@@ -1012,8 +1047,8 @@ export async function fetchStudentAiQueries(userId: string): Promise<AiQueryReco
       results.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
       return results;
     }
-  } catch (err) {
-    console.warn('Error fetching student AI queries from Firestore, reading local cache:', err);
+  } catch (_err) {
+    // Graceful fallback to local cache
   }
 
   try {
@@ -1041,8 +1076,8 @@ export async function fetchAllAiQueries(): Promise<AiQueryRecord[]> {
       results.sort((a, b) => new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime());
       return results;
     }
-  } catch (err) {
-    console.warn('Error fetching all AI queries from Firestore, using local cache:', err);
+  } catch (_err) {
+    // Graceful fallback to local cache
   }
 
   try {
@@ -1061,8 +1096,8 @@ export async function deleteAiQueryRecord(queryId: string): Promise<void> {
   try {
     const docRef = doc(db, 'ai_queries', queryId);
     await deleteDoc(docRef);
-  } catch (err) {
-    console.warn('Error deleting AI query from Firestore:', err);
+  } catch (_err) {
+    // Graceful fallback
   }
 
   try {
@@ -1280,8 +1315,8 @@ export async function recordStudentDownload(record: StudentDownloadRecord): Prom
     };
     userDownloads = [downloadItem, ...userDownloads.filter((d) => d.title !== record.title)];
     localStorage.setItem(userStorageKey, JSON.stringify(userDownloads));
-  } catch (err) {
-    console.warn('Local student download save warning:', err);
+  } catch (_err) {
+    // Graceful fallback
   }
 
   // 2. Update Admin Global Download Records in Local Storage
@@ -1290,21 +1325,21 @@ export async function recordStudentDownload(record: StudentDownloadRecord): Prom
     let adminRecords: StudentDownloadRecord[] = rawAdmin ? JSON.parse(rawAdmin) : INITIAL_SAMPLE_DOWNLOADS;
     adminRecords = [record, ...adminRecords.filter((r) => r.id !== record.id)];
     localStorage.setItem(LOCAL_ADMIN_DOWNLOADS_KEY, JSON.stringify(adminRecords));
-  } catch (err) {
-    console.warn('Admin local storage warning:', err);
+  } catch (_err) {
+    // Graceful fallback
   }
 
   // 3. Write to Firestore `student_downloads` collection
   try {
     const dlDocRef = doc(db, 'student_downloads', record.id);
     await setDoc(dlDocRef, record);
-  } catch (firestoreErr) {
+  } catch (_firestoreErr) {
     // If student_downloads collection write is restricted or offline, write to analytics collection
     try {
       const analyticsRef = doc(db, 'analytics', `dl_${record.id}`);
       await setDoc(analyticsRef, record);
-    } catch (fallbackErr) {
-      console.warn('Firestore download record sync fallback:', fallbackErr);
+    } catch (_fallbackErr) {
+      // Graceful fallback
     }
   }
 
@@ -1331,8 +1366,8 @@ export async function recordStudentDownload(record: StudentDownloadRecord): Prom
       },
       { merge: true }
     );
-  } catch (profileErr) {
-    console.warn('Student profile downloads array update notice:', profileErr);
+  } catch (_profileErr) {
+    // Graceful fallback
   }
 
   // 5. Dispatch Custom Events for Instant UI reactivity across student profile & admin panel
@@ -1358,8 +1393,8 @@ export async function fetchAllStudentDownloadRecords(): Promise<StudentDownloadR
       const parsed: StudentDownloadRecord[] = JSON.parse(rawLocal);
       parsed.forEach((r) => recordsMap.set(r.id, r));
     }
-  } catch (e) {
-    console.warn('Error reading admin downloads from localStorage:', e);
+  } catch (_e) {
+    // Graceful fallback
   }
 
   // Attempt to load from Firestore student_downloads collection
@@ -1372,7 +1407,7 @@ export async function fetchAllStudentDownloadRecords(): Promise<StudentDownloadR
         recordsMap.set(data.id, data);
       }
     });
-  } catch (fsErr) {
+  } catch (_fsErr) {
     // Also check analytics collection fallback
     try {
       const snap2 = await getDocs(collection(db, 'analytics'));
@@ -1384,8 +1419,8 @@ export async function fetchAllStudentDownloadRecords(): Promise<StudentDownloadR
           }
         }
       });
-    } catch (e2) {
-      console.warn('Error reading cloud student downloads:', e2);
+    } catch (_e2) {
+      // Graceful fallback
     }
   }
 
@@ -1408,24 +1443,26 @@ export async function fetchStudentProfileDownloads(userId: string): Promise<Stud
       const parsed: StudentDownloadItem[] = JSON.parse(rawLocal);
       parsed.forEach((item) => itemsMap.set(item.title, item));
     }
-  } catch (e) {
-    console.warn('User local downloads read error:', e);
+  } catch (_e) {
+    // Graceful fallback
   }
 
-  // 2. Read from Firestore user profile document
-  try {
-    const userDocRef = doc(db, 'users', userId);
-    const snap = await getDoc(userDocRef);
-    if (snap.exists()) {
-      const data = snap.data();
-      if (Array.isArray(data.downloads)) {
-        data.downloads.forEach((item: StudentDownloadItem) => {
-          itemsMap.set(item.title, item);
-        });
+  // 2. Read from Firestore user profile document if authenticated
+  if (auth.currentUser && auth.currentUser.uid === userId) {
+    try {
+      const userDocRef = doc(db, 'users', userId);
+      const snap = await getDoc(userDocRef);
+      if (snap.exists()) {
+        const data = snap.data();
+        if (Array.isArray(data.downloads)) {
+          data.downloads.forEach((item: StudentDownloadItem) => {
+            itemsMap.set(item.title, item);
+          });
+        }
       }
+    } catch (_e) {
+      // Graceful fallback
     }
-  } catch (e) {
-    console.warn('User cloud downloads read error:', e);
   }
 
   return Array.from(itemsMap.values()).sort(

@@ -108,6 +108,10 @@ import {
 } from './services/currency';
 import { AdPlacement } from './components/AdPlacement';
 import { loadAdsConfigFromFirestore, saveAdsConfigLocally } from './services/ads';
+import { checkAndExecuteClientRedirection } from './services/redirects';
+
+// Immediate canonical domain redirection check
+checkAndExecuteClientRedirection();
 
 export default function App() {
   // Page view routing: 'store' for student portal, 'admin' for dedicated Control Panel, 'dashboard' for User Dashboard, 'formula-deck' for dedicated interactive sandbox, 'ask-teacher' for dedicated Ask Teacher solver page, 'resource' for dedicated standalone downloadable content page
@@ -341,23 +345,16 @@ export default function App() {
         const localSession = getLocalDemoSession();
         if (localSession) {
           setCurrentUser(localSession);
-          const unsubscribeProfile = subscribeToUserProfile(localSession.uid, (profile) => {
-            if (profile) {
-              setUserProfile(profile);
-            } else {
-              setUserProfile({
-                userId: localSession.uid,
-                email: localSession.email,
-                displayName: localSession.displayName,
-                photoURL: localSession.photoURL,
-                grade: selectedClass,
-                isPro: true,
-                bookmarks: ['res-quad-class10'],
-                createdAt: new Date().toISOString(),
-              });
-            }
+          setUserProfile({
+            userId: localSession.uid,
+            email: localSession.email,
+            displayName: localSession.displayName,
+            photoURL: localSession.photoURL,
+            grade: selectedClass,
+            isPro: true,
+            bookmarks: ['res-quad-class10'],
+            createdAt: new Date().toISOString(),
           });
-          return () => unsubscribeProfile();
         } else {
           setCurrentUser(null);
           setUserProfile(null);
@@ -568,8 +565,8 @@ export default function App() {
       if (targetFormat && targetFormat.toLowerCase().includes('video')) {
         setSelectedFormat('Video Lessons (YouTube & Facebook)');
       }
-    } catch (e) {
-      console.warn('URL param parse notice:', e);
+    } catch (_e) {
+      // Ignore
     }
 
     // URL and Hash based page view routing (supports direct /admin or #admin)
@@ -769,8 +766,8 @@ export default function App() {
       setPendingDownloadItem(null);
       setIsLoginRequiredOpen(false);
       showToast('Signed out successfully');
-    } catch (err) {
-      console.warn('Sign out error:', err);
+    } catch (_err) {
+      // Ignore
     }
   };
 
@@ -1041,8 +1038,8 @@ export default function App() {
         keyFormulas: targetResource?.keyFormulas,
         examTraps: targetResource?.examTraps,
       });
-    } catch (e) {
-      console.warn('System file download error:', e);
+    } catch (_e) {
+      // Ignore
     }
 
     const downloadId = `dl-${Date.now()}`;
@@ -1070,7 +1067,7 @@ export default function App() {
       downloadUrl: targetResource?.downloadUrl,
       downloadedAt: new Date().toISOString(),
       device: typeof navigator !== 'undefined' && navigator.userAgent.includes('Mobile') ? 'Mobile Device' : 'Desktop Browser',
-    }).catch((err) => console.warn('Record student download err:', err));
+    }).catch(() => {});
 
     recordResourceDownloadEvent(title, false);
     setDownloads((prev) => [newItem, ...prev.filter((p) => p.title !== title)]);

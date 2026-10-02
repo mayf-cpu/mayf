@@ -111,8 +111,8 @@ export async function resetAllAdminFeaturesToDefaults(): Promise<AdminResetResul
       saveGatewaySettingsToFirestore(DEFAULT_GATEWAY_CONFIG),
       saveSeoSettingsToFirestore(DEFAULT_SEO_SETTINGS),
       savePageTextSettingsToFirestore(DEFAULT_PAGE_TEXT),
-    ]).catch((err) => {
-      console.warn('Notice while saving reset settings to cloud Firestore:', err);
+    ]).catch(() => {
+      // Graceful fallback
     });
 
     // 11. Broadcast master reset notification event

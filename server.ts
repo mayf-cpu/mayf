@@ -13,6 +13,15 @@ const __dirname = path.dirname(__filename);
 const app = express();
 const PORT = Number(process.env.PORT) || 3000;
 
+// Canonical domain redirect: ensure www.mayf.co.in redirects to https://mayf.co.in
+app.use((req, res, next) => {
+  const host = req.get('host') || '';
+  if (host.startsWith('www.mayf.co.in')) {
+    return res.redirect(301, `https://mayf.co.in${req.originalUrl}`);
+  }
+  next();
+});
+
 app.use(express.json({ limit: '20mb' }));
 app.use(express.urlencoded({ extended: true, limit: '20mb' }));
 
@@ -109,6 +118,52 @@ app.get('/api/health', (req, res) => {
     timestamp: new Date().toISOString(),
     geminiConfigured: Boolean(process.env.GEMINI_API_KEY),
   });
+});
+
+// Live Domain Redirection Check Endpoint
+app.all('/api/admin/check-redirect', async (req, res) => {
+  try {
+    const rawUrl = (req.query.url as string) || (req.body?.url as string) || 'https://www.mayf.co.in/';
+    const targetUrl = rawUrl.startsWith('http') ? rawUrl : `https://${rawUrl}`;
+    const startTime = Date.now();
+
+    const response = await fetch(targetUrl, {
+      method: 'GET',
+      redirect: 'manual',
+      headers: {
+        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36',
+      },
+    });
+
+    const elapsedMs = Date.now() - startTime;
+    const statusCode = response.status;
+    const location = response.headers.get('location') || '';
+    const serverHeader = response.headers.get('server') || '';
+    const cfRay = response.headers.get('cf-ray') || '';
+
+    const isRedirect = statusCode >= 300 && statusCode < 400;
+    const redirectsToApex = Boolean(location && (location.includes('mayf.co.in') && !location.includes('www.')));
+
+    return res.json({
+      success: true,
+      testedUrl: targetUrl,
+      statusCode,
+      location,
+      server: serverHeader,
+      cfRay,
+      elapsedMs,
+      isRedirect,
+      redirectsToApex,
+      statusText: isRedirect
+        ? `HTTP ${statusCode} Redirect to: ${location}`
+        : `HTTP ${statusCode} (No redirect header returned)`,
+    });
+  } catch (err: any) {
+    return res.status(500).json({
+      success: false,
+      error: err?.message || 'Failed to perform redirect check.',
+    });
+  }
 });
 
 // Math AI Teacher Assistant Endpoint

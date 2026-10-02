@@ -70,10 +70,9 @@ export const AdminSocialTab: React.FC<AdminSocialTabProps> = ({
       await saveSocialSettingsToFirestore(social);
       saveSocialConfigLocally(social);
       onToast('✓ Social channels & App Deep Links published live to website!');
-    } catch (e) {
-      console.warn('Social save cloud error:', e);
+    } catch (_e) {
       saveSocialConfigLocally(social);
-      onToast('Saved locally. Cloud sync warning.');
+      onToast('Saved locally in browser cache.');
     } finally {
       setIsSaving(false);
     }

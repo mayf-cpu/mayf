@@ -72,8 +72,8 @@ export function getRazorpayGatewayConfig(): RazorpayGatewayConfig {
     if (raw) {
       return { ...DEFAULT_GATEWAY_CONFIG, ...JSON.parse(raw) };
     }
-  } catch (e) {
-    console.warn('Failed to parse gateway config from storage:', e);
+  } catch (_e) {
+    // Graceful fallback to default gateway config
   }
   return DEFAULT_GATEWAY_CONFIG;
 }
@@ -107,8 +107,7 @@ export function openRazorpayCheckout(
       });
       rzp.open();
       return true;
-    } catch (err) {
-      console.warn('Razorpay SDK invocation fell back:', err);
+    } catch (_err) {
       if (onFallbackRequired) onFallbackRequired();
       return false;
     }

@@ -108,11 +108,11 @@ export const ProCheckoutModal: React.FC<ProCheckoutModalProps> = ({
     }
 
     try {
-      if (currentUser) {
+      if (currentUser && !currentUser.uid.startsWith('demo_')) {
         await saveRazorpayOrder(orderData);
       }
-    } catch (err) {
-      console.warn('Order sync warning: ', err);
+    } catch (_err) {
+      // Non-blocking order cloud sync fallback
     }
 
     setTimeout(() => {

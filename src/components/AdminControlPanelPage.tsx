@@ -344,8 +344,8 @@ export const AdminControlPanelPage: React.FC<AdminControlPanelPageProps> = ({
         setPageText(cloudPageText);
         savePageTextConfigLocally(cloudPageText);
       }
-    } catch (e) {
-      console.warn('Admin data load notice:', e);
+    } catch (_e) {
+      // Non-blocking admin data load fallback
     } finally {
       setLoadingOrders(false);
     }
@@ -866,8 +866,8 @@ export const AdminControlPanelPage: React.FC<AdminControlPanelPageProps> = ({
               saveCategoriesLocally(newCats);
               try {
                 await saveCategorySettingsToFirestore(newCats);
-              } catch (e) {
-                console.warn('Saved categories locally, cloud notice:', e);
+              } catch (_e) {
+                // Non-blocking cloud sync fallback
               }
             }}
             onToast={onToast}
@@ -884,8 +884,8 @@ export const AdminControlPanelPage: React.FC<AdminControlPanelPageProps> = ({
               applyThemeToDocument(newTheme);
               try {
                 await saveThemeSettingsToFirestore(newTheme);
-              } catch (e) {
-                console.warn('Saved theme locally, cloud notice:', e);
+              } catch (_e) {
+                // Non-blocking cloud sync fallback
               }
             }}
             onToast={onToast}
@@ -901,8 +901,8 @@ export const AdminControlPanelPage: React.FC<AdminControlPanelPageProps> = ({
               saveSocialConfigLocally(newSocial);
               try {
                 await saveSocialSettingsToFirestore(newSocial);
-              } catch (e) {
-                console.warn('Saved social locally, cloud notice:', e);
+              } catch (_e) {
+                // Non-blocking cloud sync fallback
               }
             }}
             onToast={onToast}

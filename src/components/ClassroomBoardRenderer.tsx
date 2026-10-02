@@ -59,6 +59,7 @@ function renderMathToHtml(latex: string, displayMode: boolean = false): string {
       displayMode,
       throwOnError: false,
       output: 'htmlAndMathml',
+      strict: 'ignore',
     });
   } catch (err) {
     return `<span class="font-mono text-amber-300">${latex}</span>`;

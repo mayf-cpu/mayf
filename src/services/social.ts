@@ -141,8 +141,8 @@ export function getSocialConfig(): SocialConfig {
         };
       }
     }
-  } catch (e) {
-    console.warn('Error reading social config from localStorage:', e);
+  } catch (_e) {
+    // Graceful fallback to default social config
   }
   return DEFAULT_SOCIAL_CONFIG;
 }
@@ -151,8 +151,8 @@ export function saveSocialConfigLocally(cfg: SocialConfig): void {
   try {
     localStorage.setItem(SOCIAL_STORAGE_KEY, JSON.stringify(cfg));
     window.dispatchEvent(new CustomEvent('social-changed', { detail: cfg }));
-  } catch (e) {
-    console.warn('Error saving social config:', e);
+  } catch (_e) {
+    // Ignore
   }
 }
 
@@ -174,8 +174,8 @@ export function openInAppOrWeb(nativeUri: string, webFallbackUrl: string): void 
   try {
     // Attempt to invoke the native app handler
     window.location.href = nativeUri;
-  } catch (e) {
-    console.warn('Deep link error:', e);
+  } catch (_e) {
+    // Graceful fallback
   }
 
   // Fallback timer: if the app is not installed, open the browser fallback
@@ -201,10 +201,8 @@ export async function triggerNativeOsShare(data: {
     try {
       await navigator.share(data);
       return true;
-    } catch (err: any) {
-      if (err.name !== 'AbortError') {
-        console.warn('Native share cancelled or failed:', err);
-      }
+    } catch (_err: any) {
+      // User cancelled or share unavailable
     }
   }
   return false;

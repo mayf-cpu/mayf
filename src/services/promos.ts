@@ -70,8 +70,8 @@ export function getLocalCoupons(): CouponRecord[] {
         return parsed;
       }
     }
-  } catch (e) {
-    console.warn('Error reading coupons from localStorage:', e);
+  } catch (_e) {
+    // Graceful fallback to default coupons
   }
   return DEFAULT_COUPONS;
 }
@@ -80,8 +80,8 @@ export function saveLocalCoupons(coupons: CouponRecord[]): void {
   try {
     localStorage.setItem(COUPONS_STORAGE_KEY, JSON.stringify(coupons));
     window.dispatchEvent(new CustomEvent('coupons-changed', { detail: coupons }));
-  } catch (e) {
-    console.warn('Error saving coupons locally:', e);
+  } catch (_e) {
+    // Ignore
   }
 }
 
@@ -96,8 +96,8 @@ export async function syncAndLoadCoupons(): Promise<CouponRecord[]> {
       list = Array.from(map.values());
       saveLocalCoupons(list);
     }
-  } catch (e) {
-    console.warn('Cloud coupons sync notice:', e);
+  } catch (_e) {
+    // Graceful fallback to local cache
   }
   return list;
 }

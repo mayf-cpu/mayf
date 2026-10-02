@@ -14,8 +14,8 @@ export function getSeoSettingsLocally(): SeoSettings {
         return { ...DEFAULT_SEO_SETTINGS, ...parsed };
       }
     }
-  } catch (e) {
-    console.warn('Error reading SEO settings from localStorage:', e);
+  } catch (_e) {
+    // Graceful fallback to default SEO
   }
   return DEFAULT_SEO_SETTINGS;
 }
@@ -25,8 +25,8 @@ export function saveSeoSettingsLocally(settings: SeoSettings): void {
     localStorage.setItem(SEO_STORAGE_KEY, JSON.stringify(settings));
     applySeoToDocument(settings);
     window.dispatchEvent(new CustomEvent('seo-changed', { detail: settings }));
-  } catch (e) {
-    console.warn('Error saving SEO settings locally:', e);
+  } catch (_e) {
+    // Ignore
   }
 }
 

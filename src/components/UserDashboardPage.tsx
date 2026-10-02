@@ -153,8 +153,7 @@ export const UserDashboardPage: React.FC<UserDashboardPageProps> = ({
 
       await updateUserProfile(currentUser.uid, payload);
       onToast('✓ Profile details & preferences saved successfully!');
-    } catch (err) {
-      console.warn('Profile save warning:', err);
+    } catch (_err) {
       onToast('Saved locally in browser cache.');
     } finally {
       setIsSavingProfile(false);

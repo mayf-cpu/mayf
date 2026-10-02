@@ -612,7 +612,7 @@ export const AskTeacherPage: React.FC<AskTeacherPageProps> = ({
                 Type Your Math Question or Paste Text:
               </label>
               <span className="text-[11px] text-slate-400 font-medium">
-                Supports LaTeX: $x^2$, \sqrt&#123;a&#125;, or plain English
+                Supports LaTeX: $x^2$, {'\\sqrt{a}'}, or plain English
               </span>
             </div>
             <textarea

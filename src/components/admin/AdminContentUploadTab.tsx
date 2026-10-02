@@ -264,8 +264,8 @@ export const AdminContentUploadTab: React.FC<AdminContentUploadTabProps> = ({
       for (const item of stagedResources) {
         try {
           await saveCustomResourceToFirestore(item);
-        } catch (e) {
-          console.warn('Firestore write warning for', item.id, e);
+        } catch (_e) {
+          // Non-blocking cloud sync fallback
         }
       }
 
@@ -337,8 +337,8 @@ export const AdminContentUploadTab: React.FC<AdminContentUploadTabProps> = ({
 
       try {
         await saveCustomResourceToFirestore(duplicatePayload);
-      } catch (cloudErr) {
-        console.warn('Saved duplicate locally, Firestore cloud notice:', cloudErr);
+      } catch (_cloudErr) {
+        // Non-blocking cloud sync fallback
       }
 
       onToast(`🎉 Duplicated "${res.title}" successfully!`);
@@ -413,8 +413,8 @@ export const AdminContentUploadTab: React.FC<AdminContentUploadTabProps> = ({
 
       try {
         await saveCustomResourceToFirestore(payload);
-      } catch (cloudErr) {
-        console.warn('Saved to local storage, Firestore cloud sync notice:', cloudErr);
+      } catch (_cloudErr) {
+        // Non-blocking cloud sync fallback
       }
 
       onToast(isEditing ? `✅ Updated "${title}" successfully!` : `🎉 Published "${title}" successfully! Live in website catalog.`);
@@ -437,8 +437,8 @@ export const AdminContentUploadTab: React.FC<AdminContentUploadTabProps> = ({
 
       try {
         await deleteCustomResourceFromFirestore(id);
-      } catch (cloudErr) {
-        console.warn('Deleted locally, cloud notice:', cloudErr);
+      } catch (_cloudErr) {
+        // Non-blocking cloud sync fallback
       }
 
       onToast(`Deleted "${itemTitle}"`);

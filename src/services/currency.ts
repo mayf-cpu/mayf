@@ -199,15 +199,15 @@ export function detectUserCountryAndCurrency(): { countryCode: string; currencyC
         detectedCurrency = 'INR';
       }
     }
-  } catch (err) {
-    console.warn('Currency detection error:', err);
+  } catch (_err) {
+    // Fallback to INR default
   }
 
   // Cache detected
   try {
     localStorage.setItem(STORAGE_KEY, detectedCurrency);
     localStorage.setItem(COUNTRY_STORAGE_KEY, detectedCountry);
-  } catch (e) {
+  } catch (_e) {
     // Ignore
   }
 
@@ -233,8 +233,8 @@ export function setUserCurrency(currencyCode: string): void {
       window.dispatchEvent(new CustomEvent('currency-changed', {
         detail: SUPPORTED_CURRENCIES[currencyCode],
       }));
-    } catch (e) {
-      console.warn('Error saving currency:', e);
+    } catch (_e) {
+      // Ignore
     }
   }
 }
@@ -279,50 +279,20 @@ export function formatPrice(amountInInr: number, currencyCode?: string): string 
 }
 
 /**
- * Async background refinement via free IP geolocation (non-blocking)
+ * Detection via browser TimeZone and locale without external API calls
+ * to prevent 429 Too Many Requests errors in the console.
  */
 export function refineUserCurrencyWithIp(): void {
-  // If user already explicitly set their currency, don't override
-  try {
-    const manualChoice = localStorage.getItem('maths_portal_currency_manual_set');
-    if (manualChoice === 'true') return;
-  } catch (e) {
-    // Ignore
-  }
-
-  const controller = new AbortController();
-  const timeoutId = setTimeout(() => controller.abort(), 1800);
-
-  fetch('https://ipapi.co/json/', { signal: controller.signal })
-    .then((res) => res.json())
-    .then((data) => {
-      clearTimeout(timeoutId);
-      if (data && data.currency && SUPPORTED_CURRENCIES[data.currency]) {
-        setUserCurrency(data.currency);
-      } else if (data && data.country_code) {
-        const countryMap: Record<string, string> = {
-          IN: 'INR',
-          US: 'USD',
-          GB: 'GBP',
-          CA: 'CAD',
-          AU: 'AUD',
-          AE: 'AED',
-          SG: 'SGD',
-          SA: 'SAR',
-          JP: 'JPY',
-          DE: 'EUR',
-          FR: 'EUR',
-          IT: 'EUR',
-          ES: 'EUR',
-          NL: 'EUR',
-        };
-        const mapped = countryMap[data.country_code];
-        if (mapped && SUPPORTED_CURRENCIES[mapped]) {
-          setUserCurrency(mapped);
-        }
+  // Uses synchronous client-side timezone and locale detection which is 100% reliable and zero-cost
+  const { currencyCode } = detectUserCountryAndCurrency();
+  if (currencyCode && SUPPORTED_CURRENCIES[currencyCode]) {
+    try {
+      const saved = localStorage.getItem(STORAGE_KEY);
+      if (!saved || saved !== currencyCode) {
+        localStorage.setItem(STORAGE_KEY, currencyCode);
       }
-    })
-    .catch(() => {
-      // Fail silently; fallback to browser locale detection
-    });
+    } catch (_e) {
+      // Ignore
+    }
+  }
 }

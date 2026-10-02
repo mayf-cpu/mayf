@@ -106,8 +106,8 @@ export function getLocalPageBlocks(): HomePageBlock[] {
         return merged.sort((a, b) => a.order - b.order);
       }
     }
-  } catch (e) {
-    console.warn('Error reading page blocks from localStorage:', e);
+  } catch (_e) {
+    // Graceful fallback to default blocks
   }
   return DEFAULT_PAGE_BLOCKS;
 }
@@ -119,8 +119,8 @@ export function saveLocalPageBlocks(blocks: HomePageBlock[]): void {
     if (typeof window !== 'undefined') {
       window.dispatchEvent(new CustomEvent('page-blocks-changed', { detail: sorted }));
     }
-  } catch (e) {
-    console.warn('Error saving page blocks locally:', e);
+  } catch (_e) {
+    // Ignore
   }
 }
 
@@ -135,8 +135,8 @@ export async function loadPageBlocksFromFirestore(): Promise<HomePageBlock[]> {
         return data.blocks;
       }
     }
-  } catch (e) {
-    console.warn('Notice: Firestore page blocks not yet initialized, using defaults:', e);
+  } catch (_e) {
+    // Graceful fallback to local blocks
   }
   return getLocalPageBlocks();
 }
@@ -150,7 +150,7 @@ export async function savePageBlocksToFirestore(blocks: HomePageBlock[]): Promis
       blocks: sorted,
       updatedAt: new Date().toISOString(),
     }, { merge: true });
-  } catch (e) {
-    console.warn('Notice saving page blocks to cloud:', e);
+  } catch (_e) {
+    // Graceful fallback
   }
 }

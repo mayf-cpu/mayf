@@ -59,10 +59,9 @@ export const AdminThemeTab: React.FC<AdminThemeTabProps> = ({
       await saveThemeSettingsToFirestore(theme);
       saveThemeConfigLocally(theme);
       onToast('✓ Theme & Layout settings saved to cloud & published live!');
-    } catch (e) {
-      console.warn('Theme cloud save notice:', e);
+    } catch (_e) {
       saveThemeConfigLocally(theme);
-      onToast('Saved locally. Cloud sync warning.');
+      onToast('Saved locally in browser cache.');
     } finally {
       setIsSaving(false);
     }

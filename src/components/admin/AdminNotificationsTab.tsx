@@ -55,8 +55,8 @@ export const AdminNotificationsTab: React.FC<AdminNotificationsTabProps> = ({
 
       try {
         await sendNotificationToFirestore(payload);
-      } catch (cloudErr) {
-        console.warn('Saved locally, cloud notice:', cloudErr);
+      } catch (_cloudErr) {
+        // Non-blocking cloud sync fallback
       }
 
       // Dispatch browser notification event
@@ -81,8 +81,8 @@ export const AdminNotificationsTab: React.FC<AdminNotificationsTabProps> = ({
 
       try {
         await deleteNotificationFromFirestore(id);
-      } catch (cloudErr) {
-        console.warn('Deleted locally, cloud notice:', cloudErr);
+      } catch (_cloudErr) {
+        // Non-blocking cloud sync fallback
       }
 
       onToast('Notification removed from history.');

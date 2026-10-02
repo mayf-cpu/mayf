@@ -256,8 +256,8 @@ export function getAdsConfig(): AdsGlobalConfig {
         },
       };
     }
-  } catch (e) {
-    console.warn('Failed to parse ads config from localStorage:', e);
+  } catch (_e) {
+    // Graceful fallback to default ads config
   }
   return DEFAULT_ADS_CONFIG;
 }
@@ -274,8 +274,8 @@ export function saveAdsConfigLocally(config: AdsGlobalConfig): void {
     localStorage.setItem(STORAGE_KEY, JSON.stringify(payload));
     window.dispatchEvent(new CustomEvent('ads-config-changed', { detail: payload }));
     applyAdSenseScript(payload);
-  } catch (e) {
-    console.error('Failed to save ads config locally:', e);
+  } catch (_e) {
+    // Ignore
   }
 }
 
@@ -304,8 +304,8 @@ export async function loadAdsConfigFromFirestore(): Promise<AdsGlobalConfig | nu
     if (snap.exists()) {
       return snap.data() as AdsGlobalConfig;
     }
-  } catch (e) {
-    console.warn('Could not load ads settings from Firestore:', e);
+  } catch (_e) {
+    // Graceful fallback
   }
   return null;
 }

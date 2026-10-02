@@ -59,8 +59,8 @@ export const AdminPromosTab: React.FC<AdminPromosTabProps> = ({
 
       try {
         await saveCouponToFirestore(payload);
-      } catch (cloudErr) {
-        console.warn('Saved locally, cloud notice:', cloudErr);
+      } catch (_cloudErr) {
+        // Non-blocking cloud sync fallback
       }
 
       onToast(`🎉 Promo code "${cleanCode}" created & active! Ready for student checkout.`);
@@ -82,8 +82,8 @@ export const AdminPromosTab: React.FC<AdminPromosTabProps> = ({
 
       try {
         await saveCouponToFirestore(updated);
-      } catch (cloudErr) {
-        console.warn('Updated locally, cloud notice:', cloudErr);
+      } catch (_cloudErr) {
+        // Non-blocking cloud sync fallback
       }
 
       onToast(`Promo code "${c.code}" is now ${updated.isActive ? 'ACTIVE' : 'PAUSED'}.`);
@@ -102,8 +102,8 @@ export const AdminPromosTab: React.FC<AdminPromosTabProps> = ({
 
       try {
         await deleteCouponFromFirestore(couponId);
-      } catch (cloudErr) {
-        console.warn('Deleted locally, cloud notice:', cloudErr);
+      } catch (_cloudErr) {
+        // Non-blocking cloud sync fallback
       }
 
       onToast(`Promo code "${couponCode}" deleted.`);
