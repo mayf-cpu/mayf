@@ -519,7 +519,7 @@ export async function signInWithGoogle(): Promise<User> {
             };
             saveCachedAssignedAdmins([...cachedAdmins.filter((a) => a.email.toLowerCase().trim() !== cleanEmail), newRec]);
             recordLocalUser(initialProfile);
-            syncUserProfileToServer(initialProfile).catch(() => {});
+            await syncUserProfileToServer(initialProfile);
           }
         }
       } catch (_apiErr) {}
@@ -1116,6 +1116,71 @@ export function recordLocalUser(profile: UserProfile): void {
 export async function fetchAllUsers(): Promise<UserProfile[]> {
   const uMap = new Map<string, UserProfile>();
 
+  // 0. Include currently authenticated Firebase user if logged in!
+  if (auth.currentUser) {
+    const cur = auth.currentUser;
+    const curEmail = (cur.email || '').toLowerCase().trim();
+    const curId = cur.uid;
+    if (curId || curEmail) {
+      const curProfile: UserProfile = {
+        userId: curId,
+        email: curEmail,
+        displayName: cur.displayName || (curEmail ? curEmail.split('@')[0] : 'Student'),
+        photoURL: cur.photoURL || '',
+        grade: 'Class 9',
+        targetExam: 'CBSE Board',
+        schoolName: '',
+        mobileNumber: cur.phoneNumber || '',
+        countryCode: '+91',
+        phoneNumber: cur.phoneNumber || '',
+        whatsappAlerts: true,
+        isPro: false,
+        bookmarks: ['res-quad-class10'],
+        downloads: [],
+        createdAt: new Date().toISOString(),
+        updatedAt: new Date().toISOString(),
+      };
+      if (INITIAL_ADMIN_EMAILS.some((e) => e.toLowerCase().trim() === curEmail)) {
+        curProfile.role = curEmail === PRIMARY_SUPERADMIN_EMAIL ? 'superadmin' : 'admin';
+      }
+      uMap.set(curId, curProfile);
+      if (curEmail) uMap.set(curEmail, curProfile);
+      recordLocalUser(curProfile);
+      syncUserProfileToServer(curProfile).catch(() => {});
+
+      // Also try fetching the user's own Firestore doc directly (isOwner permission usually allows this)
+      try {
+        const selfDocSnap = await getDoc(doc(db, 'users', curId));
+        if (selfDocSnap.exists()) {
+          const selfData = selfDocSnap.data() as UserProfile;
+          const mergedSelf = { ...curProfile, ...selfData };
+          uMap.set(curId, mergedSelf);
+          if (curEmail) uMap.set(curEmail, mergedSelf);
+        }
+      } catch (_selfErr) {}
+    }
+  }
+
+  // Also check demo student session
+  const demo = getLocalDemoSession();
+  if (demo && demo.uid) {
+    const dEmail = (demo.email || '').toLowerCase().trim();
+    const dProfile: UserProfile = {
+      userId: demo.uid,
+      email: dEmail,
+      displayName: demo.displayName || 'Student',
+      photoURL: demo.photoURL || '',
+      grade: 'Class 9',
+      isPro: true,
+      bookmarks: ['res-quad-class10'],
+      downloads: [],
+      createdAt: new Date().toISOString(),
+      updatedAt: new Date().toISOString(),
+    };
+    uMap.set(demo.uid, dProfile);
+    if (dEmail) uMap.set(dEmail, dProfile);
+  }
+
   // 1. Fetch from persistent server API /api/users (catches registrations from all devices/browsers)
   try {
     const res = await fetch('/api/users');
@@ -1321,28 +1386,67 @@ export async function fetchAllUsers(): Promise<UserProfile[]> {
   return merged;
 }
 
-// Live real-time listener for all students in admin panel
+// Live real-time listener for all students in admin panel (with polling fallback)
 export function subscribeToAllUsers(callback: (users: UserProfile[]) => void): () => void {
+  let isSubscribed = true;
+
+  // Initial fetch
+  fetchAllUsers().then((initial) => {
+    if (isSubscribed && initial && initial.length > 0) {
+      callback(initial);
+    }
+  });
+
+  // 1. Setup Firestore listener if user is authenticated
+  let unsubscribeFirestore = () => {};
   if (auth.currentUser) {
     try {
       const usersRef = collection(db, 'users');
       const q = query(usersRef, limit(300));
-      return onSnapshot(
+      unsubscribeFirestore = onSnapshot(
         q,
         () => {
+          if (!isSubscribed) return;
           fetchAllUsers().then((all) => {
-            if (all && all.length > 0) callback(all);
+            if (isSubscribed && all && all.length > 0) callback(all);
           });
         },
         (err) => {
-          console.warn('subscribeToAllUsers notice:', err);
+          console.warn('subscribeToAllUsers onSnapshot notice:', err);
         }
       );
     } catch {
-      return () => {};
+      // Graceful fallback to timer
     }
   }
-  return () => {};
+
+  // 2. Setup periodic polling fallback every 6 seconds to capture Google sign-ins from any tab/device
+  const intervalId = setInterval(() => {
+    if (!isSubscribed) return;
+    fetchAllUsers().then((polled) => {
+      if (isSubscribed && polled && polled.length > 0) {
+        callback(polled);
+      }
+    });
+  }, 6000);
+
+  // 3. Listen to local custom event
+  const handleLocalChange = () => {
+    if (!isSubscribed) return;
+    fetchAllUsers().then((changed) => {
+      if (isSubscribed && changed && changed.length > 0) {
+        callback(changed);
+      }
+    });
+  };
+  window.addEventListener('registered-users-changed', handleLocalChange);
+
+  return () => {
+    isSubscribed = false;
+    clearInterval(intervalId);
+    unsubscribeFirestore();
+    window.removeEventListener('registered-users-changed', handleLocalChange);
+  };
 }
 
 // Save Gateway Config to Firestore Settings

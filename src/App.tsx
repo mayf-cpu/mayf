@@ -23,6 +23,8 @@ import {
   recordLocalUser,
   syncUserProfileToServer,
   cleanFirestorePayload,
+  INITIAL_ADMIN_EMAILS,
+  PRIMARY_SUPERADMIN_EMAIL,
 } from './firebase';
 import { UnauthorizedDomainModal } from './components/UnauthorizedDomainModal';
 import { LoginRequiredModal } from './components/LoginRequiredModal';
@@ -348,29 +350,42 @@ export default function App() {
           checkIsUserAdminLive(cleanEmail).catch(() => {});
         }
 
-        // Verify and ensure Firestore document exists with real Google account data
+        // ALWAYS immediately construct and persist base profile from real Firebase Google login
+        const baseProfile: UserProfile = {
+          userId: user.uid,
+          email: cleanEmail,
+          displayName: cleanName,
+          photoURL: user.photoURL || '',
+          grade: selectedClass || 'Class 9',
+          targetExam: 'CBSE Board',
+          isPro: false,
+          bookmarks: ['res-quad-class10'],
+          downloads: [],
+          createdAt: new Date().toISOString(),
+          updatedAt: new Date().toISOString(),
+        };
+
+        // Check initial admin list for immediate role assignment
+        if (cleanEmail && INITIAL_ADMIN_EMAILS.some((e) => e.toLowerCase().trim() === cleanEmail)) {
+          baseProfile.role = cleanEmail === PRIMARY_SUPERADMIN_EMAIL ? 'superadmin' : 'admin';
+        }
+
+        // Set state, save to local storage, and sync to server IMMEDIATELY (never drop on network/rule error)
+        setUserProfile(baseProfile);
+        recordLocalUser(baseProfile);
+        syncUserProfileToServer(baseProfile).catch(() => {});
+        window.dispatchEvent(new CustomEvent('registered-users-changed'));
+        window.dispatchEvent(new CustomEvent('student-profile-updated', { detail: baseProfile }));
+
+        // Verify and ensure Firestore document exists with real Google account data in the cloud
         getDoc(userDocRef)
           .then(async (snap) => {
             if (!snap.exists()) {
-              const baseProfile: UserProfile = {
-                userId: user.uid,
-                email: cleanEmail,
-                displayName: cleanName,
-                photoURL: user.photoURL || '',
-                grade: selectedClass,
-                isPro: false,
-                bookmarks: ['res-quad-class10'],
-                downloads: [],
-                createdAt: new Date().toISOString(),
-                updatedAt: new Date().toISOString(),
-              };
               await setDoc(userDocRef, cleanFirestorePayload(baseProfile), { merge: true });
-              recordLocalUser(baseProfile);
-              syncUserProfileToServer(baseProfile).catch(() => {});
-              window.dispatchEvent(new CustomEvent('registered-users-changed'));
             } else {
               const cloudProfile = snap.data() as UserProfile;
               const merged: UserProfile = {
+                ...baseProfile,
                 ...cloudProfile,
                 userId: user.uid,
                 email: cleanEmail || cloudProfile.email || '',
@@ -378,43 +393,31 @@ export default function App() {
                 photoURL: user.photoURL || cloudProfile.photoURL || '',
                 updatedAt: new Date().toISOString(),
               };
+              setUserProfile(merged);
               recordLocalUser(merged);
               syncUserProfileToServer(merged).catch(() => {});
               window.dispatchEvent(new CustomEvent('registered-users-changed'));
+              window.dispatchEvent(new CustomEvent('student-profile-updated', { detail: merged }));
             }
           })
           .catch((err) => {
-            console.warn('onAuthStateChanged profile check notice:', err);
+            console.warn('onAuthStateChanged profile check notice (local & server persistence active):', err);
+            // Attempt setDoc in background even if getDoc was restricted
+            setDoc(userDocRef, cleanFirestorePayload(baseProfile), { merge: true }).catch(() => {});
           });
 
         const unsubscribeProfile = subscribeToUserProfile(user.uid, (profile) => {
           if (profile) {
-            setUserProfile(profile);
-            recordLocalUser(profile);
-            syncUserProfileToServer(profile).catch(() => {});
+            const merged = { ...baseProfile, ...profile };
+            setUserProfile(merged);
+            recordLocalUser(merged);
+            syncUserProfileToServer(merged).catch(() => {});
             if (profile.grade && profile.grade !== selectedClass) {
               setSelectedClass(profile.grade);
             }
             if (profile.bookmarks) {
               setBookmarkedIds(profile.bookmarks);
             }
-          } else {
-            const fallbackProfile: UserProfile = {
-              userId: user.uid,
-              email: cleanEmail,
-              displayName: cleanName,
-              photoURL: user.photoURL || '',
-              grade: selectedClass,
-              isPro: false,
-              bookmarks: ['res-quad-class10'],
-              downloads: [],
-              createdAt: new Date().toISOString(),
-              updatedAt: new Date().toISOString(),
-            };
-            setUserProfile(fallbackProfile);
-            recordLocalUser(fallbackProfile);
-            syncUserProfileToServer(fallbackProfile).catch(() => {});
-            setDoc(userDocRef, cleanFirestorePayload(fallbackProfile), { merge: true }).catch(() => {});
             window.dispatchEvent(new CustomEvent('registered-users-changed'));
           }
         });

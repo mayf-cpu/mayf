@@ -192,7 +192,20 @@ export const AdminControlPanelPage: React.FC<AdminControlPanelPageProps> = ({
 
   // Core Data state
   const [orders, setOrders] = useState<OrderRecord[]>([]);
-  const [users, setUsers] = useState<UserProfile[]>(getLocalUsers);
+  const [users, setUsers] = useState<UserProfile[]>(() => {
+    const local = getLocalUsers();
+    if (userProfile && (userProfile.userId || userProfile.email)) {
+      const exists = local.some(
+        (u) =>
+          (userProfile.userId && u.userId === userProfile.userId) ||
+          (userProfile.email && u.email?.toLowerCase().trim() === userProfile.email.toLowerCase().trim())
+      );
+      if (!exists) {
+        return [userProfile, ...local];
+      }
+    }
+    return local;
+  });
   const [coupons, setCoupons] = useState<CouponRecord[]>(getLocalCoupons);
   const [notifications, setNotifications] = useState<NotificationRecord[]>(getLocalNotifications);
   const [customResources, setCustomResources] = useState<CustomResourceRecord[]>(getLocalCustomResources);
@@ -316,6 +329,17 @@ export const AdminControlPanelPage: React.FC<AdminControlPanelPageProps> = ({
       });
     }
   }, [activeTab, isAuthorized]);
+
+  // Sync current authenticated user or profile into student directory
+  useEffect(() => {
+    if (currentUser?.email || currentUser?.uid || userProfile) {
+      fetchAllUsers().then((fetched) => {
+        if (fetched && fetched.length > 0) {
+          setUsers(fetched);
+        }
+      });
+    }
+  }, [currentUser?.email, currentUser?.uid, userProfile]);
 
   const handleSyncLegacyData = async () => {
     setIsMigratingLegacy(true);

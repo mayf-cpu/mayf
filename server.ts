@@ -153,9 +153,6 @@ function saveStoredAdmins(admins: any[]): void {
 let memoryStudents: any[] | null = null;
 
 function getStoredStudents(): any[] {
-  if (memoryStudents && memoryStudents.length > 0) {
-    return memoryStudents;
-  }
   try {
     if (fs.existsSync(STUDENTS_FILE_PATH)) {
       const content = fs.readFileSync(STUDENTS_FILE_PATH, 'utf-8');
@@ -168,7 +165,9 @@ function getStoredStudents(): any[] {
   } catch (err) {
     console.error('Error reading students file:', err);
   }
-  memoryStudents = [];
+  if (memoryStudents && memoryStudents.length > 0) {
+    return memoryStudents;
+  }
   return [];
 }
 

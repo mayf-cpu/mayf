@@ -1,5 +1,27 @@
 [
   {
+    "userId": "test_google_123",
+    "email": "test_google@example.com",
+    "displayName": "Google Test Student",
+    "photoURL": "",
+    "grade": "Class 9",
+    "targetExam": "",
+    "schoolName": "",
+    "mobileNumber": "",
+    "countryCode": "+91",
+    "phoneNumber": "",
+    "whatsappAlerts": true,
+    "isPro": false,
+    "proPlan": "",
+    "notes": "",
+    "bookmarks": [
+      "res-quad-class10"
+    ],
+    "downloads": [],
+    "createdAt": "2026-10-03T04:06:17.685Z",
+    "updatedAt": "2026-10-03T04:06:17.685Z"
+  },
+  {
     "userId": "test_aarav_1",
     "email": "aarav.test@example.com",
     "displayName": "Aarav Sharma",
