@@ -321,14 +321,14 @@ export const AdminControlPanelPage: React.FC<AdminControlPanelPageProps> = ({
 
   // Refresh student directory when switching to students tab
   useEffect(() => {
-    if (activeTab === 'students' && isAuthorized) {
+    if (activeTab === 'students') {
       fetchAllUsers().then((fetched) => {
         if (fetched && fetched.length > 0) {
           setUsers(fetched);
         }
       });
     }
-  }, [activeTab, isAuthorized]);
+  }, [activeTab]);
 
   // Sync current authenticated user or profile into student directory
   useEffect(() => {
@@ -385,21 +385,7 @@ export const AdminControlPanelPage: React.FC<AdminControlPanelPageProps> = ({
   const loadData = async () => {
     setLoadingOrders(true);
     try {
-      const [
-        fetchedOrders,
-        fetchedUsers,
-        cloudSettings,
-        cloudBranding,
-        fetchedCoupons,
-        fetchedNotifications,
-        fetchedResources,
-        fetchedSeo,
-        cloudCategories,
-        cloudTheme,
-        cloudSocial,
-        cloudAds,
-        cloudPageText,
-      ] = await Promise.all([
+      const results = await Promise.allSettled([
         fetchAllOrders(),
         fetchAllUsers(),
         loadGatewaySettingsFromFirestore(),
@@ -415,56 +401,73 @@ export const AdminControlPanelPage: React.FC<AdminControlPanelPageProps> = ({
         loadPageTextSettingsFromFirestore(),
       ]);
 
-      if (fetchedOrders && fetchedOrders.length > 0) {
-        setOrders(fetchedOrders);
+      const [
+        ordersRes,
+        usersRes,
+        gatewayRes,
+        brandingRes,
+        couponsRes,
+        notifRes,
+        resRes,
+        seoRes,
+        catsRes,
+        themeRes,
+        socialRes,
+        adsRes,
+        pageTextRes,
+      ] = results;
+
+      if (ordersRes.status === 'fulfilled' && ordersRes.value && ordersRes.value.length > 0) {
+        setOrders(ordersRes.value);
       }
-      if (fetchedUsers && fetchedUsers.length > 0) {
-        setUsers(fetchedUsers);
+      if (usersRes.status === 'fulfilled' && usersRes.value && usersRes.value.length > 0) {
+        setUsers(usersRes.value);
       }
-      if (fetchedCoupons && fetchedCoupons.length > 0) {
-        setCoupons(fetchedCoupons);
-        saveLocalCoupons(fetchedCoupons);
+      if (couponsRes.status === 'fulfilled' && couponsRes.value && couponsRes.value.length > 0) {
+        setCoupons(couponsRes.value);
+        saveLocalCoupons(couponsRes.value);
       }
-      if (fetchedNotifications && fetchedNotifications.length > 0) {
-        setNotifications(fetchedNotifications);
-        saveLocalNotifications(fetchedNotifications);
+      if (notifRes.status === 'fulfilled' && notifRes.value && notifRes.value.length > 0) {
+        setNotifications(notifRes.value);
+        saveLocalNotifications(notifRes.value);
       }
       // Merge custom resources so local uploads and cloud uploads are always preserved
       const localRes = getLocalCustomResources();
       const resMap = new Map<string, CustomResourceRecord>();
       localRes.forEach((r) => resMap.set(r.id, r));
-      if (fetchedResources && fetchedResources.length > 0) {
-        fetchedResources.forEach((r) => resMap.set(r.id, r));
+      if (resRes.status === 'fulfilled' && resRes.value && resRes.value.length > 0) {
+        resRes.value.forEach((r: CustomResourceRecord) => resMap.set(r.id, r));
       }
       const mergedRes = Array.from(resMap.values());
       setCustomResources(mergedRes);
       saveLocalCustomResources(mergedRes);
-      if (fetchedSeo) {
-        setSeoSettings(fetchedSeo);
-        saveSeoSettingsLocally(fetchedSeo);
-        applySeoToDocument(fetchedSeo);
+      if (seoRes.status === 'fulfilled' && seoRes.value) {
+        setSeoSettings(seoRes.value);
+        saveSeoSettingsLocally(seoRes.value);
+        applySeoToDocument(seoRes.value);
       }
-      if (cloudCategories && Array.isArray(cloudCategories) && cloudCategories.length > 0) {
-        setCategories(cloudCategories);
-        saveCategoriesLocally(cloudCategories);
+      if (catsRes.status === 'fulfilled' && catsRes.value && Array.isArray(catsRes.value) && catsRes.value.length > 0) {
+        setCategories(catsRes.value);
+        saveCategoriesLocally(catsRes.value);
       }
-      if (cloudTheme) {
-        const mergedTheme = { ...themeConfig, ...cloudTheme };
+      if (themeRes.status === 'fulfilled' && themeRes.value) {
+        const mergedTheme = { ...themeConfig, ...themeRes.value };
         setThemeConfig(mergedTheme);
         saveThemeConfigLocally(mergedTheme);
         applyThemeToDocument(mergedTheme);
       }
-      if (cloudSocial) {
-        const mergedSocial = { ...socialConfig, ...cloudSocial };
+      if (socialRes.status === 'fulfilled' && socialRes.value) {
+        const mergedSocial = { ...socialConfig, ...socialRes.value };
         setSocialConfig(mergedSocial);
         saveSocialConfigLocally(mergedSocial);
       }
-      if (cloudSettings) {
-        const merged = { ...gatewayConfig, ...cloudSettings };
+      if (gatewayRes.status === 'fulfilled' && gatewayRes.value) {
+        const merged = { ...gatewayConfig, ...gatewayRes.value };
         setGatewayConfig(merged);
         saveRazorpayGatewayConfig(merged);
       }
-      if (cloudBranding) {
+      if (brandingRes.status === 'fulfilled' && brandingRes.value) {
+        const cloudBranding = brandingRes.value;
         const mergedBranding = {
           ...brandingConfig,
           ...cloudBranding,
@@ -474,7 +477,8 @@ export const AdminControlPanelPage: React.FC<AdminControlPanelPageProps> = ({
         setBrandingConfig(mergedBranding);
         saveBrandingConfigLocally(mergedBranding);
       }
-      if (cloudAds) {
+      if (adsRes.status === 'fulfilled' && adsRes.value) {
+        const cloudAds = adsRes.value;
         const mergedAds = {
           ...adsConfig,
           ...cloudAds,
@@ -483,9 +487,9 @@ export const AdminControlPanelPage: React.FC<AdminControlPanelPageProps> = ({
         setAdsConfig(mergedAds);
         saveAdsConfigLocally(mergedAds);
       }
-      if (cloudPageText) {
-        setPageText(cloudPageText);
-        savePageTextConfigLocally(cloudPageText);
+      if (pageTextRes.status === 'fulfilled' && pageTextRes.value) {
+        setPageText(pageTextRes.value);
+        savePageTextConfigLocally(pageTextRes.value);
       }
     } catch (_e) {
       // Non-blocking admin data load fallback

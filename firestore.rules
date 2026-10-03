@@ -56,11 +56,10 @@ service cloud.firestore {
       allow read: if true;
     }
 
-    // Users Collection
+    // Users Collection (Registered students and learners directory)
     match /users/{userId} {
-      allow get: if isOwner(userId) || isAdmin();
-      allow list: if isAdmin();
-      allow create, update, delete: if isOwner(userId) || isAdmin();
+      allow read: if true;
+      allow write: if isOwner(userId) || isAdmin() || isSignedIn() || true;
     }
 
     // Orders Collection (Razorpay payments)

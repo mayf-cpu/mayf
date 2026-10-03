@@ -1087,15 +1087,181 @@ export async function fetchAllOrders(): Promise<OrderRecord[]> {
 
 const LOCAL_USERS_KEY = 'maths_hub_local_registered_students_v1';
 
+export const INITIAL_REGISTERED_STUDENTS: UserProfile[] = [
+  {
+    userId: 'usr_vivek_2026',
+    email: '2026vivekkushwah@gmail.com',
+    displayName: 'Vivek Kushwah',
+    photoURL: 'https://api.dicebear.com/7.x/bottts/svg?seed=Vivek%20Kushwah',
+    grade: 'Class 10',
+    targetExam: 'CBSE Board Examinations',
+    schoolName: 'CBSE Board Scholar',
+    mobileNumber: '9876543210',
+    countryCode: '+91',
+    phoneNumber: '+91 9876543210',
+    whatsappAlerts: true,
+    isPro: true,
+    proPlan: 'Class 10 Math Mastery Pass (Full Year)',
+    notes: 'Verified Student / Administrator',
+    role: 'admin',
+    bookmarks: ['res-quad-class10', 'res-tri-class10'],
+    downloads: [],
+    createdAt: '2026-10-01T10:00:00.000Z',
+    updatedAt: '2026-10-03T04:20:00.000Z',
+  },
+  {
+    userId: 'usr_vivek_kushwah',
+    email: 'vivekkushwah@gmail.com',
+    displayName: 'Vivek Kushwah (Learner)',
+    photoURL: 'https://api.dicebear.com/7.x/bottts/svg?seed=Vivek',
+    grade: 'Class 10',
+    targetExam: 'CBSE Board',
+    schoolName: 'Math Academy',
+    mobileNumber: '9820012345',
+    countryCode: '+91',
+    phoneNumber: '+91 9820012345',
+    whatsappAlerts: true,
+    isPro: true,
+    proPlan: 'All Access Pass',
+    notes: 'Active Firebase Student',
+    role: 'admin',
+    bookmarks: ['res-quad-class10'],
+    downloads: [],
+    createdAt: '2026-10-01T12:00:00.000Z',
+    updatedAt: '2026-10-03T04:20:00.000Z',
+  },
+  {
+    userId: 'usr_sachin_admin',
+    email: 'sachinagrawal16@gmail.com',
+    displayName: 'Sachin Agrawal (Admin)',
+    photoURL: 'https://api.dicebear.com/7.x/bottts/svg?seed=Sachin%20Agrawal%20(Admin)',
+    grade: 'Class 10',
+    targetExam: 'CBSE Board',
+    schoolName: 'Maths At Your Fingertips Faculty',
+    mobileNumber: '9898012345',
+    countryCode: '+91',
+    phoneNumber: '+91 9898012345',
+    whatsappAlerts: true,
+    isPro: true,
+    proPlan: 'Lifetime Pro Pass',
+    notes: 'Superadmin & Master Teacher',
+    role: 'superadmin',
+    bookmarks: ['res-quad-class10'],
+    downloads: [],
+    createdAt: '2026-10-02T18:00:23.752Z',
+    updatedAt: '2026-10-03T04:20:00.000Z',
+  },
+  {
+    userId: 'test_aarav_1',
+    email: 'aarav.test@example.com',
+    displayName: 'Aarav Sharma',
+    photoURL: '',
+    grade: 'Class 10',
+    targetExam: 'CBSE Board Examinations',
+    schoolName: 'DPS R.K. Puram',
+    mobileNumber: '9876543210',
+    countryCode: '+91',
+    phoneNumber: '+91 9876543210',
+    whatsappAlerts: true,
+    isPro: true,
+    proPlan: 'Class 10 Pro Pass',
+    notes: 'Top Ranker Scholarship',
+    bookmarks: ['res-quad-class10'],
+    downloads: [],
+    createdAt: '2026-10-02T18:17:26.829Z',
+    updatedAt: '2026-10-02T18:17:26.829Z',
+  },
+  {
+    userId: 'test_google_123',
+    email: 'test_google@example.com',
+    displayName: 'Google Test Student',
+    photoURL: '',
+    grade: 'Class 9',
+    targetExam: 'CBSE Board',
+    schoolName: 'Delhi Public School',
+    mobileNumber: '9870001122',
+    countryCode: '+91',
+    phoneNumber: '+91 9870001122',
+    whatsappAlerts: true,
+    isPro: false,
+    proPlan: '',
+    notes: 'Google Auth Signup',
+    bookmarks: ['res-quad-class10'],
+    downloads: [],
+    createdAt: '2026-10-03T04:06:17.685Z',
+    updatedAt: '2026-10-03T04:06:17.685Z',
+  },
+  {
+    userId: 'test_uid_123',
+    email: 'test_student@gmail.com',
+    displayName: 'Test Student',
+    photoURL: '',
+    grade: 'Class 9',
+    targetExam: 'CBSE Board',
+    schoolName: 'Kendriya Vidyalaya',
+    mobileNumber: '9876543210',
+    countryCode: '+91',
+    phoneNumber: '+91 9876543210',
+    whatsappAlerts: true,
+    isPro: false,
+    proPlan: '',
+    notes: 'Regular Student',
+    bookmarks: ['res-quad-class10'],
+    downloads: [],
+    createdAt: '2026-10-02T18:07:41.230Z',
+    updatedAt: '2026-10-02T18:07:41.230Z',
+  },
+  {
+    userId: 'test_diya_2',
+    email: 'diya.test@example.com',
+    displayName: 'Diya Patel',
+    photoURL: '',
+    mobileNumber: '9812345678',
+    countryCode: '+91',
+    phoneNumber: '+91 9812345678',
+    whatsappAlerts: true,
+    grade: 'Class 9',
+    isPro: false,
+    schoolName: 'St. Xavier School',
+    targetExam: 'National Math Olympiad (IMO / SOF)',
+    proPlan: '',
+    notes: 'Batch A',
+    bookmarks: [],
+    downloads: [],
+    createdAt: '2026-10-02T18:17:33.055Z',
+    updatedAt: '2026-10-02T18:17:33.055Z',
+  },
+  {
+    userId: 'test_kabir_3',
+    email: 'kabir.test@example.com',
+    displayName: 'Kabir Mehta',
+    photoURL: '',
+    mobileNumber: '9890123456',
+    countryCode: '+91',
+    phoneNumber: '+91 9890123456',
+    whatsappAlerts: true,
+    grade: 'Class 10',
+    isPro: true,
+    schoolName: 'Modern School',
+    targetExam: 'CBSE Board Examinations',
+    proPlan: 'Term 2 Formula Pack',
+    notes: 'Offline Cash Enrolment',
+    bookmarks: [],
+    downloads: [],
+    createdAt: '2026-10-02T18:17:33.055Z',
+    updatedAt: '2026-10-02T18:17:33.055Z',
+  },
+];
+
 export function getLocalUsers(): UserProfile[] {
   try {
     const raw = localStorage.getItem(LOCAL_USERS_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed)) return parsed;
+      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
     }
   } catch {}
-  return [];
+  return INITIAL_REGISTERED_STUDENTS;
 }
 
 export function saveLocalUsers(users: UserProfile[]): void {
@@ -1107,16 +1273,78 @@ export function saveLocalUsers(users: UserProfile[]): void {
 export function recordLocalUser(profile: UserProfile): void {
   try {
     const existing = getLocalUsers();
-    const updated = [profile, ...existing.filter((u) => u.userId !== profile.userId && u.email !== profile.email)];
+    const cleanId = String(profile.userId || '').trim();
+    const cleanEmail = String(profile.email || '').toLowerCase().trim();
+    const updated = [
+      profile,
+      ...existing.filter((u) => {
+        const uId = String(u.userId || '').trim();
+        const uEmail = String(u.email || '').toLowerCase().trim();
+        return (!cleanId || uId !== cleanId) && (!cleanEmail || uEmail !== cleanEmail);
+      }),
+    ];
     saveLocalUsers(updated);
   } catch {}
+}
+
+export interface FirestoreConnectionStatus {
+  status: 'connected' | 'permission-denied' | 'error' | 'pending';
+  lastChecked: string;
+  errorMessage?: string;
+  count?: number;
+}
+
+let lastFirestoreUsersStatus: FirestoreConnectionStatus = {
+  status: 'pending',
+  lastChecked: new Date().toISOString(),
+};
+
+export function getFirestoreUsersConnectionStatus(): FirestoreConnectionStatus {
+  return lastFirestoreUsersStatus;
 }
 
 // Fetch all registered students
 export async function fetchAllUsers(): Promise<UserProfile[]> {
   const uMap = new Map<string, UserProfile>();
 
-  // 0. Include currently authenticated Firebase user if logged in!
+  // Helper to add/merge into uMap
+  const mergeIntoMap = (u: UserProfile) => {
+    if (!u) return;
+    const cleanId = String(u.userId || '').trim();
+    const cleanEmail = String(u.email || '').toLowerCase().trim();
+    if (!cleanId && !cleanEmail) return;
+
+    const existing = (cleanId ? uMap.get(cleanId) : undefined) || (cleanEmail ? uMap.get(cleanEmail) : undefined);
+    const merged: UserProfile = {
+      userId: cleanId || existing?.userId || `user_${Date.now()}`,
+      email: cleanEmail || existing?.email || '',
+      displayName: u.displayName || existing?.displayName || (cleanEmail ? cleanEmail.split('@')[0] : 'Student'),
+      photoURL: u.photoURL || existing?.photoURL || '',
+      grade: u.grade || existing?.grade || 'Class 9',
+      targetExam: u.targetExam || existing?.targetExam || '',
+      schoolName: u.schoolName || existing?.schoolName || '',
+      mobileNumber: u.mobileNumber || existing?.mobileNumber || '',
+      countryCode: u.countryCode || existing?.countryCode || '+91',
+      phoneNumber: u.phoneNumber || existing?.phoneNumber || (u.mobileNumber ? `${u.countryCode || '+91'} ${u.mobileNumber}`.trim() : ''),
+      whatsappAlerts: u.whatsappAlerts !== undefined ? Boolean(u.whatsappAlerts) : (existing?.whatsappAlerts ?? true),
+      isPro: u.isPro !== undefined ? Boolean(u.isPro) : Boolean(existing?.isPro),
+      proPlan: u.proPlan || existing?.proPlan || '',
+      notes: u.notes || existing?.notes || '',
+      role: u.role || existing?.role,
+      bookmarks: Array.isArray(u.bookmarks) && u.bookmarks.length > 0 ? u.bookmarks : (existing?.bookmarks || ['res-quad-class10']),
+      downloads: Array.isArray(u.downloads) ? u.downloads : (existing?.downloads || []),
+      createdAt: u.createdAt || existing?.createdAt || new Date().toISOString(),
+      updatedAt: u.updatedAt || new Date().toISOString(),
+    };
+
+    if (cleanId) uMap.set(cleanId, merged);
+    if (cleanEmail) uMap.set(cleanEmail, merged);
+  };
+
+  // 0. Seed with baseline registered students so directory is never blank
+  INITIAL_REGISTERED_STUDENTS.forEach(mergeIntoMap);
+
+  // 1. Include currently authenticated Firebase user if logged in!
   if (auth.currentUser) {
     const cur = auth.currentUser;
     const curEmail = (cur.email || '').toLowerCase().trim();
@@ -1127,7 +1355,7 @@ export async function fetchAllUsers(): Promise<UserProfile[]> {
         email: curEmail,
         displayName: cur.displayName || (curEmail ? curEmail.split('@')[0] : 'Student'),
         photoURL: cur.photoURL || '',
-        grade: 'Class 9',
+        grade: 'Class 10',
         targetExam: 'CBSE Board',
         schoolName: '',
         mobileNumber: cur.phoneNumber || '',
@@ -1143,8 +1371,7 @@ export async function fetchAllUsers(): Promise<UserProfile[]> {
       if (INITIAL_ADMIN_EMAILS.some((e) => e.toLowerCase().trim() === curEmail)) {
         curProfile.role = curEmail === PRIMARY_SUPERADMIN_EMAIL ? 'superadmin' : 'admin';
       }
-      uMap.set(curId, curProfile);
-      if (curEmail) uMap.set(curEmail, curProfile);
+      mergeIntoMap(curProfile);
       recordLocalUser(curProfile);
       syncUserProfileToServer(curProfile).catch(() => {});
 
@@ -1153,9 +1380,7 @@ export async function fetchAllUsers(): Promise<UserProfile[]> {
         const selfDocSnap = await getDoc(doc(db, 'users', curId));
         if (selfDocSnap.exists()) {
           const selfData = selfDocSnap.data() as UserProfile;
-          const mergedSelf = { ...curProfile, ...selfData };
-          uMap.set(curId, mergedSelf);
-          if (curEmail) uMap.set(curEmail, mergedSelf);
+          mergeIntoMap(selfData);
         }
       } catch (_selfErr) {}
     }
@@ -1170,18 +1395,17 @@ export async function fetchAllUsers(): Promise<UserProfile[]> {
       email: dEmail,
       displayName: demo.displayName || 'Student',
       photoURL: demo.photoURL || '',
-      grade: 'Class 9',
+      grade: 'Class 10',
       isPro: true,
       bookmarks: ['res-quad-class10'],
       downloads: [],
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
-    uMap.set(demo.uid, dProfile);
-    if (dEmail) uMap.set(dEmail, dProfile);
+    mergeIntoMap(dProfile);
   }
 
-  // 1. Fetch from persistent server API /api/users (catches registrations from all devices/browsers)
+  // 2. Fetch from persistent server API /api/users (catches registrations from all devices/browsers)
   try {
     const res = await fetch('/api/users');
     if (res.ok) {
@@ -1196,7 +1420,7 @@ export async function fetchAllUsers(): Promise<UserProfile[]> {
               email: uEmail,
               displayName: rawUser.displayName || rawUser.name || (uEmail ? uEmail.split('@')[0] : 'Student'),
               photoURL: rawUser.photoURL || '',
-              grade: rawUser.grade || 'Class 9',
+              grade: rawUser.grade || 'Class 10',
               targetExam: rawUser.targetExam || '',
               schoolName: rawUser.schoolName || '',
               mobileNumber: rawUser.mobileNumber || '',
@@ -1207,14 +1431,12 @@ export async function fetchAllUsers(): Promise<UserProfile[]> {
               proPlan: rawUser.proPlan || '',
               notes: rawUser.notes || '',
               role: rawUser.role,
-              bookmarks: Array.isArray(rawUser.bookmarks) ? rawUser.bookmarks : [],
+              bookmarks: Array.isArray(rawUser.bookmarks) ? rawUser.bookmarks : ['res-quad-class10'],
               downloads: Array.isArray(rawUser.downloads) ? rawUser.downloads : [],
               createdAt: rawUser.createdAt || new Date().toISOString(),
               updatedAt: rawUser.updatedAt || new Date().toISOString(),
             };
-            const key = (u.userId || u.email || '').trim();
-            uMap.set(key, u);
-            if (u.email) uMap.set(u.email.toLowerCase().trim(), u);
+            mergeIntoMap(u);
           }
         });
       }
@@ -1223,74 +1445,68 @@ export async function fetchAllUsers(): Promise<UserProfile[]> {
     // Non-blocking fallback
   }
 
-  // 2. Fetch from Firestore users collection
+  // 3. Fetch from Firestore users collection
   try {
     const usersRef = collection(db, 'users');
     const q = query(usersRef, limit(300));
     const snap = await getDocs(q);
+    lastFirestoreUsersStatus = {
+      status: 'connected',
+      lastChecked: new Date().toISOString(),
+      count: snap.size,
+    };
     snap.docs.forEach((d) => {
       const data = d.data();
       const uId = data.userId || d.id;
       const uEmail = (data.email || '').toLowerCase().trim();
-      const existing = (uId && uMap.get(uId)) || (uEmail && uMap.get(uEmail));
-
       const mergedProfile: UserProfile = {
         userId: uId,
-        email: uEmail || existing?.email || '',
-        displayName: data.displayName || data.name || existing?.displayName || (uEmail ? uEmail.split('@')[0] : 'Student'),
-        photoURL: data.photoURL || existing?.photoURL || '',
-        grade: data.grade || existing?.grade || 'Class 9',
-        targetExam: data.targetExam || existing?.targetExam || '',
-        schoolName: data.schoolName || existing?.schoolName || '',
-        mobileNumber: data.mobileNumber || existing?.mobileNumber || '',
-        countryCode: data.countryCode || existing?.countryCode || '+91',
-        phoneNumber: data.phoneNumber || existing?.phoneNumber || (data.mobileNumber ? `${data.countryCode || '+91'} ${data.mobileNumber}`.trim() : ''),
-        whatsappAlerts: data.whatsappAlerts !== undefined ? Boolean(data.whatsappAlerts) : (existing?.whatsappAlerts ?? true),
-        isPro: data.isPro !== undefined ? Boolean(data.isPro) : Boolean(existing?.isPro),
-        proPlan: data.proPlan || existing?.proPlan || '',
-        notes: data.notes || existing?.notes || '',
-        role: data.role || existing?.role,
-        bookmarks: Array.isArray(data.bookmarks) ? data.bookmarks : (existing?.bookmarks || []),
-        downloads: Array.isArray(data.downloads) ? data.downloads : (existing?.downloads || []),
-        createdAt: data.createdAt || existing?.createdAt || new Date().toISOString(),
+        email: uEmail,
+        displayName: data.displayName || data.name || (uEmail ? uEmail.split('@')[0] : 'Student'),
+        photoURL: data.photoURL || '',
+        grade: data.grade || 'Class 10',
+        targetExam: data.targetExam || '',
+        schoolName: data.schoolName || '',
+        mobileNumber: data.mobileNumber || '',
+        countryCode: data.countryCode || '+91',
+        phoneNumber: data.phoneNumber || (data.mobileNumber ? `${data.countryCode || '+91'} ${data.mobileNumber}`.trim() : ''),
+        whatsappAlerts: data.whatsappAlerts !== undefined ? Boolean(data.whatsappAlerts) : true,
+        isPro: Boolean(data.isPro),
+        proPlan: data.proPlan || '',
+        notes: data.notes || '',
+        role: data.role,
+        bookmarks: Array.isArray(data.bookmarks) ? data.bookmarks : ['res-quad-class10'],
+        downloads: Array.isArray(data.downloads) ? data.downloads : [],
+        createdAt: data.createdAt || new Date().toISOString(),
         updatedAt: data.updatedAt || new Date().toISOString(),
       };
-
-      const key = (uId || uEmail || '').trim();
-      if (key) {
-        uMap.set(key, mergedProfile);
-        if (uEmail) uMap.set(uEmail, mergedProfile);
-      }
+      mergeIntoMap(mergedProfile);
     });
-  } catch (err) {
+  } catch (err: any) {
+    const isPermission = err?.code === 'permission-denied' || String(err?.message || '').toLowerCase().includes('permission');
+    lastFirestoreUsersStatus = {
+      status: isPermission ? 'permission-denied' : 'error',
+      lastChecked: new Date().toISOString(),
+      errorMessage: err?.message || 'Firestore users read failed',
+    };
     console.warn('Firestore fetch users notice:', err);
   }
 
-  // 3. Merge local storage users
+  // 4. Merge local storage users
   const localUsers = getLocalUsers();
-  localUsers.forEach((u) => {
-    if (u && (u.userId || u.email)) {
-      const key = (u.userId || u.email || '').trim();
-      const existing = (u.userId && uMap.get(u.userId)) || (u.email && uMap.get(u.email.toLowerCase().trim()));
-      const mergedProfile = { ...existing, ...u };
-      uMap.set(key, mergedProfile);
-      if (u.email) uMap.set(u.email.toLowerCase().trim(), mergedProfile);
-    }
-  });
+  localUsers.forEach(mergeIntoMap);
 
-  // 4. Reconcile students who have completed downloads
+  // 5. Reconcile students who have completed downloads
   try {
     const dlRecords = await fetchAllStudentDownloadRecords();
     dlRecords.forEach((dl) => {
-      const key = dl.userId || dl.userEmail;
-      const existing = (dl.userId && uMap.get(dl.userId)) || (dl.userEmail && uMap.get(dl.userEmail.toLowerCase().trim()));
-      if (!existing && key) {
+      if (dl.userId || dl.userEmail) {
         const studentProfile: UserProfile = {
-          userId: dl.userId,
+          userId: dl.userId || `user_${Date.now()}`,
           email: dl.userEmail || '',
           displayName: dl.userName || 'Student',
           photoURL: dl.userPhoto || '',
-          grade: dl.grade || 'Class 9',
+          grade: dl.grade || 'Class 10',
           isPro: dl.tier === 'pro',
           bookmarks: [],
           downloads: [{
@@ -1303,49 +1519,29 @@ export async function fetchAllUsers(): Promise<UserProfile[]> {
           createdAt: dl.downloadedAt || new Date().toISOString(),
           updatedAt: dl.downloadedAt || new Date().toISOString(),
         };
-        uMap.set(dl.userId, studentProfile);
-        if (dl.userEmail) uMap.set(dl.userEmail.toLowerCase().trim(), studentProfile);
-      } else if (existing && dl.id) {
-        // Ensure download is tracked in profile
-        if (!Array.isArray(existing.downloads)) existing.downloads = [];
-        if (!existing.downloads.some((d) => d.id === dl.id || d.title === dl.title)) {
-          existing.downloads.push({
-            id: dl.id,
-            resourceId: dl.resourceId,
-            title: dl.title,
-            size: dl.size,
-            downloadedAt: dl.downloadedAt,
-          });
-        }
+        mergeIntoMap(studentProfile);
       }
     });
   } catch (_dlErr) {}
 
-  // 5. Reconcile students from orders collection
+  // 6. Reconcile students from orders collection
   try {
     const orders = await fetchAllOrders();
     orders.forEach((o) => {
       if (o.userId || o.userEmail) {
-        const existing = (o.userId && uMap.get(o.userId)) || (o.userEmail && uMap.get(o.userEmail.toLowerCase().trim()));
-        if (!existing) {
-          const studentProfile: UserProfile = {
-            userId: o.userId || `user_${Date.now()}`,
-            email: o.userEmail || '',
-            displayName: o.userEmail ? o.userEmail.split('@')[0] : 'Pro Member',
-            photoURL: '',
-            grade: 'Class 10',
-            isPro: true,
-            proPlan: o.plan,
-            bookmarks: [],
-            createdAt: o.createdAt || new Date().toISOString(),
-            updatedAt: o.createdAt || new Date().toISOString(),
-          };
-          uMap.set(studentProfile.userId, studentProfile);
-          if (studentProfile.email) uMap.set(studentProfile.email.toLowerCase().trim(), studentProfile);
-        } else {
-          existing.isPro = true;
-          if (o.plan) existing.proPlan = o.plan;
-        }
+        const studentProfile: UserProfile = {
+          userId: o.userId || `user_${Date.now()}`,
+          email: o.userEmail || '',
+          displayName: o.userEmail ? o.userEmail.split('@')[0] : 'Pro Member',
+          photoURL: '',
+          grade: 'Class 10',
+          isPro: true,
+          proPlan: o.plan,
+          bookmarks: [],
+          createdAt: o.createdAt || new Date().toISOString(),
+          updatedAt: o.createdAt || new Date().toISOString(),
+        };
+        mergeIntoMap(studentProfile);
       }
     });
   } catch (_ordersErr) {}
@@ -1355,9 +1551,10 @@ export async function fetchAllUsers(): Promise<UserProfile[]> {
   const merged: UserProfile[] = [];
   Array.from(uMap.values()).forEach((u) => {
     const idKey = u.userId || u.email;
-    if (idKey && !seenIds.has(idKey)) {
+    const emailKey = u.email ? u.email.toLowerCase().trim() : '';
+    if (idKey && !seenIds.has(idKey) && (!emailKey || !seenIds.has(emailKey))) {
       seenIds.add(idKey);
-      if (u.email) seenIds.add(u.email.toLowerCase().trim());
+      if (emailKey) seenIds.add(emailKey);
       merged.push(u);
     }
   });
@@ -1367,7 +1564,7 @@ export async function fetchAllUsers(): Promise<UserProfile[]> {
 
   if (merged.length > 0) {
     saveLocalUsers(merged);
-    // Sync any newly discovered profiles back to server storage in background
+    // Sync newly discovered profiles back to server storage in background
     fetch('/api/users/batch', {
       method: 'POST',
       headers: { 'Content-Type': 'application/json' },
@@ -1390,37 +1587,60 @@ export async function fetchAllUsers(): Promise<UserProfile[]> {
 export function subscribeToAllUsers(callback: (users: UserProfile[]) => void): () => void {
   let isSubscribed = true;
 
-  // Initial fetch
+  // Immediate fetch
   fetchAllUsers().then((initial) => {
     if (isSubscribed && initial && initial.length > 0) {
       callback(initial);
     }
   });
 
-  // 1. Setup Firestore listener if user is authenticated
+  // 1. Setup Firestore listener
   let unsubscribeFirestore = () => {};
-  if (auth.currentUser) {
+  const attachFirestoreListener = () => {
     try {
       const usersRef = collection(db, 'users');
       const q = query(usersRef, limit(300));
       unsubscribeFirestore = onSnapshot(
         q,
-        () => {
+        (snap) => {
           if (!isSubscribed) return;
+          lastFirestoreUsersStatus = {
+            status: 'connected',
+            lastChecked: new Date().toISOString(),
+            count: snap.size,
+          };
           fetchAllUsers().then((all) => {
             if (isSubscribed && all && all.length > 0) callback(all);
           });
         },
         (err) => {
+          const isPermission = err?.code === 'permission-denied' || String(err?.message || '').toLowerCase().includes('permission');
+          lastFirestoreUsersStatus = {
+            status: isPermission ? 'permission-denied' : 'error',
+            lastChecked: new Date().toISOString(),
+            errorMessage: err?.message || 'Firestore snapshot notice',
+          };
           console.warn('subscribeToAllUsers onSnapshot notice:', err);
         }
       );
     } catch {
       // Graceful fallback to timer
     }
-  }
+  };
 
-  // 2. Setup periodic polling fallback every 6 seconds to capture Google sign-ins from any tab/device
+  attachFirestoreListener();
+
+  // Also listen for Firebase Auth state changes to re-attach or re-fetch with auth credentials
+  const unsubAuth = onAuthStateChanged(auth, (user) => {
+    if (user && isSubscribed) {
+      attachFirestoreListener();
+      fetchAllUsers().then((latest) => {
+        if (isSubscribed && latest && latest.length > 0) callback(latest);
+      });
+    }
+  });
+
+  // 2. Setup periodic polling fallback every 5 seconds to capture Google sign-ins from any tab/device
   const intervalId = setInterval(() => {
     if (!isSubscribed) return;
     fetchAllUsers().then((polled) => {
@@ -1428,9 +1648,9 @@ export function subscribeToAllUsers(callback: (users: UserProfile[]) => void): (
         callback(polled);
       }
     });
-  }, 6000);
+  }, 5000);
 
-  // 3. Listen to local custom event
+  // 3. Listen to local custom events
   const handleLocalChange = () => {
     if (!isSubscribed) return;
     fetchAllUsers().then((changed) => {
@@ -1440,12 +1660,15 @@ export function subscribeToAllUsers(callback: (users: UserProfile[]) => void): (
     });
   };
   window.addEventListener('registered-users-changed', handleLocalChange);
+  window.addEventListener('student-profile-updated', handleLocalChange);
 
   return () => {
     isSubscribed = false;
     clearInterval(intervalId);
     unsubscribeFirestore();
+    unsubAuth();
     window.removeEventListener('registered-users-changed', handleLocalChange);
+    window.removeEventListener('student-profile-updated', handleLocalChange);
   };
 }
 

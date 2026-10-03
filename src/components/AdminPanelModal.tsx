@@ -172,21 +172,7 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
   const loadData = async () => {
     setLoadingOrders(true);
     try {
-      const [
-        fetchedOrders,
-        fetchedUsers,
-        cloudSettings,
-        cloudBranding,
-        fetchedCoupons,
-        fetchedNotifications,
-        fetchedResources,
-        fetchedSeo,
-        cloudCategories,
-        cloudTheme,
-        cloudSocial,
-        cloudAds,
-        cloudPageText,
-      ] = await Promise.all([
+      const results = await Promise.allSettled([
         fetchAllOrders(),
         fetchAllUsers(),
         loadGatewaySettingsFromFirestore(),
@@ -202,45 +188,62 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
         loadPageTextSettingsFromFirestore(),
       ]);
 
-      if (fetchedOrders && fetchedOrders.length > 0) {
-        setOrders(fetchedOrders);
+      const [
+        ordersRes,
+        usersRes,
+        gatewayRes,
+        brandingRes,
+        couponsRes,
+        notifRes,
+        resRes,
+        seoRes,
+        catsRes,
+        themeRes,
+        socialRes,
+        adsRes,
+        pageTextRes,
+      ] = results;
+
+      if (ordersRes.status === 'fulfilled' && ordersRes.value && ordersRes.value.length > 0) {
+        setOrders(ordersRes.value);
       }
-      if (fetchedUsers && fetchedUsers.length > 0) {
-        setUsers(fetchedUsers);
+      if (usersRes.status === 'fulfilled' && usersRes.value && usersRes.value.length > 0) {
+        setUsers(usersRes.value);
       }
-      if (fetchedCoupons && fetchedCoupons.length > 0) {
-        setCoupons(fetchedCoupons);
+      if (couponsRes.status === 'fulfilled' && couponsRes.value && couponsRes.value.length > 0) {
+        setCoupons(couponsRes.value);
       }
-      if (fetchedNotifications && fetchedNotifications.length > 0) {
-        setNotifications(fetchedNotifications);
+      if (notifRes.status === 'fulfilled' && notifRes.value && notifRes.value.length > 0) {
+        setNotifications(notifRes.value);
       }
-      if (fetchedResources && fetchedResources.length > 0) {
-        setCustomResources(fetchedResources);
+      if (resRes.status === 'fulfilled' && resRes.value && resRes.value.length > 0) {
+        setCustomResources(resRes.value);
       }
-      if (fetchedSeo) {
-        setSeoSettings(fetchedSeo);
+      if (seoRes.status === 'fulfilled' && seoRes.value) {
+        setSeoSettings(seoRes.value);
       }
-      if (cloudCategories && Array.isArray(cloudCategories) && cloudCategories.length > 0) {
-        setCategories(cloudCategories);
-        saveCategoriesLocally(cloudCategories);
+      if (catsRes.status === 'fulfilled' && catsRes.value && Array.isArray(catsRes.value) && catsRes.value.length > 0) {
+        setCategories(catsRes.value);
+        saveCategoriesLocally(catsRes.value);
       }
-      if (cloudTheme) {
-        const mergedTheme = { ...themeConfig, ...cloudTheme };
+      if (themeRes.status === 'fulfilled' && themeRes.value) {
+        const mergedTheme = { ...themeConfig, ...themeRes.value };
         setThemeConfig(mergedTheme);
         saveThemeConfigLocally(mergedTheme);
         applyThemeToDocument(mergedTheme);
       }
-      if (cloudSocial) {
-        const mergedSocial = { ...socialConfig, ...cloudSocial };
+      if (socialRes.status === 'fulfilled' && socialRes.value) {
+        const mergedSocial = { ...socialConfig, ...socialRes.value };
         setSocialConfig(mergedSocial);
         saveSocialConfigLocally(mergedSocial);
       }
-      if (cloudSettings) {
-        const merged = { ...gatewayConfig, ...cloudSettings };
+      if (gatewayRes.status === 'fulfilled' && gatewayRes.value) {
+        const merged = { ...gatewayConfig, ...gatewayRes.value };
         setGatewayConfig(merged);
         saveRazorpayGatewayConfig(merged);
       }
-      if (cloudBranding) {
+      if (brandingRes.status === 'fulfilled' && brandingRes.value) {
+        const cloudBranding = brandingRes.value;
         const mergedBranding = {
           ...brandingConfig,
           ...cloudBranding,
@@ -250,7 +253,8 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
         setBrandingConfig(mergedBranding);
         saveBrandingConfigLocally(mergedBranding);
       }
-      if (cloudAds) {
+      if (adsRes.status === 'fulfilled' && adsRes.value) {
+        const cloudAds = adsRes.value;
         const mergedAds = {
           ...adsConfig,
           ...cloudAds,
@@ -259,9 +263,9 @@ export const AdminPanelModal: React.FC<AdminPanelModalProps> = ({
         setAdsConfig(mergedAds);
         saveAdsConfigLocally(mergedAds);
       }
-      if (cloudPageText) {
-        setPageText(cloudPageText);
-        savePageTextConfigLocally(cloudPageText);
+      if (pageTextRes.status === 'fulfilled' && pageTextRes.value) {
+        setPageText(pageTextRes.value);
+        savePageTextConfigLocally(pageTextRes.value);
       }
     } catch (_e) {
       // Non-blocking admin data load fallback

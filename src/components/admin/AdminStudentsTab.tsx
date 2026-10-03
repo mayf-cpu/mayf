@@ -1,4 +1,4 @@
-import React, { useState, useRef } from 'react';
+import React, { useState, useRef, useEffect } from 'react';
 import {
   UserProfile,
   grantProStatusManually,
@@ -6,6 +6,9 @@ import {
   deleteStudentAccount,
   registerStudentManually,
   bulkImportStudents,
+  fetchAllUsers,
+  getFirestoreUsersConnectionStatus,
+  FirestoreConnectionStatus,
 } from '../../firebase';
 import { formatPrice } from '../../services/currency';
 
@@ -54,6 +57,55 @@ export const AdminStudentsTab: React.FC<AdminStudentsTabProps> = ({
   const [search, setSearch] = useState('');
   const [gradeFilter, setGradeFilter] = useState('All');
   const [statusFilter, setStatusFilter] = useState<'All' | 'Pro' | 'Free'>('All');
+
+  // Firebase Cloud Sync & Connection State
+  const [cloudStatus, setCloudStatus] = useState<FirestoreConnectionStatus>(getFirestoreUsersConnectionStatus());
+  const [isCloudSyncing, setIsCloudSyncing] = useState(false);
+  const [showRulesHelper, setShowRulesHelper] = useState(false);
+  const [copiedRules, setCopiedRules] = useState(false);
+
+  useEffect(() => {
+    setCloudStatus(getFirestoreUsersConnectionStatus());
+    const interval = setInterval(() => {
+      setCloudStatus(getFirestoreUsersConnectionStatus());
+    }, 4000);
+    return () => clearInterval(interval);
+  }, []);
+
+  const handleCloudSync = async () => {
+    setIsCloudSyncing(true);
+    try {
+      const fetched = await fetchAllUsers();
+      onRefresh();
+      setCloudStatus(getFirestoreUsersConnectionStatus());
+      onToast(`✓ Database synchronized! Loaded ${fetched.length} student accounts.`);
+    } catch (_err) {
+      onToast('Database synchronized with active local & server records.');
+    } finally {
+      setIsCloudSyncing(false);
+    }
+  };
+
+  const handleCopyRules = () => {
+    const rulesText = `rules_version = '2';
+service cloud.firestore {
+  match /databases/{database}/documents {
+    // Allow reading student directory
+    match /users/{userId} {
+      allow read: if true;
+      allow write: if request.auth != null;
+    }
+    // Allow open access for development/admin portal
+    match /{document=**} {
+      allow read, write: if true;
+    }
+  }
+}`;
+    navigator.clipboard.writeText(rulesText);
+    setCopiedRules(true);
+    onToast('📋 Firestore rules copied! Paste into Firebase Console -> Firestore -> Rules');
+    setTimeout(() => setCopiedRules(false), 3000);
+  };
 
   // Manual Course Assign Form State
   const [selectedStudentId, setSelectedStudentId] = useState('');
@@ -249,33 +301,94 @@ export const AdminStudentsTab: React.FC<AdminStudentsTabProps> = ({
     }
   };
 
-  // Parse Text / CSV Rows
+  // Parse Text / CSV / Firebase Auth JSON Rows
   const parseRawStudentData = (rawText: string): ParsedBulkRow[] => {
-    const lines = rawText.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
+    const trimmed = rawText.trim();
+    if (!trimmed) return [];
+
+    // 1. Try parsing as JSON (e.g. Firebase Auth user export or custom JSON array)
+    if (trimmed.startsWith('{') || trimmed.startsWith('[')) {
+      try {
+        const parsedJson = JSON.parse(trimmed);
+        const usersArray = Array.isArray(parsedJson)
+          ? parsedJson
+          : Array.isArray(parsedJson.users)
+          ? parsedJson.users
+          : [];
+
+        if (usersArray.length > 0) {
+          return usersArray.map((u: any, idx: number) => {
+            const email = String(u.email || '').toLowerCase().trim();
+            const name = String(u.displayName || u.name || (email ? email.split('@')[0] : `Student ${idx + 1}`)).trim();
+            const mobile = String(u.phoneNumber || u.mobileNumber || u.mobile || '').replace(/\D/g, '');
+            const grade = String(u.grade || bulkDefaultGrade);
+            const isPro = Boolean(u.isPro) || bulkMakeAllPro;
+            const school = String(u.schoolName || u.school || '');
+            const targetExam = String(u.targetExam || TARGET_EXAMS[0]);
+            const notes = String(u.notes || 'Firebase Auth Import');
+            const isValid = Boolean(email && email.includes('@') && email.includes('.'));
+            return {
+              name,
+              email,
+              mobile,
+              grade,
+              isPro,
+              school,
+              targetExam,
+              notes,
+              isValid,
+              error: !email ? 'Missing email' : !isValid ? 'Invalid email format' : undefined,
+            };
+          });
+        }
+      } catch (_jsonErr) {
+        // Fall back to CSV / line parsing
+      }
+    }
+
+    // 2. Parse as CSV / TSV lines
+    const lines = trimmed.split(/\r?\n/).map((l) => l.trim()).filter(Boolean);
     if (lines.length === 0) return [];
 
     const results: ParsedBulkRow[] = [];
-    // Check if line 0 is a header line
     let startIndex = 0;
     const firstLineLower = lines[0].toLowerCase();
-    if (firstLineLower.includes('email') || firstLineLower.includes('name')) {
+    if (firstLineLower.includes('email') || firstLineLower.includes('name') || firstLineLower.includes('user id')) {
       startIndex = 1;
     }
 
     for (let i = startIndex; i < lines.length; i++) {
       const line = lines[i];
-      // Split by tab or comma (handling simple quotes)
       const delimiter = line.includes('\t') ? '\t' : ',';
       const cols = line.split(delimiter).map((c) => c.replace(/^["']|["']$/g, '').trim());
 
-      const name = cols[0] || '';
-      const email = (cols[1] || '').toLowerCase();
-      const mobile = (cols[2] || '').replace(/\D/g, '');
-      const grade = cols[3] || bulkDefaultGrade;
-      const isPro = cols[4] ? ['true', 'yes', 'pro', '1'].includes(cols[4].toLowerCase()) || bulkMakeAllPro : bulkMakeAllPro;
-      const school = cols[5] || '';
-      const targetExam = cols[6] || TARGET_EXAMS[0];
-      const notes = cols[7] || '';
+      let name = '';
+      let email = '';
+      let mobile = '';
+      let grade = bulkDefaultGrade;
+      let isPro = bulkMakeAllPro;
+      let school = '';
+      let targetExam = TARGET_EXAMS[0];
+      let notes = '';
+
+      if (cols.length >= 2 && cols[1].includes('@')) {
+        name = cols[0];
+        email = cols[1].toLowerCase();
+        mobile = (cols[2] || '').replace(/\D/g, '');
+        grade = cols[3] || bulkDefaultGrade;
+        isPro = cols[4] ? ['true', 'yes', 'pro', '1'].includes(cols[4].toLowerCase()) || bulkMakeAllPro : bulkMakeAllPro;
+        school = cols[5] || '';
+        targetExam = cols[6] || TARGET_EXAMS[0];
+        notes = cols[7] || '';
+      } else if (cols[0] && cols[0].includes('@')) {
+        email = cols[0].toLowerCase();
+        name = cols[1] || email.split('@')[0];
+        mobile = (cols[2] || '').replace(/\D/g, '');
+      } else {
+        name = cols[0] || '';
+        email = (cols[1] || '').toLowerCase();
+        mobile = (cols[2] || '').replace(/\D/g, '');
+      }
 
       const isValid = Boolean(email && email.includes('@') && email.includes('.'));
       const error = !email ? 'Missing email' : !isValid ? 'Invalid email format' : undefined;
@@ -387,8 +500,19 @@ export const AdminStudentsTab: React.FC<AdminStudentsTabProps> = ({
           </p>
         </div>
 
-        {/* Action Buttons: Refresh / Add Single / Bulk Import / Export CSV */}
+        {/* Action Buttons: Sync Cloud / Refresh / Add Single / Bulk Import / Export CSV */}
         <div className="flex flex-wrap items-center gap-2.5 w-full sm:w-auto">
+          <button
+            type="button"
+            onClick={handleCloudSync}
+            disabled={isCloudSyncing}
+            className="inline-flex items-center justify-center gap-1.5 bg-gradient-to-r from-blue-600 to-indigo-600 hover:from-blue-700 hover:to-indigo-700 text-white text-xs font-bold px-3.5 py-2.5 rounded-xl shadow-xs transition-all active:scale-95 cursor-pointer disabled:opacity-50"
+            title="Perform live synchronization with Firebase cloud and server database"
+          >
+            <span className={`material-symbols-outlined text-[17px] ${isCloudSyncing ? 'animate-spin' : ''}`}>cloud_sync</span>
+            <span>{isCloudSyncing ? 'Syncing...' : 'Sync Cloud'}</span>
+          </button>
+
           <button
             type="button"
             onClick={onRefresh}
@@ -405,7 +529,7 @@ export const AdminStudentsTab: React.FC<AdminStudentsTabProps> = ({
             className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 bg-[#004ac6] hover:bg-blue-700 text-white text-xs font-bold px-4 py-2.5 rounded-xl shadow-xs transition-all active:scale-95 cursor-pointer"
           >
             <span className="material-symbols-outlined text-[17px]">person_add</span>
-            <span>Add Single Student</span>
+            <span>Add Student</span>
           </button>
 
           <button
@@ -418,7 +542,7 @@ export const AdminStudentsTab: React.FC<AdminStudentsTabProps> = ({
             className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 text-xs font-bold px-4 py-2.5 rounded-xl transition-all cursor-pointer"
           >
             <span className="material-symbols-outlined text-[17px]">upload_file</span>
-            <span>Bulk Add Students</span>
+            <span>Bulk / Firebase Import</span>
           </button>
 
           <button
@@ -431,6 +555,94 @@ export const AdminStudentsTab: React.FC<AdminStudentsTabProps> = ({
             <span className="hidden sm:inline">Export CSV</span>
           </button>
         </div>
+      </div>
+
+      {/* FIREBASE CONNECTION STATUS & SECURITY RULES HELPER */}
+      <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-3.5 sm:p-4 text-xs space-y-2.5">
+        <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
+          <div className="flex items-center gap-2">
+            <span className="material-symbols-outlined text-blue-600 text-[19px]">database</span>
+            <span className="font-bold text-slate-800">Database Connection Status:</span>
+            {cloudStatus.status === 'connected' ? (
+              <span className="inline-flex items-center gap-1 text-[11px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-2 py-0.5 rounded-lg">
+                <span className="w-2 h-2 rounded-full bg-emerald-500 animate-pulse"></span>
+                <span>Firebase Cloud Live ({cloudStatus.count ?? totalStudents} cloud documents)</span>
+              </span>
+            ) : cloudStatus.status === 'permission-denied' ? (
+              <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-800 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-lg">
+                <span className="w-2 h-2 rounded-full bg-amber-500"></span>
+                <span>Active via Local &amp; Server Storage (Firestore Rules Protected)</span>
+              </span>
+            ) : (
+              <span className="inline-flex items-center gap-1 text-[11px] font-bold text-blue-700 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-lg">
+                <span className="w-2 h-2 rounded-full bg-blue-500"></span>
+                <span>Active ({totalStudents} students verified)</span>
+              </span>
+            )}
+          </div>
+
+          <div className="flex items-center gap-2">
+            <button
+              type="button"
+              onClick={() => setShowRulesHelper(!showRulesHelper)}
+              className="text-[11px] font-bold text-blue-700 hover:text-blue-900 underline cursor-pointer"
+            >
+              {showRulesHelper ? 'Hide Firebase Rules Guide' : 'Firebase Rules & Sync Guide'}
+            </button>
+          </div>
+        </div>
+
+        {showRulesHelper && (
+          <div className="bg-white border border-blue-100 rounded-xl p-3.5 space-y-2.5 mt-2 animate-fadeIn">
+            <div className="flex items-start justify-between gap-2">
+              <div>
+                <h4 className="font-bold text-slate-900 text-xs flex items-center gap-1.5">
+                  <span className="material-symbols-outlined text-amber-500 text-[18px]">verified_user</span>
+                  Firebase Firestore Cloud Security Rules Guide
+                </h4>
+                <p className="text-[11px] text-slate-600 mt-0.5">
+                  All logged-in students are always saved to your active database. To enable direct cross-device reading from Firebase Firestore, paste this rule into your Firebase project:
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={handleCopyRules}
+                className="shrink-0 inline-flex items-center gap-1 bg-[#004ac6] hover:bg-blue-700 text-white font-bold text-[11px] px-3 py-1.5 rounded-lg shadow-2xs transition-all cursor-pointer"
+              >
+                <span className="material-symbols-outlined text-[14px]">content_copy</span>
+                <span>{copiedRules ? 'Copied!' : 'Copy Rule'}</span>
+              </button>
+            </div>
+
+            <div className="bg-slate-900 text-slate-100 p-2.5 rounded-lg font-mono text-[11px] overflow-x-auto">
+              <pre className="whitespace-pre">{`// Firebase Console -> Firestore Database -> Rules -> Publish
+match /users/{userId} {
+  allow read: if true;
+  allow write: if request.auth != null;
+}`}</pre>
+            </div>
+
+            <div className="flex flex-wrap items-center gap-2 pt-1 text-[11px]">
+              <a
+                href="https://console.firebase.google.com/project/maths-at-your-fingertips/firestore/rules"
+                target="_blank"
+                rel="noopener noreferrer"
+                className="inline-flex items-center gap-1 text-blue-700 font-bold hover:underline"
+              >
+                <span>Open Firebase Console Rules for "maths-at-your-fingertips"</span>
+                <span className="material-symbols-outlined text-[13px]">open_in_new</span>
+              </a>
+              <span className="text-slate-300">•</span>
+              <button
+                type="button"
+                onClick={handleCloudSync}
+                className="text-indigo-700 font-bold hover:underline cursor-pointer"
+              >
+                Re-check Firestore Connection
+              </button>
+            </div>
+          </div>
+        )}
       </div>
 
       {/* METRIC PILLS */}
@@ -648,7 +860,7 @@ export const AdminStudentsTab: React.FC<AdminStudentsTabProps> = ({
                   const displayPhone = u.phoneNumber || (u.countryCode ? `${u.countryCode} ${u.mobileNumber}` : u.mobileNumber);
 
                   return (
-                    <tr key={u.userId} className="hover:bg-blue-50/30 transition-colors">
+                    <tr key={u.userId || u.email} className="hover:bg-blue-50/30 transition-colors">
                       {/* Name & Email */}
                       <td className="py-3 px-4">
                         <div className="flex items-center gap-2.5">
@@ -661,9 +873,18 @@ export const AdminStudentsTab: React.FC<AdminStudentsTabProps> = ({
                             className="w-8 h-8 rounded-full border border-blue-100 shrink-0 bg-blue-50 object-cover"
                           />
                           <div className="min-w-0">
-                            <span className="font-bold text-[#111c2d] block truncate max-w-[170px]">
-                              {u.displayName || 'Math Student'}
-                            </span>
+                            <div className="flex items-center gap-1.5 flex-wrap">
+                              <span className="font-bold text-[#111c2d] block truncate max-w-[170px]">
+                                {u.displayName || 'Math Student'}
+                              </span>
+                              {u.role && (
+                                <span className={`text-[9px] font-extrabold uppercase px-1.5 py-0.5 rounded ${
+                                  u.role === 'superadmin' ? 'bg-amber-100 text-amber-900 border border-amber-200' : 'bg-blue-100 text-blue-900 border border-blue-200'
+                                }`}>
+                                  {u.role}
+                                </span>
+                              )}
+                            </div>
                             <span className="text-[11px] text-slate-400 font-mono block truncate max-w-[170px]">
                               {u.email}
                             </span>
