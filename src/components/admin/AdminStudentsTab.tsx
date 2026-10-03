@@ -9,6 +9,8 @@ import {
   fetchAllUsers,
   getFirestoreUsersConnectionStatus,
   FirestoreConnectionStatus,
+  purgeDummyStudents,
+  isDummyStudentRecord,
 } from '../../firebase';
 import { formatPrice } from '../../services/currency';
 
@@ -37,6 +39,8 @@ const TARGET_EXAMS = [
 ];
 
 interface ParsedBulkRow {
+  userId?: string;
+  photoURL?: string;
   name: string;
   email: string;
   mobile: string;
@@ -56,7 +60,7 @@ export const AdminStudentsTab: React.FC<AdminStudentsTabProps> = ({
 }) => {
   const [search, setSearch] = useState('');
   const [gradeFilter, setGradeFilter] = useState('All');
-  const [statusFilter, setStatusFilter] = useState<'All' | 'Pro' | 'Free'>('All');
+  const [statusFilter, setStatusFilter] = useState<'All' | 'Real' | 'Pro' | 'Free' | 'Dummy'>('All');
 
   // Firebase Cloud Sync & Connection State
   const [cloudStatus, setCloudStatus] = useState<FirestoreConnectionStatus>(getFirestoreUsersConnectionStatus());
@@ -132,7 +136,7 @@ service cloud.firestore {
 
   // Bulk Students Registration Modal State
   const [isBulkModalOpen, setIsBulkModalOpen] = useState(false);
-  const [bulkMode, setBulkMode] = useState<'csv' | 'paste'>('csv');
+  const [bulkMode, setBulkMode] = useState<'firebase' | 'csv' | 'paste'>('firebase');
   const [pastedText, setPastedText] = useState('');
   const [parsedRows, setParsedRows] = useState<ParsedBulkRow[]>([]);
   const [isImportingBulk, setIsImportingBulk] = useState(false);
@@ -140,8 +144,17 @@ service cloud.firestore {
   const [bulkDefaultGrade, setBulkDefaultGrade] = useState('Class 10');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const handlePurgeDummyStudents = () => {
+    const cleaned = purgeDummyStudents();
+    onToast(`✓ Cleaned sample/dummy students! Displaying ${cleaned.length} verified student accounts.`);
+    onRefresh();
+  };
+
   // Actual registered students only
   const displayUsers: UserProfile[] = users;
+
+  const dummyStudentsCount = displayUsers.filter((u) => isDummyStudentRecord(u)).length;
+  const realStudentsCount = displayUsers.filter((u) => !isDummyStudentRecord(u)).length;
 
   const filteredStudents = displayUsers.filter((u) => {
     const q = search.toLowerCase().trim();
@@ -154,8 +167,17 @@ service cloud.firestore {
       (u.phoneNumber || '').includes(q) ||
       (u.schoolName || '').toLowerCase().includes(q);
     const matchGrade = gradeFilter === 'All' || u.grade === gradeFilter;
+    const isDummy = isDummyStudentRecord(u);
     const matchStatus =
-      statusFilter === 'All' || (statusFilter === 'Pro' ? u.isPro : !u.isPro);
+      statusFilter === 'All'
+        ? true
+        : statusFilter === 'Real'
+        ? !isDummy
+        : statusFilter === 'Dummy'
+        ? isDummy
+        : statusFilter === 'Pro'
+        ? u.isPro
+        : !u.isPro;
     return matchSearch && matchGrade && matchStatus;
   });
 
@@ -318,16 +340,20 @@ service cloud.firestore {
 
         if (usersArray.length > 0) {
           return usersArray.map((u: any, idx: number) => {
+            const userId = String(u.localId || u.userId || u.uid || u.user_id || '').trim();
             const email = String(u.email || '').toLowerCase().trim();
-            const name = String(u.displayName || u.name || (email ? email.split('@')[0] : `Student ${idx + 1}`)).trim();
-            const mobile = String(u.phoneNumber || u.mobileNumber || u.mobile || '').replace(/\D/g, '');
+            const name = String(u.displayName || u.display_name || u.name || (email ? email.split('@')[0] : `Student ${idx + 1}`)).trim();
+            const photoURL = String(u.photoUrl || u.photo_url || u.photoURL || '');
+            const mobile = String(u.phoneNumber || u.phone_number || u.mobileNumber || u.mobile || '').replace(/\D/g, '');
             const grade = String(u.grade || bulkDefaultGrade);
             const isPro = Boolean(u.isPro) || bulkMakeAllPro;
             const school = String(u.schoolName || u.school || '');
             const targetExam = String(u.targetExam || TARGET_EXAMS[0]);
-            const notes = String(u.notes || 'Firebase Auth Import');
+            const notes = String(u.notes || (userId ? 'Firebase Auth Account' : 'Imported Student'));
             const isValid = Boolean(email && email.includes('@') && email.includes('.'));
             return {
+              userId,
+              photoURL,
               name,
               email,
               mobile,
@@ -353,7 +379,7 @@ service cloud.firestore {
     const results: ParsedBulkRow[] = [];
     let startIndex = 0;
     const firstLineLower = lines[0].toLowerCase();
-    if (firstLineLower.includes('email') || firstLineLower.includes('name') || firstLineLower.includes('user id')) {
+    if (firstLineLower.includes('email') || firstLineLower.includes('name') || firstLineLower.includes('user id') || firstLineLower.includes('user_id')) {
       startIndex = 1;
     }
 
@@ -362,6 +388,7 @@ service cloud.firestore {
       const delimiter = line.includes('\t') ? '\t' : ',';
       const cols = line.split(delimiter).map((c) => c.replace(/^["']|["']$/g, '').trim());
 
+      let userId = '';
       let name = '';
       let email = '';
       let mobile = '';
@@ -384,6 +411,11 @@ service cloud.firestore {
         email = cols[0].toLowerCase();
         name = cols[1] || email.split('@')[0];
         mobile = (cols[2] || '').replace(/\D/g, '');
+      } else if (cols.length >= 3 && cols[2].includes('@')) {
+        userId = cols[0];
+        name = cols[1];
+        email = cols[2].toLowerCase();
+        mobile = (cols[3] || '').replace(/\D/g, '');
       } else {
         name = cols[0] || '';
         email = (cols[1] || '').toLowerCase();
@@ -394,6 +426,7 @@ service cloud.firestore {
       const error = !email ? 'Missing email' : !isValid ? 'Invalid email format' : undefined;
 
       results.push({
+        userId,
         name: name || (email ? email.split('@')[0] : `Student ${i + 1}`),
         email,
         mobile,
@@ -431,15 +464,14 @@ service cloud.firestore {
   const handleDownloadSampleCSV = () => {
     const headers = ['Name', 'Email', 'Mobile', 'Grade', 'Pro', 'School', 'TargetExam', 'Notes'];
     const sampleRows = [
-      ['Aarav Sharma', 'aarav.sharma@example.com', '9876543210', 'Class 10', 'Pro', 'DPS R.K. Puram', 'CBSE Board Examinations', 'Scholarship Student'],
-      ['Diya Patel', 'diya.patel@example.com', '9812345678', 'Class 9', 'Free', 'St. Xavier School', 'National Math Olympiad (IMO / SOF)', 'Batch A'],
-      ['Kabir Mehta', 'kabir.math@example.com', '9890123456', 'Class 10', 'Pro', 'Modern School', 'CBSE Board Examinations', 'Cash Paid'],
+      ['Rohan Verma', 'rohan.verma@gmail.com', '9876543210', 'Class 10', 'Pro', 'DPS R.K. Puram', 'CBSE Board Examinations', 'Board Prep Student'],
+      ['Priya Sharma', 'priya.sharma@gmail.com', '9812345678', 'Class 9', 'Free', 'St. Xavier School', 'National Math Olympiad (IMO / SOF)', 'Olympiad Aspirant'],
     ];
     const csvContent = 'data:text/csv;charset=utf-8,' + [headers.join(','), ...sampleRows.map((r) => r.join(','))].join('\n');
     const encodedUri = encodeURI(csvContent);
     const link = document.createElement('a');
     link.setAttribute('href', encodedUri);
-    link.setAttribute('download', 'sample_students_import_template.csv');
+    link.setAttribute('download', 'students_import_template.csv');
     document.body.appendChild(link);
     link.click();
     document.body.removeChild(link);
@@ -457,21 +489,24 @@ service cloud.firestore {
     setIsImportingBulk(true);
     try {
       const payload = validStudents.map((r) => ({
+        userId: r.userId || undefined,
+        photoURL: r.photoURL || '',
         displayName: r.name,
         email: r.email,
         mobileNumber: r.mobile,
         countryCode: '+91',
+        phoneNumber: r.mobile ? `+91 ${r.mobile}`.trim() : '',
         grade: r.grade || bulkDefaultGrade,
         schoolName: r.school,
         targetExam: r.targetExam,
         isPro: r.isPro,
         proPlan: r.isPro ? 'Admin Bulk Import' : '',
-        notes: r.notes,
+        notes: r.notes || 'Firebase Registered Student',
         whatsappAlerts: true,
       }));
 
       const res = await bulkImportStudents(payload);
-      onToast(`🎉 Successfully imported ${res.count} students into database!`);
+      onToast(`🎉 Successfully registered & synced ${res.count} students!`);
       setIsBulkModalOpen(false);
       setParsedRows([]);
       setPastedText('');
@@ -500,7 +535,7 @@ service cloud.firestore {
           </p>
         </div>
 
-        {/* Action Buttons: Sync Cloud / Refresh / Add Single / Bulk Import / Export CSV */}
+        {/* Action Buttons: Sync Cloud / Refresh / Add Single / Bulk Import / Purge Dummy / Export CSV */}
         <div className="flex flex-wrap items-center gap-2.5 w-full sm:w-auto">
           <button
             type="button"
@@ -536,14 +571,28 @@ service cloud.firestore {
             type="button"
             onClick={() => {
               setIsBulkModalOpen(true);
+              setBulkMode('firebase');
               setParsedRows([]);
               setPastedText('');
             }}
             className="flex-1 sm:flex-none inline-flex items-center justify-center gap-1.5 bg-indigo-50 hover:bg-indigo-100 text-indigo-700 border border-indigo-200 text-xs font-bold px-4 py-2.5 rounded-xl transition-all cursor-pointer"
+            title="Import users from Firebase Authentication or CSV"
           >
             <span className="material-symbols-outlined text-[17px]">upload_file</span>
-            <span>Bulk / Firebase Import</span>
+            <span>Import from Firebase / CSV</span>
           </button>
+
+          {dummyStudentsCount > 0 && (
+            <button
+              type="button"
+              onClick={handlePurgeDummyStudents}
+              className="inline-flex items-center justify-center gap-1.5 bg-rose-50 hover:bg-rose-100 text-rose-700 border border-rose-200 text-xs font-bold px-3.5 py-2.5 rounded-xl transition-all cursor-pointer"
+              title="Delete mock/dummy sample students"
+            >
+              <span className="material-symbols-outlined text-[17px]">delete_sweep</span>
+              <span>Remove Dummy Students ({dummyStudentsCount})</span>
+            </button>
+          )}
 
           <button
             type="button"
@@ -558,9 +607,13 @@ service cloud.firestore {
       </div>
 
       {/* FIREBASE CONNECTION STATUS & SECURITY RULES HELPER */}
-      <div className="bg-slate-50 border border-slate-200/80 rounded-2xl p-3.5 sm:p-4 text-xs space-y-2.5">
+      <div className={`rounded-2xl p-3.5 sm:p-4 text-xs space-y-2.5 border ${
+        cloudStatus.status === 'permission-denied'
+          ? 'bg-amber-50/80 border-amber-200'
+          : 'bg-slate-50 border-slate-200/80'
+      }`}>
         <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2">
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-2 flex-wrap">
             <span className="material-symbols-outlined text-blue-600 text-[19px]">database</span>
             <span className="font-bold text-slate-800">Database Connection Status:</span>
             {cloudStatus.status === 'connected' ? (
@@ -569,9 +622,9 @@ service cloud.firestore {
                 <span>Firebase Cloud Live ({cloudStatus.count ?? totalStudents} cloud documents)</span>
               </span>
             ) : cloudStatus.status === 'permission-denied' ? (
-              <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-800 bg-amber-50 border border-amber-200 px-2 py-0.5 rounded-lg">
-                <span className="w-2 h-2 rounded-full bg-amber-500"></span>
-                <span>Active via Local &amp; Server Storage (Firestore Rules Protected)</span>
+              <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-900 bg-amber-100 border border-amber-300 px-2.5 py-1 rounded-lg">
+                <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span>
+                <span>Cloud Firestore: Permission Denied (Requires Rule Publish in Firebase Console)</span>
               </span>
             ) : (
               <span className="inline-flex items-center gap-1 text-[11px] font-bold text-blue-700 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-lg">
@@ -587,10 +640,35 @@ service cloud.firestore {
               onClick={() => setShowRulesHelper(!showRulesHelper)}
               className="text-[11px] font-bold text-blue-700 hover:text-blue-900 underline cursor-pointer"
             >
-              {showRulesHelper ? 'Hide Firebase Rules Guide' : 'Firebase Rules & Sync Guide'}
+              {showRulesHelper ? 'Hide Firebase Setup Guide' : 'Firebase Rules & Auth Import Guide'}
             </button>
           </div>
         </div>
+
+        {/* Prominent warning if permission denied */}
+        {cloudStatus.status === 'permission-denied' && !showRulesHelper && (
+          <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-1 border-t border-amber-200/60 text-amber-900">
+            <p className="text-[11px]">
+              ⚠️ Students registering in Firebase cannot be read by this browser because your project's Firestore rules restrict queries.
+            </p>
+            <div className="flex items-center gap-2 shrink-0">
+              <button
+                type="button"
+                onClick={handleCopyRules}
+                className="bg-amber-600 hover:bg-amber-700 text-white font-bold text-[11px] px-2.5 py-1 rounded-lg cursor-pointer"
+              >
+                {copiedRules ? '✓ Rule Copied!' : 'Copy 2-Line Rule'}
+              </button>
+              <button
+                type="button"
+                onClick={() => setShowRulesHelper(true)}
+                className="text-blue-700 font-bold hover:underline cursor-pointer"
+              >
+                View Guide →
+              </button>
+            </div>
+          </div>
+        )}
 
         {showRulesHelper && (
           <div className="bg-white border border-blue-100 rounded-xl p-3.5 space-y-2.5 mt-2 animate-fadeIn">
@@ -816,9 +894,13 @@ match /users/{userId} {
               onChange={(e) => setStatusFilter(e.target.value as any)}
               className="px-2.5 py-1.5 text-xs font-semibold rounded-xl border border-slate-200 bg-slate-50 focus:bg-white text-slate-700 outline-none cursor-pointer"
             >
-              <option value="All">All Statuses</option>
-              <option value="Pro">Pro Only</option>
-              <option value="Free">Free Only</option>
+              <option value="All">All Accounts ({totalStudents})</option>
+              <option value="Real">Real Students Only ({realStudentsCount})</option>
+              <option value="Pro">Pro Members ({proStudentsCount})</option>
+              <option value="Free">Free Learners</option>
+              {dummyStudentsCount > 0 && (
+                <option value="Dummy">Sample Demo ({dummyStudentsCount})</option>
+              )}
             </select>
           </div>
         </div>
@@ -858,6 +940,7 @@ match /users/{userId} {
 
                   const hasMobile = Boolean(u.mobileNumber || u.phoneNumber);
                   const displayPhone = u.phoneNumber || (u.countryCode ? `${u.countryCode} ${u.mobileNumber}` : u.mobileNumber);
+                  const isDummy = isDummyStudentRecord(u);
 
                   return (
                     <tr key={u.userId || u.email} className="hover:bg-blue-50/30 transition-colors">
@@ -877,11 +960,20 @@ match /users/{userId} {
                               <span className="font-bold text-[#111c2d] block truncate max-w-[170px]">
                                 {u.displayName || 'Math Student'}
                               </span>
-                              {u.role && (
+                              {isDummy ? (
+                                <span className="text-[9px] font-bold text-amber-700 bg-amber-50 border border-amber-200 px-1.5 py-0.5 rounded">
+                                  Sample Demo
+                                </span>
+                              ) : u.role ? (
                                 <span className={`text-[9px] font-extrabold uppercase px-1.5 py-0.5 rounded ${
                                   u.role === 'superadmin' ? 'bg-amber-100 text-amber-900 border border-amber-200' : 'bg-blue-100 text-blue-900 border border-blue-200'
                                 }`}>
                                   {u.role}
+                                </span>
+                              ) : (
+                                <span className="text-[9px] font-bold text-emerald-700 bg-emerald-50 border border-emerald-200 px-1.5 py-0.5 rounded inline-flex items-center gap-1">
+                                  <span className="w-1.5 h-1.5 rounded-full bg-emerald-500"></span>
+                                  <span>Firebase Registered</span>
                                 </span>
                               )}
                             </div>
@@ -1219,7 +1311,19 @@ match /users/{userId} {
             <div className="p-5 sm:p-6 overflow-y-auto space-y-4">
               {/* Mode Switcher & Download Sample */}
               <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-3 pb-3 border-b border-slate-100">
-                <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl">
+                <div className="flex items-center gap-1 bg-slate-100 p-1 rounded-xl flex-wrap">
+                  <button
+                    type="button"
+                    onClick={() => setBulkMode('firebase')}
+                    className={`px-3 py-1.5 text-xs font-bold rounded-lg cursor-pointer transition-colors flex items-center gap-1.5 ${
+                      bulkMode === 'firebase'
+                        ? 'bg-white text-indigo-700 shadow-xs'
+                        : 'text-slate-600 hover:text-slate-900'
+                    }`}
+                  >
+                    <span className="material-symbols-outlined text-[15px]">database</span>
+                    <span>Firebase Auth Export (JSON/CSV)</span>
+                  </button>
                   <button
                     type="button"
                     onClick={() => setBulkMode('csv')}
@@ -1250,9 +1354,53 @@ match /users/{userId} {
                   className="inline-flex items-center gap-1 text-xs font-bold text-blue-600 hover:text-blue-800 cursor-pointer self-start sm:self-auto"
                 >
                   <span className="material-symbols-outlined text-[16px]">download</span>
-                  <span>Download Sample CSV Template</span>
+                  <span>Sample Template</span>
                 </button>
               </div>
+
+              {/* Mode 0: Firebase Auth Import */}
+              {bulkMode === 'firebase' && (
+                <div className="space-y-3">
+                  <div className="bg-indigo-50/70 border border-indigo-200/80 rounded-2xl p-3.5 text-xs space-y-1.5">
+                    <div className="flex items-center gap-2 text-indigo-900 font-bold">
+                      <span className="material-symbols-outlined text-[18px] text-indigo-600">cloud_download</span>
+                      <span>How to import registered students from Firebase Console:</span>
+                    </div>
+                    <ol className="list-decimal list-inside space-y-0.5 text-slate-700 text-[11px] leading-relaxed">
+                      <li>Open Firebase Console → <strong>maths-at-your-fingertips</strong> project</li>
+                      <li>Click <strong>Authentication</strong> → <strong>Users</strong></li>
+                      <li>Click <strong>Export users</strong> (top right) or copy user emails/objects</li>
+                      <li>Paste the JSON or CSV export into the box below and click Import!</li>
+                    </ol>
+                  </div>
+
+                  <div className="space-y-1.5">
+                    <div className="flex items-center justify-between">
+                      <label className="text-xs font-bold text-slate-800">
+                        Paste Firebase Auth JSON or CSV Export:
+                      </label>
+                      <button
+                        type="button"
+                        onClick={() => fileInputRef.current?.click()}
+                        className="text-xs font-bold text-indigo-700 hover:text-indigo-900 underline cursor-pointer"
+                      >
+                        or upload export file
+                      </button>
+                    </div>
+                    <textarea
+                      rows={5}
+                      value={pastedText}
+                      onChange={(e) => {
+                        setPastedText(e.target.value);
+                        const parsed = parseRawStudentData(e.target.value);
+                        setParsedRows(parsed);
+                      }}
+                      placeholder={`Paste Firebase Auth JSON (e.g. { "users": [{ "localId": "...", "email": "student@gmail.com", "displayName": "..." }] }) or CSV:`}
+                      className="w-full bg-[#f0f3ff] border border-blue-100 rounded-xl p-3 text-xs font-mono outline-none focus:bg-white focus:border-blue-500"
+                    />
+                  </div>
+                </div>
+              )}
 
               {/* Mode 1: File Drop Area */}
               {bulkMode === 'csv' && (
@@ -1260,7 +1408,7 @@ match /users/{userId} {
                   <input
                     ref={fileInputRef}
                     type="file"
-                    accept=".csv,.txt"
+                    accept=".csv,.txt,.json"
                     onChange={handleFileUpload}
                     className="hidden"
                   />
@@ -1272,7 +1420,7 @@ match /users/{userId} {
                       <span className="material-symbols-outlined text-[28px]">file_upload</span>
                     </div>
                     <p className="text-xs font-bold text-slate-800">
-                      Click to choose CSV file or drag and drop here
+                      Click to choose CSV or JSON file or drag and drop here
                     </p>
                     <p className="text-[11px] text-slate-500">
                       Supports standard columns: <span className="font-mono font-semibold">Name, Email, Mobile, Grade, Pro, School</span>

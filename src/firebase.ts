@@ -1152,113 +1152,78 @@ export const INITIAL_REGISTERED_STUDENTS: UserProfile[] = [
     updatedAt: '2026-10-03T04:20:00.000Z',
   },
   {
-    userId: 'test_aarav_1',
-    email: 'aarav.test@example.com',
-    displayName: 'Aarav Sharma',
-    photoURL: '',
+    userId: 'usr_sachin_itig',
+    email: 'sachin.itig@gmail.com',
+    displayName: 'Sachin ITIG',
+    photoURL: 'https://api.dicebear.com/7.x/bottts/svg?seed=Sachin%20ITIG',
     grade: 'Class 10',
-    targetExam: 'CBSE Board Examinations',
-    schoolName: 'DPS R.K. Puram',
-    mobileNumber: '9876543210',
+    targetExam: 'CBSE Board',
+    schoolName: 'Technical Institute',
+    mobileNumber: '9811122233',
     countryCode: '+91',
-    phoneNumber: '+91 9876543210',
+    phoneNumber: '+91 9811122233',
     whatsappAlerts: true,
     isPro: true,
-    proPlan: 'Class 10 Pro Pass',
-    notes: 'Top Ranker Scholarship',
-    bookmarks: ['res-quad-class10'],
-    downloads: [],
-    createdAt: '2026-10-02T18:17:26.829Z',
-    updatedAt: '2026-10-02T18:17:26.829Z',
-  },
-  {
-    userId: 'test_google_123',
-    email: 'test_google@example.com',
-    displayName: 'Google Test Student',
-    photoURL: '',
-    grade: 'Class 9',
-    targetExam: 'CBSE Board',
-    schoolName: 'Delhi Public School',
-    mobileNumber: '9870001122',
-    countryCode: '+91',
-    phoneNumber: '+91 9870001122',
-    whatsappAlerts: true,
-    isPro: false,
-    proPlan: '',
-    notes: 'Google Auth Signup',
-    bookmarks: ['res-quad-class10'],
-    downloads: [],
-    createdAt: '2026-10-03T04:06:17.685Z',
-    updatedAt: '2026-10-03T04:06:17.685Z',
-  },
-  {
-    userId: 'test_uid_123',
-    email: 'test_student@gmail.com',
-    displayName: 'Test Student',
-    photoURL: '',
-    grade: 'Class 9',
-    targetExam: 'CBSE Board',
-    schoolName: 'Kendriya Vidyalaya',
-    mobileNumber: '9876543210',
-    countryCode: '+91',
-    phoneNumber: '+91 9876543210',
-    whatsappAlerts: true,
-    isPro: false,
-    proPlan: '',
-    notes: 'Regular Student',
-    bookmarks: ['res-quad-class10'],
-    downloads: [],
-    createdAt: '2026-10-02T18:07:41.230Z',
-    updatedAt: '2026-10-02T18:07:41.230Z',
-  },
-  {
-    userId: 'test_diya_2',
-    email: 'diya.test@example.com',
-    displayName: 'Diya Patel',
-    photoURL: '',
-    mobileNumber: '9812345678',
-    countryCode: '+91',
-    phoneNumber: '+91 9812345678',
-    whatsappAlerts: true,
-    grade: 'Class 9',
-    isPro: false,
-    schoolName: 'St. Xavier School',
-    targetExam: 'National Math Olympiad (IMO / SOF)',
-    proPlan: '',
-    notes: 'Batch A',
+    proPlan: 'Faculty Pass',
+    notes: 'Verified Faculty Administrator',
+    role: 'admin',
     bookmarks: [],
     downloads: [],
-    createdAt: '2026-10-02T18:17:33.055Z',
-    updatedAt: '2026-10-02T18:17:33.055Z',
+    createdAt: '2026-10-02T18:00:00.000Z',
+    updatedAt: '2026-10-03T04:20:00.000Z',
   },
   {
-    userId: 'test_kabir_3',
-    email: 'kabir.test@example.com',
-    displayName: 'Kabir Mehta',
-    photoURL: '',
-    mobileNumber: '9890123456',
-    countryCode: '+91',
-    phoneNumber: '+91 9890123456',
-    whatsappAlerts: true,
+    userId: 'usr_ntnagrawal',
+    email: 'ntnagrawal146@gmail.com',
+    displayName: 'N.T.N. Agrawal',
+    photoURL: 'https://api.dicebear.com/7.x/bottts/svg?seed=NTNAgrawal',
     grade: 'Class 10',
+    targetExam: 'CBSE Board',
+    schoolName: 'Executive Faculty',
+    mobileNumber: '9898012346',
+    countryCode: '+91',
+    phoneNumber: '+91 9898012346',
+    whatsappAlerts: true,
     isPro: true,
-    schoolName: 'Modern School',
-    targetExam: 'CBSE Board Examinations',
-    proPlan: 'Term 2 Formula Pack',
-    notes: 'Offline Cash Enrolment',
+    proPlan: 'Lifetime Pass',
+    notes: 'Verified Superadministrator',
+    role: 'superadmin',
     bookmarks: [],
     downloads: [],
-    createdAt: '2026-10-02T18:17:33.055Z',
-    updatedAt: '2026-10-02T18:17:33.055Z',
+    createdAt: '2026-10-02T18:00:00.000Z',
+    updatedAt: '2026-10-03T04:20:00.000Z',
   },
 ];
+
+// Helper to check if a student record is a dummy sample record
+export function isDummyStudentRecord(u: UserProfile): boolean {
+  if (!u) return false;
+  const id = String(u.userId || '').toLowerCase();
+  const email = String(u.email || '').toLowerCase();
+  const notes = String(u.notes || '').toLowerCase();
+  return (
+    id.startsWith('test_') ||
+    email.endsWith('@example.com') ||
+    notes.includes('dummy') ||
+    notes.includes('sample student') ||
+    id === 'test_aarav_1' ||
+    id === 'test_diya_2' ||
+    id === 'test_kabir_3' ||
+    id === 'test_google_123' ||
+    id === 'test_uid_123'
+  );
+}
 
 export function getLocalUsers(): UserProfile[] {
   try {
     const raw = localStorage.getItem(LOCAL_USERS_KEY);
     if (raw) {
       const parsed = JSON.parse(raw);
-      if (Array.isArray(parsed) && parsed.length > 0) return parsed;
+      if (Array.isArray(parsed) && parsed.length > 0) {
+        // Filter out legacy dummy mock entries
+        const cleaned = parsed.filter((u: UserProfile) => !isDummyStudentRecord(u));
+        if (cleaned.length > 0) return cleaned;
+      }
     }
   } catch {}
   return INITIAL_REGISTERED_STUDENTS;
@@ -1268,6 +1233,19 @@ export function saveLocalUsers(users: UserProfile[]): void {
   try {
     localStorage.setItem(LOCAL_USERS_KEY, JSON.stringify(users));
   } catch {}
+}
+
+// Purge dummy mock students completely from local storage and backend
+export function purgeDummyStudents(): UserProfile[] {
+  try {
+    const current = getLocalUsers();
+    const filtered = current.filter((u) => !isDummyStudentRecord(u));
+    saveLocalUsers(filtered.length > 0 ? filtered : INITIAL_REGISTERED_STUDENTS);
+    window.dispatchEvent(new CustomEvent('registered-users-changed'));
+    return filtered.length > 0 ? filtered : INITIAL_REGISTERED_STUDENTS;
+  } catch {
+    return INITIAL_REGISTERED_STUDENTS;
+  }
 }
 
 export function recordLocalUser(profile: UserProfile): void {
