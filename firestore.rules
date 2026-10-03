@@ -22,7 +22,7 @@ service cloud.firestore {
 
     // Admin helper for authorized administrators
     function isAdmin() {
-      return isSignedIn() && (
+      return isSignedIn() && request.auth.token.email != null && (
         (request.auth.token.email in [
           'sachinagrawal16@gmail.com',
           'sachin.itig@gmail.com',
@@ -31,11 +31,17 @@ service cloud.firestore {
           'admin@mathsatyourfingertips.com',
           'ntnagrawal146@gmail.com'
         ]) ||
+        (request.auth.token.email.lower() in [
+          'sachinagrawal16@gmail.com',
+          'sachin.itig@gmail.com',
+          '2026vivekkushwah@gmail.com',
+          'vivekkushwah@gmail.com',
+          'admin@mathsatyourfingertips.com',
+          'ntnagrawal146@gmail.com'
+        ]) ||
         exists(/databases/$(database)/documents/admins/$(request.auth.uid)) ||
-        (request.auth.token.email != null && (
-          exists(/databases/$(database)/documents/admins/$(request.auth.token.email)) ||
-          exists(/databases/$(database)/documents/admins/$(request.auth.token.email.lower()))
-        ))
+        exists(/databases/$(database)/documents/admins/$(request.auth.token.email)) ||
+        exists(/databases/$(database)/documents/admins/$(request.auth.token.email.lower()))
       );
     }
 

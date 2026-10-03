@@ -150,20 +150,30 @@ function saveStoredAdmins(admins: any[]): void {
 }
 
 // Student User Profiles Storage Helpers
+let memoryStudents: any[] | null = null;
+
 function getStoredStudents(): any[] {
+  if (memoryStudents && memoryStudents.length > 0) {
+    return memoryStudents;
+  }
   try {
     if (fs.existsSync(STUDENTS_FILE_PATH)) {
       const content = fs.readFileSync(STUDENTS_FILE_PATH, 'utf-8');
       const parsed = JSON.parse(content);
-      if (Array.isArray(parsed)) return parsed;
+      if (Array.isArray(parsed)) {
+        memoryStudents = parsed;
+        return parsed;
+      }
     }
   } catch (err) {
     console.error('Error reading students file:', err);
   }
+  memoryStudents = [];
   return [];
 }
 
 function saveStoredStudents(students: any[]): void {
+  memoryStudents = [...students];
   try {
     const dir = path.dirname(STUDENTS_FILE_PATH);
     if (!fs.existsSync(dir)) {

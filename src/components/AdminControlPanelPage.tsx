@@ -12,6 +12,7 @@ import {
   deleteAssignedAdminFromFirestore,
   fetchAllOrders,
   fetchAllUsers,
+  subscribeToAllUsers,
   OrderRecord,
   UserProfile,
   getLocalUsers,
@@ -272,12 +273,49 @@ export const AdminControlPanelPage: React.FC<AdminControlPanelPageProps> = ({
     return () => window.removeEventListener('admins-updated', handleAdminsUpdated);
   }, []);
 
+  // Listen for student registrations and updates in real-time
+  useEffect(() => {
+    const handleUsersChanged = () => {
+      fetchAllUsers().then((fetched) => {
+        if (fetched && fetched.length > 0) {
+          setUsers(fetched);
+        }
+      });
+    };
+    window.addEventListener('registered-users-changed', handleUsersChanged);
+    window.addEventListener('student-profile-updated', handleUsersChanged);
+
+    // Also attach Firestore live listener if user is authenticated admin
+    const unsubUsers = subscribeToAllUsers((liveUsers) => {
+      if (liveUsers && liveUsers.length > 0) {
+        setUsers(liveUsers);
+      }
+    });
+
+    return () => {
+      window.removeEventListener('registered-users-changed', handleUsersChanged);
+      window.removeEventListener('student-profile-updated', handleUsersChanged);
+      unsubUsers();
+    };
+  }, []);
+
   const isGoogleAdmin = Boolean(
     isDirectlyKnownAdmin ||
     liveAdminVerified ||
     (currentUser?.email && verifiedEmail === currentUser.email.toLowerCase().trim())
   );
   const isAuthorized = isGoogleAdmin || isPasscodeUnlocked;
+
+  // Refresh student directory when switching to students tab
+  useEffect(() => {
+    if (activeTab === 'students' && isAuthorized) {
+      fetchAllUsers().then((fetched) => {
+        if (fetched && fetched.length > 0) {
+          setUsers(fetched);
+        }
+      });
+    }
+  }, [activeTab, isAuthorized]);
 
   const handleSyncLegacyData = async () => {
     setIsMigratingLegacy(true);

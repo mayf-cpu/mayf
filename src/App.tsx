@@ -5,7 +5,9 @@
 
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { User, onAuthStateChanged } from 'firebase/auth';
+import { doc, getDoc, setDoc } from 'firebase/firestore';
 import {
+  db,
   auth,
   signInWithGoogle,
   logOut,
@@ -20,6 +22,7 @@ import {
   checkIsUserAdminLive,
   recordLocalUser,
   syncUserProfileToServer,
+  cleanFirestorePayload,
 } from './firebase';
 import { UnauthorizedDomainModal } from './components/UnauthorizedDomainModal';
 import { LoginRequiredModal } from './components/LoginRequiredModal';
@@ -337,23 +340,52 @@ export default function App() {
     const unsubscribeAuth = onAuthStateChanged(auth, (user) => {
       if (user) {
         setCurrentUser(user);
-        if (user.email) {
-          checkIsUserAdminLive(user.email).catch(() => {});
+        const cleanEmail = (user.email || '').toLowerCase().trim();
+        const cleanName = user.displayName || (cleanEmail ? cleanEmail.split('@')[0] : 'Learner');
+        const userDocRef = doc(db, 'users', user.uid);
+
+        if (cleanEmail) {
+          checkIsUserAdminLive(cleanEmail).catch(() => {});
         }
-        // Immediately record base profile to local cache & server database
-        const baseProfile: UserProfile = {
-          userId: user.uid,
-          email: user.email || '',
-          displayName: user.displayName || 'Learner',
-          photoURL: user.photoURL || '',
-          grade: selectedClass,
-          isPro: false,
-          bookmarks: ['res-quad-class10'],
-          createdAt: new Date().toISOString(),
-          updatedAt: new Date().toISOString(),
-        };
-        recordLocalUser(baseProfile);
-        syncUserProfileToServer(baseProfile).catch(() => {});
+
+        // Verify and ensure Firestore document exists with real Google account data
+        getDoc(userDocRef)
+          .then(async (snap) => {
+            if (!snap.exists()) {
+              const baseProfile: UserProfile = {
+                userId: user.uid,
+                email: cleanEmail,
+                displayName: cleanName,
+                photoURL: user.photoURL || '',
+                grade: selectedClass,
+                isPro: false,
+                bookmarks: ['res-quad-class10'],
+                downloads: [],
+                createdAt: new Date().toISOString(),
+                updatedAt: new Date().toISOString(),
+              };
+              await setDoc(userDocRef, cleanFirestorePayload(baseProfile), { merge: true });
+              recordLocalUser(baseProfile);
+              syncUserProfileToServer(baseProfile).catch(() => {});
+              window.dispatchEvent(new CustomEvent('registered-users-changed'));
+            } else {
+              const cloudProfile = snap.data() as UserProfile;
+              const merged: UserProfile = {
+                ...cloudProfile,
+                userId: user.uid,
+                email: cleanEmail || cloudProfile.email || '',
+                displayName: cloudProfile.displayName || cleanName,
+                photoURL: user.photoURL || cloudProfile.photoURL || '',
+                updatedAt: new Date().toISOString(),
+              };
+              recordLocalUser(merged);
+              syncUserProfileToServer(merged).catch(() => {});
+              window.dispatchEvent(new CustomEvent('registered-users-changed'));
+            }
+          })
+          .catch((err) => {
+            console.warn('onAuthStateChanged profile check notice:', err);
+          });
 
         const unsubscribeProfile = subscribeToUserProfile(user.uid, (profile) => {
           if (profile) {
@@ -369,18 +401,21 @@ export default function App() {
           } else {
             const fallbackProfile: UserProfile = {
               userId: user.uid,
-              email: user.email || '',
-              displayName: user.displayName || 'Learner',
+              email: cleanEmail,
+              displayName: cleanName,
               photoURL: user.photoURL || '',
               grade: selectedClass,
               isPro: false,
               bookmarks: ['res-quad-class10'],
+              downloads: [],
               createdAt: new Date().toISOString(),
               updatedAt: new Date().toISOString(),
             };
             setUserProfile(fallbackProfile);
             recordLocalUser(fallbackProfile);
             syncUserProfileToServer(fallbackProfile).catch(() => {});
+            setDoc(userDocRef, cleanFirestorePayload(fallbackProfile), { merge: true }).catch(() => {});
+            window.dispatchEvent(new CustomEvent('registered-users-changed'));
           }
         });
         return () => unsubscribeProfile();

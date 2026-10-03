@@ -13,7 +13,7 @@ interface PagesContext {
 
 export async function onRequest(context: PagesContext): Promise<Response> {
   const url = new URL(context.request.url);
-  const backendBase = 'https://ais-pre-mdcohwj24k254wgdckgjjc-464692473971.asia-southeast1.run.app';
+  const backendBase = context.env?.BACKEND_URL || 'https://ais-pre-33bbrp4344zgnookbvrifx-566895799712.asia-east1.run.app';
   const targetUrl = `${backendBase}${url.pathname}${url.search}`;
 
   const req = context.request;

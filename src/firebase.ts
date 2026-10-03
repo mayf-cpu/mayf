@@ -143,6 +143,23 @@ export interface StudentDownloadRecord extends StudentDownloadItem {
   device?: string;
 }
 
+// Helper to clean payloads for Firestore (removes undefined values that Firestore rejects)
+export function cleanFirestorePayload<T extends Record<string, any>>(obj: T): Partial<T> {
+  const result: any = {};
+  if (!obj || typeof obj !== 'object') return result;
+  for (const key of Object.keys(obj)) {
+    const val = obj[key];
+    if (val !== undefined) {
+      if (val && typeof val === 'object' && !Array.isArray(val) && !(val instanceof Date)) {
+        result[key] = cleanFirestorePayload(val);
+      } else {
+        result[key] = val;
+      }
+    }
+  }
+  return result;
+}
+
 // Synchronize Student Profile with Persistent Server Storage
 export async function syncUserProfileToServer(
   profile: Partial<UserProfile> & { userId?: string; email?: string }
@@ -193,11 +210,13 @@ export async function updateUserProfile(
   // 3. Dispatch global profile updated event so all UI components update instantly
   try {
     window.dispatchEvent(new CustomEvent('student-profile-updated', { detail: dataToSave }));
+    window.dispatchEvent(new CustomEvent('registered-users-changed'));
   } catch {}
 
   // 4. Sync to Firestore in background without throwing fatal unhandled errors
   try {
-    await setDoc(userRef, dataToSave, { merge: true });
+    const cleaned = cleanFirestorePayload(dataToSave);
+    await setDoc(userRef, cleaned, { merge: true });
   } catch (error) {
     console.warn('Firestore update sync notice (local & server persistence active):', error);
   }
@@ -253,11 +272,13 @@ export async function updateUserMobileNumber(
   // 3. Dispatch event so Header, Dashboard & Admin refresh automatically
   try {
     window.dispatchEvent(new CustomEvent('student-profile-updated', { detail: updateData }));
+    window.dispatchEvent(new CustomEvent('registered-users-changed'));
   } catch {}
 
   // 4. Try Firestore sync without crashing the caller
   try {
-    await setDoc(userRef, updateData, { merge: true });
+    const cleaned = cleanFirestorePayload(updateData);
+    await setDoc(userRef, cleaned, { merge: true });
   } catch (error) {
     console.warn('Firestore mobile sync notice (local & server persistence active):', error);
   }
@@ -328,7 +349,8 @@ export async function registerStudentManually(
 
   // 3. Try Firestore setDoc in background
   try {
-    await setDoc(doc(db, 'users', newStudent.userId), newStudent, { merge: true });
+    await setDoc(doc(db, 'users', newStudent.userId), cleanFirestorePayload(newStudent), { merge: true });
+    window.dispatchEvent(new CustomEvent('registered-users-changed'));
   } catch (err) {
     console.warn('Firestore setDoc notice (persisted to server):', err);
   }
@@ -404,9 +426,10 @@ export async function bulkImportStudents(
 
   // 3. Try Firestore batch/setDoc in background
   preparedList.forEach((u) => {
-    setDoc(doc(db, 'users', u.userId), u, { merge: true }).catch(() => {});
+    setDoc(doc(db, 'users', u.userId), cleanFirestorePayload(u), { merge: true }).catch(() => {});
   });
 
+  window.dispatchEvent(new CustomEvent('registered-users-changed'));
   return { count, users: serverUsers };
 }
 
@@ -453,16 +476,19 @@ export async function signInWithGoogle(): Promise<User> {
     // 3. Construct base profile IMMEDIATELY so student registration is never lost
     const initialProfile: UserProfile = {
       userId: user.uid,
-      email: user.email || '',
-      displayName: user.displayName || 'Math Student',
+      email: cleanEmail,
+      displayName: user.displayName || (cleanEmail ? cleanEmail.split('@')[0] : 'Math Student'),
       photoURL: user.photoURL || '',
       grade: 'Class 9',
       isPro: false,
-      role: assignedRole,
       bookmarks: ['res-quad-class10'],
+      downloads: [],
       createdAt: new Date().toISOString(),
       updatedAt: new Date().toISOString(),
     };
+    if (assignedRole) {
+      initialProfile.role = assignedRole;
+    }
 
     // 4. GUARANTEE instant persistence to local storage and server database FIRST!
     recordLocalUser(initialProfile);
@@ -501,23 +527,37 @@ export async function signInWithGoogle(): Promise<User> {
 
     // 6. Sync to Firestore in background without breaking login if security rules or network fails
     const userRef = doc(db, 'users', user.uid);
-    getDoc(userRef)
-      .then(async (snap) => {
-        if (!snap.exists()) {
-          await setDoc(userRef, initialProfile, { merge: true });
-        } else {
-          const existing = snap.data() as UserProfile;
-          if (assignedRole && existing.role !== assignedRole) {
-            existing.role = assignedRole;
-            await setDoc(userRef, { role: assignedRole, updatedAt: new Date().toISOString() }, { merge: true });
-          }
-          recordLocalUser(existing);
-          syncUserProfileToServer(existing).catch(() => {});
+    try {
+      const snap = await getDoc(userRef);
+      if (!snap.exists()) {
+        const cleaned = cleanFirestorePayload(initialProfile);
+        await setDoc(userRef, cleaned, { merge: true });
+      } else {
+        const existing = snap.data() as UserProfile;
+        const merged: UserProfile = {
+          ...existing,
+          userId: user.uid,
+          email: cleanEmail || existing.email,
+          displayName: existing.displayName || user.displayName || cleanEmail.split('@')[0],
+          photoURL: existing.photoURL || user.photoURL || '',
+          updatedAt: new Date().toISOString(),
+        };
+        if (assignedRole && existing.role !== assignedRole) {
+          merged.role = assignedRole;
         }
-      })
-      .catch((dbErr) => {
-        console.warn('Firestore profile sync notice (local & server persistence active):', dbErr);
-      });
+        await setDoc(userRef, cleanFirestorePayload(merged), { merge: true });
+        recordLocalUser(merged);
+        syncUserProfileToServer(merged).catch(() => {});
+      }
+    } catch (dbErr) {
+      console.warn('Firestore profile sync notice (local & server persistence active):', dbErr);
+    }
+
+    // 7. Dispatch events so all open admin panels and dashboards update instantly
+    try {
+      window.dispatchEvent(new CustomEvent('registered-users-changed'));
+      window.dispatchEvent(new CustomEvent('student-profile-updated', { detail: initialProfile }));
+    } catch {}
 
     return user;
   } catch (error: any) {
@@ -1082,8 +1122,31 @@ export async function fetchAllUsers(): Promise<UserProfile[]> {
     if (res.ok) {
       const data = await res.json();
       if (Array.isArray(data.users)) {
-        data.users.forEach((u: UserProfile) => {
-          if (u && (u.userId || u.email)) {
+        data.users.forEach((rawUser: any) => {
+          if (rawUser && (rawUser.userId || rawUser.email)) {
+            const uId = String(rawUser.userId || rawUser.id || `user_${Date.now()}`).trim();
+            const uEmail = String(rawUser.email || '').toLowerCase().trim();
+            const u: UserProfile = {
+              userId: uId,
+              email: uEmail,
+              displayName: rawUser.displayName || rawUser.name || (uEmail ? uEmail.split('@')[0] : 'Student'),
+              photoURL: rawUser.photoURL || '',
+              grade: rawUser.grade || 'Class 9',
+              targetExam: rawUser.targetExam || '',
+              schoolName: rawUser.schoolName || '',
+              mobileNumber: rawUser.mobileNumber || '',
+              countryCode: rawUser.countryCode || '+91',
+              phoneNumber: rawUser.phoneNumber || (rawUser.mobileNumber ? `${rawUser.countryCode || '+91'} ${rawUser.mobileNumber}`.trim() : ''),
+              whatsappAlerts: rawUser.whatsappAlerts !== undefined ? Boolean(rawUser.whatsappAlerts) : true,
+              isPro: Boolean(rawUser.isPro),
+              proPlan: rawUser.proPlan || '',
+              notes: rawUser.notes || '',
+              role: rawUser.role,
+              bookmarks: Array.isArray(rawUser.bookmarks) ? rawUser.bookmarks : [],
+              downloads: Array.isArray(rawUser.downloads) ? rawUser.downloads : [],
+              createdAt: rawUser.createdAt || new Date().toISOString(),
+              updatedAt: rawUser.updatedAt || new Date().toISOString(),
+            };
             const key = (u.userId || u.email || '').trim();
             uMap.set(key, u);
             if (u.email) uMap.set(u.email.toLowerCase().trim(), u);
@@ -1098,20 +1161,44 @@ export async function fetchAllUsers(): Promise<UserProfile[]> {
   // 2. Fetch from Firestore users collection
   try {
     const usersRef = collection(db, 'users');
-    const q = query(usersRef, limit(200));
+    const q = query(usersRef, limit(300));
     const snap = await getDocs(q);
     snap.docs.forEach((d) => {
-      const u = d.data() as UserProfile;
-      if (u && (u.userId || u.email)) {
-        const key = (u.userId || u.email || '').trim();
-        const existing = (u.userId && uMap.get(u.userId)) || (u.email && uMap.get(u.email.toLowerCase().trim()));
-        const mergedProfile = { ...existing, ...u };
+      const data = d.data();
+      const uId = data.userId || d.id;
+      const uEmail = (data.email || '').toLowerCase().trim();
+      const existing = (uId && uMap.get(uId)) || (uEmail && uMap.get(uEmail));
+
+      const mergedProfile: UserProfile = {
+        userId: uId,
+        email: uEmail || existing?.email || '',
+        displayName: data.displayName || data.name || existing?.displayName || (uEmail ? uEmail.split('@')[0] : 'Student'),
+        photoURL: data.photoURL || existing?.photoURL || '',
+        grade: data.grade || existing?.grade || 'Class 9',
+        targetExam: data.targetExam || existing?.targetExam || '',
+        schoolName: data.schoolName || existing?.schoolName || '',
+        mobileNumber: data.mobileNumber || existing?.mobileNumber || '',
+        countryCode: data.countryCode || existing?.countryCode || '+91',
+        phoneNumber: data.phoneNumber || existing?.phoneNumber || (data.mobileNumber ? `${data.countryCode || '+91'} ${data.mobileNumber}`.trim() : ''),
+        whatsappAlerts: data.whatsappAlerts !== undefined ? Boolean(data.whatsappAlerts) : (existing?.whatsappAlerts ?? true),
+        isPro: data.isPro !== undefined ? Boolean(data.isPro) : Boolean(existing?.isPro),
+        proPlan: data.proPlan || existing?.proPlan || '',
+        notes: data.notes || existing?.notes || '',
+        role: data.role || existing?.role,
+        bookmarks: Array.isArray(data.bookmarks) ? data.bookmarks : (existing?.bookmarks || []),
+        downloads: Array.isArray(data.downloads) ? data.downloads : (existing?.downloads || []),
+        createdAt: data.createdAt || existing?.createdAt || new Date().toISOString(),
+        updatedAt: data.updatedAt || new Date().toISOString(),
+      };
+
+      const key = (uId || uEmail || '').trim();
+      if (key) {
         uMap.set(key, mergedProfile);
-        if (u.email) uMap.set(u.email.toLowerCase().trim(), mergedProfile);
+        if (uEmail) uMap.set(uEmail, mergedProfile);
       }
     });
-  } catch (_err) {
-    // Graceful fallback
+  } catch (err) {
+    console.warn('Firestore fetch users notice:', err);
   }
 
   // 3. Merge local storage users
@@ -1221,8 +1308,41 @@ export async function fetchAllUsers(): Promise<UserProfile[]> {
       headers: { 'Content-Type': 'application/json' },
       body: JSON.stringify({ users: merged }),
     }).catch(() => {});
+
+    // If an authenticated user/admin is available, sync to Firestore as well
+    if (auth.currentUser) {
+      merged.forEach((m) => {
+        if (m.userId) {
+          setDoc(doc(db, 'users', m.userId), cleanFirestorePayload(m), { merge: true }).catch(() => {});
+        }
+      });
+    }
   }
   return merged;
+}
+
+// Live real-time listener for all students in admin panel
+export function subscribeToAllUsers(callback: (users: UserProfile[]) => void): () => void {
+  if (auth.currentUser) {
+    try {
+      const usersRef = collection(db, 'users');
+      const q = query(usersRef, limit(300));
+      return onSnapshot(
+        q,
+        () => {
+          fetchAllUsers().then((all) => {
+            if (all && all.length > 0) callback(all);
+          });
+        },
+        (err) => {
+          console.warn('subscribeToAllUsers notice:', err);
+        }
+      );
+    } catch {
+      return () => {};
+    }
+  }
+  return () => {};
 }
 
 // Save Gateway Config to Firestore Settings
