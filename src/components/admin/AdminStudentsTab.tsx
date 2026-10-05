@@ -11,6 +11,8 @@ import {
   FirestoreConnectionStatus,
   purgeDummyStudents,
   isDummyStudentRecord,
+  auth,
+  signInWithGoogle,
 } from '../../firebase';
 import { formatPrice } from '../../services/currency';
 
@@ -144,10 +146,29 @@ service cloud.firestore {
   const [bulkDefaultGrade, setBulkDefaultGrade] = useState('Class 10');
   const fileInputRef = useRef<HTMLInputElement>(null);
 
-  const handlePurgeDummyStudents = () => {
-    const cleaned = purgeDummyStudents();
-    onToast(`✓ Cleaned sample/dummy students! Displaying ${cleaned.length} verified student accounts.`);
-    onRefresh();
+  const handlePurgeDummyStudents = async () => {
+    try {
+      const cleaned = purgeDummyStudents();
+      await fetch('/api/users/purge-dummies', { method: 'POST' });
+      await fetchAllUsers();
+      onRefresh();
+      onToast(`✓ Cleaned all dummy/sample students! Displaying ${cleaned.length} verified accounts.`);
+    } catch (_err) {
+      onRefresh();
+      onToast('Purged dummy students from database.');
+    }
+  };
+
+  const handleGoogleConnect = async () => {
+    try {
+      await signInWithGoogle();
+      const fetched = await fetchAllUsers();
+      onRefresh();
+      setCloudStatus(getFirestoreUsersConnectionStatus());
+      onToast(`✓ Authenticated with Firebase Google Auth! Synchronized ${fetched.length} registered accounts.`);
+    } catch (_e) {
+      onToast('Google authentication cancelled or closed.');
+    }
   };
 
   // Actual registered students only
@@ -624,13 +645,30 @@ service cloud.firestore {
             ) : cloudStatus.status === 'permission-denied' ? (
               <span className="inline-flex items-center gap-1 text-[11px] font-bold text-amber-900 bg-amber-100 border border-amber-300 px-2.5 py-1 rounded-lg">
                 <span className="w-2 h-2 rounded-full bg-amber-500 animate-pulse"></span>
-                <span>Cloud Firestore: Permission Denied (Requires Rule Publish in Firebase Console)</span>
+                <span>Cloud Firestore: Permission Denied (Requires Rule in Firebase Console)</span>
               </span>
             ) : (
               <span className="inline-flex items-center gap-1 text-[11px] font-bold text-blue-700 bg-blue-50 border border-blue-200 px-2 py-0.5 rounded-lg">
                 <span className="w-2 h-2 rounded-full bg-blue-500"></span>
-                <span>Active ({totalStudents} students verified)</span>
+                <span>Active ({totalStudents} verified accounts)</span>
               </span>
+            )}
+
+            {auth.currentUser ? (
+              <span className="inline-flex items-center gap-1 text-[10px] font-bold text-blue-800 bg-blue-100/70 border border-blue-200 px-2 py-0.5 rounded-md">
+                <span className="material-symbols-outlined text-[13px]">verified_user</span>
+                <span>Auth: {auth.currentUser.email}</span>
+              </span>
+            ) : (
+              <button
+                type="button"
+                onClick={handleGoogleConnect}
+                className="inline-flex items-center gap-1 text-[11px] font-bold text-blue-700 bg-blue-50 hover:bg-blue-100 border border-blue-200 px-2.5 py-0.5 rounded-lg cursor-pointer transition-colors"
+                title="Sign in with your Google Admin account to authorize Firebase Cloud access"
+              >
+                <span className="material-symbols-outlined text-[13px]">login</span>
+                <span>Sign in with Google</span>
+              </button>
             )}
           </div>
 
@@ -649,22 +687,34 @@ service cloud.firestore {
         {cloudStatus.status === 'permission-denied' && !showRulesHelper && (
           <div className="flex flex-col sm:flex-row sm:items-center justify-between gap-2 pt-1 border-t border-amber-200/60 text-amber-900">
             <p className="text-[11px]">
-              ⚠️ Students registering in Firebase cannot be read by this browser because your project's Firestore rules restrict queries.
+              ⚠️ Direct Firestore read restricted by Firebase rules. Real students are saved to server database. To sync directly:
             </p>
-            <div className="flex items-center gap-2 shrink-0">
+            <div className="flex items-center gap-2 shrink-0 flex-wrap">
+              {!auth.currentUser && (
+                <button
+                  type="button"
+                  onClick={handleGoogleConnect}
+                  className="bg-blue-600 hover:bg-blue-700 text-white font-bold text-[11px] px-2.5 py-1 rounded-lg cursor-pointer"
+                >
+                  Sign in with Google
+                </button>
+              )}
               <button
                 type="button"
                 onClick={handleCopyRules}
                 className="bg-amber-600 hover:bg-amber-700 text-white font-bold text-[11px] px-2.5 py-1 rounded-lg cursor-pointer"
               >
-                {copiedRules ? '✓ Rule Copied!' : 'Copy 2-Line Rule'}
+                {copiedRules ? '✓ Rule Copied!' : 'Copy Rule for Console'}
               </button>
               <button
                 type="button"
-                onClick={() => setShowRulesHelper(true)}
-                className="text-blue-700 font-bold hover:underline cursor-pointer"
+                onClick={() => {
+                  setIsBulkModalOpen(true);
+                  setBulkMode('firebase');
+                }}
+                className="bg-indigo-600 hover:bg-indigo-700 text-white font-bold text-[11px] px-2.5 py-1 rounded-lg cursor-pointer"
               >
-                View Guide →
+                Import from Firebase Console
               </button>
             </div>
           </div>

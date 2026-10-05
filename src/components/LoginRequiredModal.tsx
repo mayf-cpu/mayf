@@ -131,34 +131,9 @@ export const LoginRequiredModal: React.FC<LoginRequiredModalProps> = ({
           <div className="relative flex py-1 items-center">
             <div className="flex-grow border-t border-slate-200"></div>
             <span className="flex-shrink mx-3 text-slate-400 text-[11px] font-bold uppercase tracking-wider">
-              Or 1-Click Student Login
+              Or Student Quick Login
             </span>
             <div className="flex-grow border-t border-slate-200"></div>
-          </div>
-
-          {/* Quick Demo Student Sign In Buttons */}
-          <div className="grid grid-cols-2 gap-2">
-            <button
-              type="button"
-              onClick={() => handleInstantDemo('Aarav Sharma', 'aarav.sharma24@gmail.com')}
-              className="p-2.5 rounded-xl border border-blue-200 bg-blue-50/60 hover:bg-blue-100 text-left transition-colors cursor-pointer"
-            >
-              <span className="text-[11px] font-bold text-blue-900 block truncate">
-                Aarav Sharma
-              </span>
-              <span className="text-[10px] text-blue-700 block">Class 10 Student</span>
-            </button>
-
-            <button
-              type="button"
-              onClick={() => handleInstantDemo('Diya Patel', 'diya.patel99@gmail.com')}
-              className="p-2.5 rounded-xl border border-emerald-200 bg-emerald-50/60 hover:bg-emerald-100 text-left transition-colors cursor-pointer"
-            >
-              <span className="text-[11px] font-bold text-emerald-900 block truncate">
-                Diya Patel
-              </span>
-              <span className="text-[10px] text-emerald-700 block">Class 9 Student</span>
-            </button>
           </div>
 
           {/* Manual Student Registration Option */}
@@ -169,10 +144,10 @@ export const LoginRequiredModal: React.FC<LoginRequiredModalProps> = ({
                 onClose();
                 onOpenManualRegister();
               }}
-              className="w-full flex items-center justify-center gap-1.5 bg-blue-50/80 hover:bg-blue-100 text-[#004ac6] border border-blue-200 font-bold text-xs py-2 px-3 rounded-xl transition-colors cursor-pointer"
+              className="w-full flex items-center justify-center gap-1.5 bg-blue-50/80 hover:bg-blue-100 text-[#004ac6] border border-blue-200 font-bold text-xs py-2.5 px-3 rounded-xl transition-colors cursor-pointer"
             >
               <span className="material-symbols-outlined text-[16px]">person_add</span>
-              <span>Register New Student Account Manually</span>
+              <span>Register New Student Account</span>
             </button>
           )}
 
@@ -183,14 +158,14 @@ export const LoginRequiredModal: React.FC<LoginRequiredModalProps> = ({
               onClick={() => setShowDirectForm(true)}
               className="w-full text-center text-[11px] font-bold text-slate-500 hover:text-blue-600 transition-colors cursor-pointer py-1"
             >
-              Sign in with custom student name / email →
+              Enter student name &amp; email directly →
             </button>
           ) : (
             <form onSubmit={handleCustomFormSubmit} className="space-y-2.5 pt-1">
               <div>
                 <input
                   type="text"
-                  placeholder="Student Full Name (e.g. Rohan Verma)"
+                  placeholder="Student Full Name"
                   value={studentName}
                   onChange={(e) => setStudentName(e.target.value)}
                   className="w-full bg-slate-50 border border-slate-200 rounded-xl px-3 py-2 text-xs outline-none focus:border-blue-500"
@@ -199,7 +174,7 @@ export const LoginRequiredModal: React.FC<LoginRequiredModalProps> = ({
               <div>
                 <input
                   type="email"
-                  placeholder="Student Email (e.g. rohan.v@school.com)"
+                  placeholder="Student Email"
                   required
                   value={studentEmail}
                   onChange={(e) => setStudentEmail(e.target.value)}

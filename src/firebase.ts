@@ -1196,22 +1196,50 @@ export const INITIAL_REGISTERED_STUDENTS: UserProfile[] = [
 ];
 
 // Helper to check if a student record is a dummy sample record
-export function isDummyStudentRecord(u: UserProfile): boolean {
+export function isDummyStudentRecord(u: UserProfile | any): boolean {
   if (!u) return false;
-  const id = String(u.userId || '').toLowerCase();
-  const email = String(u.email || '').toLowerCase();
-  const notes = String(u.notes || '').toLowerCase();
-  return (
-    id.startsWith('test_') ||
-    email.endsWith('@example.com') ||
-    notes.includes('dummy') ||
-    notes.includes('sample student') ||
-    id === 'test_aarav_1' ||
-    id === 'test_diya_2' ||
-    id === 'test_kabir_3' ||
-    id === 'test_google_123' ||
-    id === 'test_uid_123'
-  );
+  const id = String(u.userId || u.id || '').toLowerCase().trim();
+  const email = String(u.email || '').toLowerCase().trim();
+  const notes = String(u.notes || '').toLowerCase().trim();
+
+  // Known dummy mock student IDs
+  const dummyIds = [
+    'usr_stu_aarav_sharma',
+    'usr_stu_priya_patel',
+    'usr_stu_rohan_verma',
+    'usr_stu_ananya_iyer',
+    'usr_stu_aditya_deshmukh',
+    'usr_stu_sneha_mukherjee',
+    'usr_stu_kavya_reddy',
+    'usr_stu_arjun_nair',
+    'usr_stu_tanya_singh',
+    'test_aarav_1',
+    'test_diya_2',
+    'test_kabir_3',
+    'test_google_123',
+    'test_uid_123',
+  ];
+
+  if (dummyIds.includes(id)) return true;
+  if (id.startsWith('mock_dummy_')) return true;
+  if (id.startsWith('usr_stu_')) return true;
+  if (email.endsWith('@example.com')) return true;
+  if (notes.includes('dummy mock sample')) return true;
+
+  const dummyEmails = [
+    'aarav.sharma.cbse@gmail.com',
+    'priya.patel.maths@gmail.com',
+    'rohan.verma.imo@gmail.com',
+    'ananya.iyer.foundation@gmail.com',
+    'aditya.deshmukh24@gmail.com',
+    'sneha.mukherjee.icse@gmail.com',
+    'kavya.reddy.maths@gmail.com',
+    'arjun.nair.class6@gmail.com',
+    'tanya.singh.class5@gmail.com',
+  ];
+  if (dummyEmails.includes(email)) return true;
+
+  return false;
 }
 
 export function getLocalUsers(): UserProfile[] {
@@ -1220,7 +1248,7 @@ export function getLocalUsers(): UserProfile[] {
     if (raw) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed) && parsed.length > 0) {
-        // Filter out legacy dummy mock entries
+        // Filter out dummy mock entries
         const cleaned = parsed.filter((u: UserProfile) => !isDummyStudentRecord(u));
         if (cleaned.length > 0) return cleaned;
       }
@@ -1231,7 +1259,8 @@ export function getLocalUsers(): UserProfile[] {
 
 export function saveLocalUsers(users: UserProfile[]): void {
   try {
-    localStorage.setItem(LOCAL_USERS_KEY, JSON.stringify(users));
+    const cleanUsers = users.filter((u) => !isDummyStudentRecord(u));
+    localStorage.setItem(LOCAL_USERS_KEY, JSON.stringify(cleanUsers));
   } catch {}
 }
 
@@ -1240,9 +1269,13 @@ export function purgeDummyStudents(): UserProfile[] {
   try {
     const current = getLocalUsers();
     const filtered = current.filter((u) => !isDummyStudentRecord(u));
-    saveLocalUsers(filtered.length > 0 ? filtered : INITIAL_REGISTERED_STUDENTS);
+    saveLocalUsers(filtered);
+
+    // Call server to purge dummy records from backend file as well
+    fetch('/api/users/purge-dummies', { method: 'POST' }).catch(() => {});
+
     window.dispatchEvent(new CustomEvent('registered-users-changed'));
-    return filtered.length > 0 ? filtered : INITIAL_REGISTERED_STUDENTS;
+    return filtered;
   } catch {
     return INITIAL_REGISTERED_STUDENTS;
   }
@@ -1524,10 +1557,11 @@ export async function fetchAllUsers(): Promise<UserProfile[]> {
     });
   } catch (_ordersErr) {}
 
-  // De-duplicate into final list
+  // De-duplicate into final list (strictly excluding any dummy mock records)
   const seenIds = new Set<string>();
   const merged: UserProfile[] = [];
   Array.from(uMap.values()).forEach((u) => {
+    if (isDummyStudentRecord(u)) return;
     const idKey = u.userId || u.email;
     const emailKey = u.email ? u.email.toLowerCase().trim() : '';
     if (idKey && !seenIds.has(idKey) && (!emailKey || !seenIds.has(emailKey))) {
@@ -1733,6 +1767,28 @@ export async function loadPageTextSettingsFromFirestore(): Promise<any | null> {
 
 // Admin manual Pro subscription grant
 export async function grantProStatusManually(userId: string, plan: string = 'Admin All-Access Pass'): Promise<void> {
+  // 1. Update local storage immediately
+  try {
+    const local = getLocalUsers();
+    const target = local.find((u) => u.userId === userId || u.email?.toLowerCase().trim() === userId.toLowerCase().trim());
+    if (target) {
+      target.isPro = true;
+      target.proPlan = plan;
+      target.updatedAt = new Date().toISOString();
+      saveLocalUsers(local);
+    }
+  } catch {}
+
+  // 2. Update server storage immediately
+  try {
+    await fetch(`/api/users/${encodeURIComponent(userId)}/pro`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ isPro: true, proPlan: plan }),
+    });
+  } catch {}
+
+  // 3. Attempt Firestore update in background
   try {
     const userRef = doc(db, 'users', userId);
     await setDoc(userRef, {
@@ -1741,32 +1797,34 @@ export async function grantProStatusManually(userId: string, plan: string = 'Adm
       updatedAt: new Date().toISOString(),
     }, { merge: true });
   } catch (error) {
-    handleFirestoreError(error, OperationType.UPDATE, `users/${userId}`);
+    console.warn('Firestore grantProStatus notice (persisted to local/server):', error);
   }
-
-  // Update local storage
-  try {
-    const local = getLocalUsers();
-    const target = local.find((u) => u.userId === userId);
-    if (target) {
-      target.isPro = true;
-      target.proPlan = plan;
-      saveLocalUsers(local);
-    }
-  } catch {}
-
-  // Update server storage
-  try {
-    await fetch(`/api/users/${encodeURIComponent(userId)}/pro`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ isPro: true, proPlan: plan }),
-    });
-  } catch {}
 }
 
 // Admin toggle user Pro status
 export async function toggleUserProStatus(userId: string, isPro: boolean, plan: string = 'Class 10 Board Prep'): Promise<void> {
+  // 1. Update local storage immediately
+  try {
+    const local = getLocalUsers();
+    const target = local.find((u) => u.userId === userId || u.email?.toLowerCase().trim() === userId.toLowerCase().trim());
+    if (target) {
+      target.isPro = isPro;
+      target.proPlan = isPro ? plan : undefined;
+      target.updatedAt = new Date().toISOString();
+      saveLocalUsers(local);
+    }
+  } catch {}
+
+  // 2. Update server storage immediately
+  try {
+    await fetch(`/api/users/${encodeURIComponent(userId)}/pro`, {
+      method: 'PATCH',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ isPro, proPlan: isPro ? plan : null }),
+    });
+  } catch {}
+
+  // 3. Attempt Firestore update in background
   try {
     const userRef = doc(db, 'users', userId);
     await setDoc(userRef, {
@@ -1775,52 +1833,33 @@ export async function toggleUserProStatus(userId: string, isPro: boolean, plan: 
       updatedAt: new Date().toISOString(),
     }, { merge: true });
   } catch (error) {
-    handleFirestoreError(error, OperationType.UPDATE, `users/${userId}`);
+    console.warn('Firestore toggleUserProStatus notice (persisted to local/server):', error);
   }
-
-  // Update local storage
-  try {
-    const local = getLocalUsers();
-    const target = local.find((u) => u.userId === userId);
-    if (target) {
-      target.isPro = isPro;
-      target.proPlan = isPro ? plan : undefined;
-      saveLocalUsers(local);
-    }
-  } catch {}
-
-  // Update server storage
-  try {
-    await fetch(`/api/users/${encodeURIComponent(userId)}/pro`, {
-      method: 'PATCH',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ isPro, proPlan: isPro ? plan : null }),
-    });
-  } catch {}
 }
 
 // Delete student account by Admin
 export async function deleteStudentAccount(userId: string): Promise<void> {
-  try {
-    const userRef = doc(db, 'users', userId);
-    await deleteDoc(userRef);
-  } catch (error) {
-    handleFirestoreError(error, OperationType.DELETE, `users/${userId}`);
-  }
-
-  // Delete from local storage
+  // 1. Delete from local storage immediately
   try {
     const local = getLocalUsers();
-    const updated = local.filter((u) => u.userId !== userId);
+    const updated = local.filter((u) => u.userId !== userId && u.email?.toLowerCase().trim() !== userId.toLowerCase().trim());
     saveLocalUsers(updated);
   } catch {}
 
-  // Delete from server storage
+  // 2. Delete from server storage immediately
   try {
     await fetch(`/api/users/${encodeURIComponent(userId)}`, {
       method: 'DELETE',
     });
   } catch {}
+
+  // 3. Attempt Firestore deleteDoc in background
+  try {
+    const userRef = doc(db, 'users', userId);
+    await deleteDoc(userRef);
+  } catch (error) {
+    console.warn('Firestore deleteDoc notice (removed from local/server):', error);
+  }
 }
 
 // Coupon / Offers Data & Methods

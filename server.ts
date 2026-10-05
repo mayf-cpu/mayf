@@ -163,21 +163,68 @@ function saveStoredAdmins(admins: any[]): void {
 // Student User Profiles Storage Helpers
 let memoryStudents: any[] | null = null;
 
+export function isDummyStudentRecord(u: any): boolean {
+  if (!u) return false;
+  const id = String(u.userId || u.id || '').toLowerCase().trim();
+  const email = String(u.email || '').toLowerCase().trim();
+  const notes = String(u.notes || '').toLowerCase().trim();
+
+  // Known dummy mock student IDs
+  const dummyIds = [
+    'usr_stu_aarav_sharma',
+    'usr_stu_priya_patel',
+    'usr_stu_rohan_verma',
+    'usr_stu_ananya_iyer',
+    'usr_stu_aditya_deshmukh',
+    'usr_stu_sneha_mukherjee',
+    'usr_stu_kavya_reddy',
+    'usr_stu_arjun_nair',
+    'usr_stu_tanya_singh',
+    'test_aarav_1',
+    'test_diya_2',
+    'test_kabir_3',
+    'test_google_123',
+    'test_uid_123',
+  ];
+
+  if (dummyIds.includes(id)) return true;
+  if (id.startsWith('mock_dummy_')) return true;
+  if (id.startsWith('usr_stu_')) return true;
+  if (email.endsWith('@example.com')) return true;
+  if (notes.includes('dummy mock sample')) return true;
+
+  const dummyEmails = [
+    'aarav.sharma.cbse@gmail.com',
+    'priya.patel.maths@gmail.com',
+    'rohan.verma.imo@gmail.com',
+    'ananya.iyer.foundation@gmail.com',
+    'aditya.deshmukh24@gmail.com',
+    'sneha.mukherjee.icse@gmail.com',
+    'kavya.reddy.maths@gmail.com',
+    'arjun.nair.class6@gmail.com',
+    'tanya.singh.class5@gmail.com',
+  ];
+  if (dummyEmails.includes(email)) return true;
+
+  return false;
+}
+
 function getStoredStudents(): any[] {
   try {
     if (fs.existsSync(STUDENTS_FILE_PATH)) {
       const content = fs.readFileSync(STUDENTS_FILE_PATH, 'utf-8');
       const parsed = JSON.parse(content);
       if (Array.isArray(parsed)) {
-        memoryStudents = parsed;
-        return parsed;
+        const cleaned = parsed.filter((u) => !isDummyStudentRecord(u));
+        memoryStudents = cleaned;
+        return cleaned;
       }
     }
   } catch (err) {
     console.error('Error reading students file:', err);
   }
   if (memoryStudents && memoryStudents.length > 0) {
-    return memoryStudents;
+    return memoryStudents.filter((u) => !isDummyStudentRecord(u));
   }
   return [];
 }
@@ -305,11 +352,24 @@ app.get('/api/users', (req, res) => {
   return res.json({ success: true, users: students, count: students.length });
 });
 
+// 5b. Purge dummy sample students from storage
+app.post('/api/users/purge-dummies', (req, res) => {
+  const students = getStoredStudents();
+  const cleaned = students.filter((s) => !isDummyStudentRecord(s));
+  saveStoredStudents(cleaned);
+  return res.json({ success: true, count: cleaned.length, users: cleaned });
+});
+
 // 6. Record / update student profile (called on Google sign-in, phone registration, or profile update)
 app.post('/api/users', (req, res) => {
   const user = req.body;
   if (!user || (!user.userId && !user.email)) {
     return res.status(400).json({ success: false, error: 'userId or email is required' });
+  }
+
+  // Reject dummy mock records
+  if (isDummyStudentRecord(user)) {
+    return res.status(200).json({ success: true, skipped: true, message: 'Dummy record ignored' });
   }
 
   const students = getStoredStudents();
@@ -386,16 +446,18 @@ app.post('/api/users/batch', (req, res) => {
   const students = getStoredStudents();
   const map = new Map<string, any>();
 
-  // Seed with existing
+  // Seed with existing (excluding any dummy records)
   students.forEach((s) => {
-    const key = (s.userId || s.email || '').toLowerCase().trim();
-    if (key) map.set(key, s);
-    if (s.email) map.set(s.email.toLowerCase().trim(), s);
+    if (!isDummyStudentRecord(s)) {
+      const key = (s.userId || s.email || '').toLowerCase().trim();
+      if (key) map.set(key, s);
+      if (s.email) map.set(s.email.toLowerCase().trim(), s);
+    }
   });
 
-  // Merge new
+  // Merge new (excluding any dummy records)
   users.forEach((u) => {
-    if (u && (u.userId || u.email)) {
+    if (u && (u.userId || u.email) && !isDummyStudentRecord(u)) {
       const uId = String(u.userId || '').trim();
       const uEmail = String(u.email || '').toLowerCase().trim();
       const existing = (uId && map.get(uId)) || (uEmail && map.get(uEmail)) || {};
