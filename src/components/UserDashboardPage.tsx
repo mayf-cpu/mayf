@@ -1,6 +1,6 @@
 import React, { useState, useEffect } from 'react';
 import { User } from 'firebase/auth';
-import { UserProfile, OrderRecord, fetchUserOrders, updateUserProfile, updateUserMobileNumber, isUserAdmin } from '../firebase';
+import { UserProfile, OrderRecord, fetchUserOrders, updateUserProfile, updateUserMobileNumber, isUserAdmin, checkIsEmailPro } from '../firebase';
 import { MathResource } from '../data/mathResources';
 import { formatPrice, getUserCurrency, setUserCurrency, SUPPORTED_CURRENCIES } from '../services/currency';
 import { printResourceInA4 } from '../services/fileDownloader';
@@ -201,8 +201,14 @@ export const UserDashboardPage: React.FC<UserDashboardPageProps> = ({
     }
   };
 
-  const isPro = userProfile?.isPro || orders.some(o => o.status === 'captured');
   const isAdmin = isUserAdmin(currentUser);
+  const isPro = Boolean(
+    userProfile?.isPro ||
+    orders.some((o) => o.status === 'captured') ||
+    isAdmin ||
+    (currentUser?.email && checkIsEmailPro(currentUser.email)) ||
+    (userProfile?.email && checkIsEmailPro(userProfile.email))
+  );
 
   // If not logged in
   if (!currentUser) {

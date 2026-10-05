@@ -62,13 +62,21 @@ export const AdminStudentsTab: React.FC<AdminStudentsTabProps> = ({
 }) => {
   const [search, setSearch] = useState('');
   const [gradeFilter, setGradeFilter] = useState('All');
-  const [statusFilter, setStatusFilter] = useState<'All' | 'Real' | 'Pro' | 'Free' | 'Dummy'>('All');
+  const [statusFilter, setStatusFilter] = useState<'All' | 'Students' | 'Admins' | 'Real' | 'Pro' | 'Free' | 'Dummy'>('All');
 
   // Firebase Cloud Sync & Connection State
   const [cloudStatus, setCloudStatus] = useState<FirestoreConnectionStatus>(getFirestoreUsersConnectionStatus());
   const [isCloudSyncing, setIsCloudSyncing] = useState(false);
   const [showRulesHelper, setShowRulesHelper] = useState(false);
   const [copiedRules, setCopiedRules] = useState(false);
+
+  useEffect(() => {
+    fetchAllUsers().then((fetched) => {
+      if (fetched && fetched.length > 0) {
+        onRefresh();
+      }
+    }).catch(() => {});
+  }, []);
 
   useEffect(() => {
     setCloudStatus(getFirestoreUsersConnectionStatus());
@@ -84,7 +92,9 @@ export const AdminStudentsTab: React.FC<AdminStudentsTabProps> = ({
       const fetched = await fetchAllUsers();
       onRefresh();
       setCloudStatus(getFirestoreUsersConnectionStatus());
-      onToast(`✓ Database synchronized! Loaded ${fetched.length} student accounts.`);
+      const studentsOnly = fetched.filter((u) => !u.role || (u.role !== 'admin' && u.role !== 'superadmin')).length;
+      const adminsOnly = fetched.filter((u) => u.role === 'admin' || u.role === 'superadmin').length;
+      onToast(`✓ Database synchronized! Loaded ${fetched.length} registered accounts (${studentsOnly} students, ${adminsOnly} administrators).`);
     } catch (_err) {
       onToast('Database synchronized with active local & server records.');
     } finally {
@@ -171,11 +181,17 @@ service cloud.firestore {
     }
   };
 
-  // Actual registered students only
+  // Actual registered accounts (students and administrators)
   const displayUsers: UserProfile[] = users;
 
+  const normalStudentsCount = displayUsers.filter((u) => !u.role || (u.role !== 'admin' && u.role !== 'superadmin')).length;
+  const adminsCount = displayUsers.filter((u) => u.role === 'admin' || u.role === 'superadmin').length;
   const dummyStudentsCount = displayUsers.filter((u) => isDummyStudentRecord(u)).length;
   const realStudentsCount = displayUsers.filter((u) => !isDummyStudentRecord(u)).length;
+  const proStudentsCount = displayUsers.filter((u) => u.isPro).length;
+  const freeStudentsCount = displayUsers.filter((u) => !u.isPro).length;
+  const withMobileCount = displayUsers.filter((u) => Boolean(u.mobileNumber || u.phoneNumber)).length;
+  const totalStudents = displayUsers.length;
 
   const filteredStudents = displayUsers.filter((u) => {
     const q = search.toLowerCase().trim();
@@ -189,9 +205,15 @@ service cloud.firestore {
       (u.schoolName || '').toLowerCase().includes(q);
     const matchGrade = gradeFilter === 'All' || u.grade === gradeFilter;
     const isDummy = isDummyStudentRecord(u);
+    const isNormalStudent = !u.role || (u.role !== 'admin' && u.role !== 'superadmin');
+    const isAdminUser = u.role === 'admin' || u.role === 'superadmin';
     const matchStatus =
       statusFilter === 'All'
         ? true
+        : statusFilter === 'Students'
+        ? isNormalStudent
+        : statusFilter === 'Admins'
+        ? isAdminUser
         : statusFilter === 'Real'
         ? !isDummy
         : statusFilter === 'Dummy'
@@ -201,11 +223,6 @@ service cloud.firestore {
         : !u.isPro;
     return matchSearch && matchGrade && matchStatus;
   });
-
-  // Calculate statistics
-  const totalStudents = displayUsers.length;
-  const proStudentsCount = displayUsers.filter((u) => u.isPro).length;
-  const withMobileCount = displayUsers.filter((u) => Boolean(u.mobileNumber || u.phoneNumber)).length;
 
   const handleManualGrantCourse = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -774,34 +791,54 @@ match /users/{userId} {
       </div>
 
       {/* METRIC PILLS */}
-      <div className="grid grid-cols-1 sm:grid-cols-3 gap-3.5">
-        <div className="bg-white rounded-2xl p-4 border border-blue-50 shadow-xs flex items-center gap-3">
-          <div className="w-11 h-11 rounded-xl bg-blue-50 text-blue-700 flex items-center justify-center shrink-0">
-            <span className="material-symbols-outlined text-[24px]">school</span>
+      <div className="grid grid-cols-2 sm:grid-cols-3 lg:grid-cols-5 gap-3">
+        <div className="bg-white rounded-2xl p-3.5 border border-blue-50 shadow-xs flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-blue-50 text-blue-700 flex items-center justify-center shrink-0">
+            <span className="material-symbols-outlined text-[22px]">contacts</span>
           </div>
           <div>
-            <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">Total Students</span>
-            <span className="text-xl font-black text-[#111c2d]">{totalStudents}</span>
+            <span className="text-[10px] font-bold text-slate-500 uppercase tracking-wider block">Total Registered</span>
+            <span className="text-lg font-black text-[#111c2d]">{totalStudents}</span>
           </div>
         </div>
 
-        <div className="bg-white rounded-2xl p-4 border border-blue-50 shadow-xs flex items-center gap-3">
-          <div className="w-11 h-11 rounded-xl bg-amber-50 text-amber-700 flex items-center justify-center shrink-0">
-            <span className="material-symbols-outlined text-[24px]">workspace_premium</span>
+        <div className="bg-white rounded-2xl p-3.5 border border-emerald-100 shadow-xs flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center shrink-0">
+            <span className="material-symbols-outlined text-[22px]">school</span>
           </div>
           <div>
-            <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">Pro Active Pass</span>
-            <span className="text-xl font-black text-[#111c2d]">{proStudentsCount}</span>
+            <span className="text-[10px] font-bold text-emerald-700 uppercase tracking-wider block">Students (Learners)</span>
+            <span className="text-lg font-black text-emerald-900">{normalStudentsCount}</span>
           </div>
         </div>
 
-        <div className="bg-white rounded-2xl p-4 border border-blue-50 shadow-xs flex items-center gap-3">
-          <div className="w-11 h-11 rounded-xl bg-emerald-50 text-emerald-700 flex items-center justify-center shrink-0">
-            <span className="material-symbols-outlined text-[24px]">phone_iphone</span>
+        <div className="bg-white rounded-2xl p-3.5 border border-indigo-100 shadow-xs flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-indigo-50 text-indigo-700 flex items-center justify-center shrink-0">
+            <span className="material-symbols-outlined text-[22px]">admin_panel_settings</span>
           </div>
           <div>
-            <span className="text-[11px] font-bold text-slate-500 uppercase tracking-wider block">Verified Phone / WhatsApp</span>
-            <span className="text-xl font-black text-[#111c2d]">{withMobileCount}</span>
+            <span className="text-[10px] font-bold text-indigo-700 uppercase tracking-wider block">Admins & Faculty</span>
+            <span className="text-lg font-black text-indigo-900">{adminsCount}</span>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-2xl p-3.5 border border-amber-100 shadow-xs flex items-center gap-3">
+          <div className="w-10 h-10 rounded-xl bg-amber-50 text-amber-700 flex items-center justify-center shrink-0">
+            <span className="material-symbols-outlined text-[22px]">workspace_premium</span>
+          </div>
+          <div>
+            <span className="text-[10px] font-bold text-amber-700 uppercase tracking-wider block">Pro Active Pass</span>
+            <span className="text-lg font-black text-[#111c2d]">{proStudentsCount}</span>
+          </div>
+        </div>
+
+        <div className="bg-white rounded-2xl p-3.5 border border-blue-50 shadow-xs flex items-center gap-3 col-span-2 sm:col-span-1">
+          <div className="w-10 h-10 rounded-xl bg-purple-50 text-purple-700 flex items-center justify-center shrink-0">
+            <span className="material-symbols-outlined text-[22px]">phone_iphone</span>
+          </div>
+          <div>
+            <span className="text-[10px] font-bold text-purple-700 uppercase tracking-wider block">Verified Contact</span>
+            <span className="text-lg font-black text-[#111c2d]">{withMobileCount}</span>
           </div>
         </div>
       </div>
@@ -945,9 +982,10 @@ match /users/{userId} {
               className="px-2.5 py-1.5 text-xs font-semibold rounded-xl border border-slate-200 bg-slate-50 focus:bg-white text-slate-700 outline-none cursor-pointer"
             >
               <option value="All">All Accounts ({totalStudents})</option>
-              <option value="Real">Real Students Only ({realStudentsCount})</option>
+              <option value="Students">Registered Students / Learners ({normalStudentsCount})</option>
+              <option value="Admins">Administrators & Faculty ({adminsCount})</option>
               <option value="Pro">Pro Members ({proStudentsCount})</option>
-              <option value="Free">Free Learners</option>
+              <option value="Free">Free Learners ({freeStudentsCount})</option>
               {dummyStudentsCount > 0 && (
                 <option value="Dummy">Sample Demo ({dummyStudentsCount})</option>
               )}

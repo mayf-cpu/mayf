@@ -17,6 +17,7 @@ import {
   deleteDoc,
   collection,
   query,
+  where,
   orderBy,
   limit,
   getDocFromServer,
@@ -1087,7 +1088,7 @@ export async function fetchAllOrders(): Promise<OrderRecord[]> {
   return cloudOrders;
 }
 
-const LOCAL_USERS_KEY = 'maths_hub_local_registered_students_v1';
+const LOCAL_USERS_KEY = 'maths_hub_registered_students_v4';
 
 export const INITIAL_REGISTERED_STUDENTS: UserProfile[] = [
   {
@@ -1367,18 +1368,47 @@ export function isDummyStudentRecord(u: UserProfile | any): boolean {
 }
 
 export function getLocalUsers(): UserProfile[] {
+  const map = new Map<string, UserProfile>();
+
+  // 1. ALWAYS seed with all verified Firebase registered users
+  INITIAL_REGISTERED_STUDENTS.forEach((u) => {
+    const key = (u.email || u.userId || '').toLowerCase().trim();
+    if (key) map.set(key, u);
+    if (u.userId) map.set(u.userId, u);
+  });
+
+  // 2. Merge local storage if available
   try {
-    const raw = localStorage.getItem(LOCAL_USERS_KEY);
+    const raw = localStorage.getItem(LOCAL_USERS_KEY) || localStorage.getItem('maths_hub_registered_students_v3');
     if (raw) {
       const parsed = JSON.parse(raw);
       if (Array.isArray(parsed) && parsed.length > 0) {
-        // Filter out dummy mock entries
-        const cleaned = parsed.filter((u: UserProfile) => !isDummyStudentRecord(u));
-        if (cleaned.length > 0) return cleaned;
+        parsed.forEach((u: UserProfile) => {
+          if (!isDummyStudentRecord(u)) {
+            const cleanEmail = (u.email || '').toLowerCase().trim();
+            const cleanId = (u.userId || '').trim();
+            const existing = (cleanEmail ? map.get(cleanEmail) : undefined) || (cleanId ? map.get(cleanId) : undefined) || {};
+            const merged = { ...existing, ...u };
+            if (cleanEmail) map.set(cleanEmail, merged);
+            if (cleanId) map.set(cleanId, merged);
+          }
+        });
       }
     }
   } catch {}
-  return INITIAL_REGISTERED_STUDENTS;
+
+  const deduplicated: UserProfile[] = [];
+  const seen = new Set<string>();
+  Array.from(map.values()).forEach((u) => {
+    const key = (u.email || u.userId || '').toLowerCase().trim();
+    if (key && !seen.has(key)) {
+      seen.add(key);
+      if (u.userId) seen.add(u.userId);
+      deduplicated.push(u);
+    }
+  });
+
+  return deduplicated;
 }
 
 export function saveLocalUsers(users: UserProfile[]): void {
@@ -1889,12 +1919,24 @@ export async function loadPageTextSettingsFromFirestore(): Promise<any | null> {
   return null;
 }
 
+// Check if an email is granted Pro access locally or by administrator role
+export function checkIsEmailPro(email?: string | null): boolean {
+  if (!email) return false;
+  const clean = email.toLowerCase().trim();
+  if (INITIAL_ADMIN_EMAILS.some((e) => e.toLowerCase().trim() === clean)) return true;
+  const local = getLocalUsers();
+  const found = local.find((u) => (u.email && u.email.toLowerCase().trim() === clean) || (u.userId && u.userId.toLowerCase().trim() === clean));
+  return Boolean(found?.isPro);
+}
+
 // Admin manual Pro subscription grant
 export async function grantProStatusManually(userId: string, plan: string = 'Admin All-Access Pass'): Promise<void> {
+  const local = getLocalUsers();
+  const target = local.find((u) => u.userId === userId || (u.email && u.email.toLowerCase().trim() === userId.toLowerCase().trim()));
+  const targetEmail = target?.email?.toLowerCase().trim() || (userId.includes('@') ? userId.toLowerCase().trim() : '');
+
   // 1. Update local storage immediately
   try {
-    const local = getLocalUsers();
-    const target = local.find((u) => u.userId === userId || u.email?.toLowerCase().trim() === userId.toLowerCase().trim());
     if (target) {
       target.isPro = true;
       target.proPlan = plan;
@@ -1903,16 +1945,16 @@ export async function grantProStatusManually(userId: string, plan: string = 'Adm
     }
   } catch {}
 
-  // 2. Update server storage immediately
+  // 2. Update server storage immediately (with email matching)
   try {
     await fetch(`/api/users/${encodeURIComponent(userId)}/pro`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ isPro: true, proPlan: plan }),
+      body: JSON.stringify({ isPro: true, proPlan: plan, email: targetEmail }),
     });
   } catch {}
 
-  // 3. Attempt Firestore update in background
+  // 3. Attempt Firestore update in background across all matching IDs/emails
   try {
     const userRef = doc(db, 'users', userId);
     await setDoc(userRef, {
@@ -1920,17 +1962,38 @@ export async function grantProStatusManually(userId: string, plan: string = 'Adm
       proPlan: plan,
       updatedAt: new Date().toISOString(),
     }, { merge: true });
+
+    // Also update any Google Auth UID document that shares this email
+    if (targetEmail) {
+      try {
+        const q = query(collection(db, 'users'), where('email', '==', targetEmail));
+        const querySnap = await getDocs(q);
+        querySnap.forEach((d) => {
+          setDoc(d.ref, {
+            isPro: true,
+            proPlan: plan,
+            updatedAt: new Date().toISOString(),
+          }, { merge: true }).catch(() => {});
+        });
+      } catch {}
+    }
   } catch (error) {
     console.warn('Firestore grantProStatus notice (persisted to local/server):', error);
   }
+
+  // 4. Dispatch events for real-time UI refresh
+  window.dispatchEvent(new CustomEvent('student-profile-updated', { detail: { userId, email: targetEmail, isPro: true, proPlan: plan } }));
+  window.dispatchEvent(new CustomEvent('registered-users-changed'));
 }
 
 // Admin toggle user Pro status
 export async function toggleUserProStatus(userId: string, isPro: boolean, plan: string = 'Class 10 Board Prep'): Promise<void> {
+  const local = getLocalUsers();
+  const target = local.find((u) => u.userId === userId || (u.email && u.email.toLowerCase().trim() === userId.toLowerCase().trim()));
+  const targetEmail = target?.email?.toLowerCase().trim() || (userId.includes('@') ? userId.toLowerCase().trim() : '');
+
   // 1. Update local storage immediately
   try {
-    const local = getLocalUsers();
-    const target = local.find((u) => u.userId === userId || u.email?.toLowerCase().trim() === userId.toLowerCase().trim());
     if (target) {
       target.isPro = isPro;
       target.proPlan = isPro ? plan : undefined;
@@ -1939,16 +2002,16 @@ export async function toggleUserProStatus(userId: string, isPro: boolean, plan: 
     }
   } catch {}
 
-  // 2. Update server storage immediately
+  // 2. Update server storage immediately (with email matching)
   try {
     await fetch(`/api/users/${encodeURIComponent(userId)}/pro`, {
       method: 'PATCH',
       headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ isPro, proPlan: isPro ? plan : null }),
+      body: JSON.stringify({ isPro, proPlan: isPro ? plan : null, email: targetEmail }),
     });
   } catch {}
 
-  // 3. Attempt Firestore update in background
+  // 3. Attempt Firestore update in background across all matching IDs/emails
   try {
     const userRef = doc(db, 'users', userId);
     await setDoc(userRef, {
@@ -1956,9 +2019,28 @@ export async function toggleUserProStatus(userId: string, isPro: boolean, plan: 
       proPlan: isPro ? plan : null,
       updatedAt: new Date().toISOString(),
     }, { merge: true });
+
+    // Also update any Google Auth UID document that shares this email
+    if (targetEmail) {
+      try {
+        const q = query(collection(db, 'users'), where('email', '==', targetEmail));
+        const querySnap = await getDocs(q);
+        querySnap.forEach((d) => {
+          setDoc(d.ref, {
+            isPro,
+            proPlan: isPro ? plan : null,
+            updatedAt: new Date().toISOString(),
+          }, { merge: true }).catch(() => {});
+        });
+      } catch {}
+    }
   } catch (error) {
     console.warn('Firestore toggleUserProStatus notice (persisted to local/server):', error);
   }
+
+  // 4. Dispatch events for real-time UI refresh
+  window.dispatchEvent(new CustomEvent('student-profile-updated', { detail: { userId, email: targetEmail, isPro, proPlan: isPro ? plan : undefined } }));
+  window.dispatchEvent(new CustomEvent('registered-users-changed'));
 }
 
 // Delete student account by Admin

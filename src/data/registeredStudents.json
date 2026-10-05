@@ -67,7 +67,7 @@
     "updatedAt": "2026-10-02T10:00:00.000Z"
   },
   {
-    "userId": "usr_fb_sevathakurji",
+    "userId": "randomGoogleUid123",
     "email": "seva.thakurji@gmail.com",
     "displayName": "Seva Thakurji",
     "photoURL": "https://api.dicebear.com/7.x/bottts/svg?seed=SevaThakurji",
@@ -78,15 +78,15 @@
     "countryCode": "+91",
     "phoneNumber": "",
     "whatsappAlerts": true,
-    "isPro": false,
-    "proPlan": "",
+    "isPro": true,
+    "proPlan": "Lifetime Pro Pass",
     "notes": "Firebase Registered Student (Google Auth)",
     "bookmarks": [
       "res-quad-class10"
     ],
     "downloads": [],
     "createdAt": "2026-10-02T12:00:00.000Z",
-    "updatedAt": "2026-10-02T12:00:00.000Z"
+    "updatedAt": "2026-10-05T16:57:24.029Z"
   },
   {
     "userId": "usr_sachin_itig",

@@ -5,7 +5,7 @@
 
 import React, { useState, useMemo, useEffect, useRef } from 'react';
 import { User, onAuthStateChanged } from 'firebase/auth';
-import { doc, getDoc, setDoc } from 'firebase/firestore';
+import { doc, getDoc, setDoc, collection, query, where, getDocs, limit } from 'firebase/firestore';
 import {
   db,
   auth,
@@ -25,6 +25,8 @@ import {
   cleanFirestorePayload,
   INITIAL_ADMIN_EMAILS,
   PRIMARY_SUPERADMIN_EMAIL,
+  checkIsEmailPro,
+  getLocalUsers,
 } from './firebase';
 import { UnauthorizedDomainModal } from './components/UnauthorizedDomainModal';
 import { LoginRequiredModal } from './components/LoginRequiredModal';
@@ -350,18 +352,46 @@ export default function App() {
           checkIsUserAdminLive(cleanEmail).catch(() => {});
         }
 
-        // ALWAYS immediately construct and persist base profile from real Firebase Google login
+        // 1. Resolve existing user profile & Pro status from local registry or admin list
+        const isAdmin = Boolean(
+          cleanEmail && INITIAL_ADMIN_EMAILS.some((e) => e.toLowerCase().trim() === cleanEmail)
+        );
+        const localRegistry = getLocalUsers();
+        const existingLocal = localRegistry.find(
+          (u) =>
+            (user.uid && u.userId === user.uid) ||
+            (cleanEmail && u.email?.toLowerCase().trim() === cleanEmail)
+        );
+
+        const initialIsPro = Boolean(
+          isAdmin ||
+          existingLocal?.isPro ||
+          userProfile?.isPro ||
+          checkIsEmailPro(cleanEmail)
+        );
+        const initialProPlan =
+          existingLocal?.proPlan ||
+          userProfile?.proPlan ||
+          (initialIsPro ? 'All-Access Pro Pass' : '');
+
+        // ALWAYS construct base profile retaining existing Pro privileges
         const baseProfile: UserProfile = {
           userId: user.uid,
           email: cleanEmail,
-          displayName: cleanName,
-          photoURL: user.photoURL || '',
-          grade: selectedClass || 'Class 9',
-          targetExam: 'CBSE Board',
-          isPro: false,
-          bookmarks: ['res-quad-class10'],
-          downloads: [],
-          createdAt: new Date().toISOString(),
+          displayName: cleanName || existingLocal?.displayName || 'Learner',
+          photoURL: user.photoURL || existingLocal?.photoURL || '',
+          grade: existingLocal?.grade || selectedClass || 'Class 9',
+          targetExam: existingLocal?.targetExam || 'CBSE Board',
+          schoolName: existingLocal?.schoolName || '',
+          mobileNumber: existingLocal?.mobileNumber || user.phoneNumber || '',
+          countryCode: existingLocal?.countryCode || '+91',
+          phoneNumber: existingLocal?.phoneNumber || user.phoneNumber || '',
+          whatsappAlerts: existingLocal?.whatsappAlerts ?? true,
+          isPro: initialIsPro,
+          proPlan: initialProPlan,
+          bookmarks: existingLocal?.bookmarks && existingLocal.bookmarks.length > 0 ? existingLocal.bookmarks : ['res-quad-class10'],
+          downloads: existingLocal?.downloads || [],
+          createdAt: existingLocal?.createdAt || new Date().toISOString(),
           updatedAt: new Date().toISOString(),
         };
 
@@ -377,28 +407,66 @@ export default function App() {
         window.dispatchEvent(new CustomEvent('registered-users-changed'));
         window.dispatchEvent(new CustomEvent('student-profile-updated', { detail: baseProfile }));
 
-        // Verify and ensure Firestore document exists with real Google account data in the cloud
+        // 2. Check backend server for Pro status asynchronously and upgrade if found
+        fetch(`/api/users/${encodeURIComponent(cleanEmail)}/status`)
+          .then((res) => (res.ok ? res.json() : null))
+          .then((srv) => {
+            if (srv && srv.success && srv.isPro) {
+              setUserProfile((prev) => {
+                if (!prev) return baseProfile;
+                const updated: UserProfile = {
+                  ...prev,
+                  isPro: true,
+                  proPlan: srv.proPlan || prev.proPlan || 'All-Access Pro Pass',
+                };
+                recordLocalUser(updated);
+                return updated;
+              });
+            }
+          })
+          .catch(() => {});
+
+        // 3. Verify and ensure Firestore document exists with real Google account data in the cloud
         getDoc(userDocRef)
           .then(async (snap) => {
-            if (!snap.exists()) {
-              await setDoc(userDocRef, cleanFirestorePayload(baseProfile), { merge: true });
-            } else {
-              const cloudProfile = snap.data() as UserProfile;
-              const merged: UserProfile = {
-                ...baseProfile,
-                ...cloudProfile,
-                userId: user.uid,
-                email: cleanEmail || cloudProfile.email || '',
-                displayName: cloudProfile.displayName || cleanName,
-                photoURL: user.photoURL || cloudProfile.photoURL || '',
-                updatedAt: new Date().toISOString(),
-              };
-              setUserProfile(merged);
-              recordLocalUser(merged);
-              syncUserProfileToServer(merged).catch(() => {});
-              window.dispatchEvent(new CustomEvent('registered-users-changed'));
-              window.dispatchEvent(new CustomEvent('student-profile-updated', { detail: merged }));
+            let cloudProfile: UserProfile | null = null;
+            if (snap.exists()) {
+              cloudProfile = snap.data() as UserProfile;
+            } else if (cleanEmail) {
+              // Also check if any document in Firestore has this email (e.g. pre-seeded or backend assigned)
+              try {
+                const q = query(collection(db, 'users'), where('email', '==', cleanEmail), limit(1));
+                const qSnap = await getDocs(q);
+                if (!qSnap.empty) {
+                  cloudProfile = qSnap.docs[0].data() as UserProfile;
+                }
+              } catch {}
             }
+
+            const cloudIsPro = Boolean(cloudProfile?.isPro);
+            const resolvedIsPro = Boolean(baseProfile.isPro || cloudIsPro || isAdmin || checkIsEmailPro(cleanEmail));
+            const resolvedProPlan = resolvedIsPro
+              ? (cloudProfile?.proPlan || baseProfile.proPlan || 'All-Access Pro Pass')
+              : '';
+
+            const merged: UserProfile = {
+              ...baseProfile,
+              ...(cloudProfile || {}),
+              userId: user.uid,
+              email: cleanEmail || cloudProfile?.email || '',
+              displayName: cloudProfile?.displayName || cleanName,
+              photoURL: user.photoURL || cloudProfile?.photoURL || '',
+              isPro: resolvedIsPro,
+              proPlan: resolvedProPlan,
+              updatedAt: new Date().toISOString(),
+            };
+            setUserProfile(merged);
+            recordLocalUser(merged);
+            syncUserProfileToServer(merged).catch(() => {});
+            // Ensure the user's UID doc in Firestore retains Pro access
+            setDoc(userDocRef, cleanFirestorePayload(merged), { merge: true }).catch(() => {});
+            window.dispatchEvent(new CustomEvent('registered-users-changed'));
+            window.dispatchEvent(new CustomEvent('student-profile-updated', { detail: merged }));
           })
           .catch((err) => {
             console.warn('onAuthStateChanged profile check notice (local & server persistence active):', err);
@@ -408,10 +476,18 @@ export default function App() {
 
         const unsubscribeProfile = subscribeToUserProfile(user.uid, (profile) => {
           if (profile) {
-            const merged = { ...baseProfile, ...profile };
-            setUserProfile(merged);
-            recordLocalUser(merged);
-            syncUserProfileToServer(merged).catch(() => {});
+            setUserProfile((prev) => {
+              const keepPro = Boolean(prev?.isPro || profile.isPro || isAdmin || checkIsEmailPro(cleanEmail));
+              const keepProPlan = keepPro ? (profile.proPlan || prev?.proPlan || 'All-Access Pro Pass') : '';
+              const merged: UserProfile = {
+                ...(prev || baseProfile),
+                ...profile,
+                isPro: keepPro,
+                proPlan: keepProPlan,
+              };
+              recordLocalUser(merged);
+              return merged;
+            });
             if (profile.grade && profile.grade !== selectedClass) {
               setSelectedClass(profile.grade);
             }
@@ -1205,7 +1281,14 @@ export default function App() {
     }
   };
 
-  const isUserPro = userProfile?.isPro || false;
+  const isUserPro = Boolean(
+    userProfile?.isPro ||
+    (userProfile?.email && checkIsEmailPro(userProfile.email)) ||
+    (currentUser?.email && checkIsEmailPro(currentUser.email)) ||
+    userProfile?.role === 'admin' ||
+    userProfile?.role === 'superadmin' ||
+    (currentUser?.email && INITIAL_ADMIN_EMAILS.some((e) => e.toLowerCase().trim() === (currentUser.email || '').toLowerCase().trim()))
+  );
 
   // Render Admin Control Panel as a separate dedicated page view
   if (currentView === 'admin') {

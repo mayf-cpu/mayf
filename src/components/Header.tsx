@@ -1,6 +1,6 @@
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { User } from 'firebase/auth';
-import { UserProfile, isUserAdmin, NotificationRecord } from '../firebase';
+import { UserProfile, isUserAdmin, NotificationRecord, checkIsEmailPro } from '../firebase';
 import { BrandingConfig } from '../services/branding';
 import { SocialConfig, getSocialConfig } from '../services/social';
 import { ThemeConfig } from '../services/theme';
@@ -257,7 +257,12 @@ export const Header: React.FC<HeaderProps> = ({
     };
   }, [sidebarOpen]);
 
-  const isPro = userProfile?.isPro || false;
+  const isPro = Boolean(
+    userProfile?.isPro ||
+    (userProfile?.email && checkIsEmailPro(userProfile.email)) ||
+    (currentUser?.email && checkIsEmailPro(currentUser.email)) ||
+    isUserAdmin(currentUser)
+  );
   const isAdmin = isUserAdmin(currentUser);
   const displayName = currentUser?.displayName || userProfile?.displayName || 'Student';
   const userPhoto =

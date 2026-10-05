@@ -388,6 +388,12 @@ app.post('/api/users', (req, res) => {
 
   if (existingIndex >= 0) {
     const existing = students[existingIndex];
+    // CRITICAL: NEVER downgrade an existing Pro user to Free on routine profile sync!
+    const resolvedIsPro = existing.isPro === true ? true : Boolean(user.isPro);
+    const resolvedProPlan = existing.isPro === true
+      ? (existing.proPlan || user.proPlan || 'All-Access Pro Pass')
+      : (user.proPlan || existing.proPlan || '');
+
     updatedRecord = {
       ...existing,
       ...user,
@@ -402,8 +408,8 @@ app.post('/api/users', (req, res) => {
       countryCode: user.countryCode || existing.countryCode || '+91',
       phoneNumber: user.phoneNumber || existing.phoneNumber || '',
       whatsappAlerts: user.whatsappAlerts !== undefined ? user.whatsappAlerts : (existing.whatsappAlerts ?? true),
-      isPro: user.isPro !== undefined ? user.isPro : existing.isPro,
-      proPlan: user.proPlan || existing.proPlan || '',
+      isPro: resolvedIsPro,
+      proPlan: resolvedProPlan,
       notes: user.notes || existing.notes || '',
       updatedAt: now,
     };
@@ -512,13 +518,16 @@ app.delete('/api/users/:userId', (req, res) => {
 
 // 9. Toggle Pro status for student
 app.patch('/api/users/:userId/pro', (req, res) => {
-  const id = decodeURIComponent(req.params.userId || '').trim();
-  const { isPro, proPlan } = req.body || {};
+  const id = decodeURIComponent(req.params.userId || '').trim().toLowerCase();
+  const { isPro, proPlan, email } = req.body || {};
+  const targetEmail = email ? String(email).toLowerCase().trim() : '';
   const students = getStoredStudents();
   let found = false;
 
   students.forEach((s) => {
-    if (String(s.userId || '').trim() === id || String(s.email || '').toLowerCase().trim() === id.toLowerCase()) {
+    const sId = String(s.userId || '').trim().toLowerCase();
+    const sEmail = String(s.email || '').toLowerCase().trim();
+    if (sId === id || sEmail === id || (targetEmail && sEmail === targetEmail)) {
       s.isPro = Boolean(isPro);
       if (proPlan) s.proPlan = proPlan;
       s.updatedAt = new Date().toISOString();
@@ -531,6 +540,26 @@ app.patch('/api/users/:userId/pro', (req, res) => {
     return res.json({ success: true });
   }
   return res.status(404).json({ success: false, error: 'Student not found' });
+});
+
+// 10. Check Pro status for student by email or ID
+app.get('/api/users/:emailOrId/status', (req, res) => {
+  const query = decodeURIComponent(req.params.emailOrId || '').toLowerCase().trim();
+  const students = getStoredStudents();
+  const found = students.find((s) => {
+    const sId = String(s.userId || '').toLowerCase().trim();
+    const sEmail = String(s.email || '').toLowerCase().trim();
+    return sId === query || sEmail === query;
+  });
+  if (found) {
+    return res.json({
+      success: true,
+      isPro: Boolean(found.isPro),
+      proPlan: found.proPlan || '',
+      user: found,
+    });
+  }
+  return res.json({ success: false, isPro: false });
 });
 
 // Live Domain Redirection Check Endpoint
